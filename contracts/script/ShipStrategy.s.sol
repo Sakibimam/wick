@@ -22,8 +22,9 @@ contract ShipStrategy is Script {
     function run() external {
         address board = vm.envAddress("BOARD");
         address extruction = vm.envAddress("EXTRUCTION");
-        uint256 makerKey = vm.envUint("MAKER_PK");
-        address maker = vm.addr(makerKey);
+        bool keyedMaker = vm.envExists("MAKER_PK");
+        uint256 makerKey = keyedMaker ? vm.envUint("MAKER_PK") : 0;
+        address maker = keyedMaker ? vm.addr(makerKey) : vm.envAddress("MAKER_ADDRESS");
         uint256 w0gAmount = vm.envUint("W0G_AMOUNT");
         uint256 usdcAmount = vm.envUint("USDC_AMOUNT");
         uint256 feeBpsRaw = vm.envUint("FEE_BPS");
@@ -55,7 +56,8 @@ contract ShipStrategy is Script {
         amounts[0] = w0gAmount;
         amounts[1] = usdcAmount;
 
-        vm.startBroadcast(makerKey);
+        if (keyedMaker) vm.startBroadcast(makerKey);
+        else vm.startBroadcast(maker);
         IERC20(w0g).approve(aqua, type(uint256).max);
         IERC20(usdc).approve(aqua, type(uint256).max);
         bytes32 shippedHash = IAqua(aqua).ship(router, abi.encode(order), tokens, amounts);
