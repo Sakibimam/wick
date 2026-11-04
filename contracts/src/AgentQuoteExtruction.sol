@@ -21,6 +21,10 @@ contract AgentQuoteExtruction is IExtruction, IStaticExtruction {
         _board = board_;
     }
 
+    function board() external view returns (AgentQuoteBoard) {
+        return _board;
+    }
+
     function extruction(
         bool,
         uint256 nextPC,
@@ -37,11 +41,12 @@ contract AgentQuoteExtruction is IExtruction, IStaticExtruction {
         if (args.length != 2) revert InvalidArgsLength(args.length);
         uint16 feeBps = uint16(bytes2(args));
         if (feeBps >= _BPS) revert InvalidFeeBps(feeBps);
+        if (!_board.isQuoteCurrent(query.maker, query.tokenIn, query.tokenOut)) revert StaleQuote();
 
         AgentQuoteBoard.Quote memory q = _board.getQuote(query.maker, query.tokenIn, query.tokenOut);
         if (
             q.maker != query.maker || q.tokenIn != query.tokenIn || q.tokenOut != query.tokenOut || q.rateE18 == 0
-                || block.timestamp > q.expiry
+                || q.inferenceId == bytes32(0) || block.timestamp > q.expiry
         ) revert StaleQuote();
 
         updatedSwap = swap;

@@ -31,7 +31,7 @@ The `lib/` sources are committed at the pinned revisions below. `forge-std` is a
 | [1inch/solidity-utils](https://github.com/1inch/solidity-utils) | `6.9.7` | `29043f22422fde454951e9733129cce5d67e6a39` |
 | [foundry-rs/forge-std](https://github.com/foundry-rs/forge-std) | `v1.11.0` | `8e40513d678f392f398620b3ef2b418648b33e89` |
 
-The router is pinned to SwapVM `v1.0.2`: its deployed EIP-712 domain reports version `1.0.2`. The aqua source remapping bridges the path difference between SwapVM's `@1inch/aqua/src/interfaces/IAqua.sol` import and Aqua `v1.0.1`'s `contracts/interfaces/IAqua.sol` layout. Dependency files stay unmodified.
+The router is pinned to SwapVM `v1.0.2`: its deployed `eip712Domain()` returns name `1inch SwapVM v1.0` and version `1.0.2`. The aqua source remapping bridges the path difference between SwapVM's `@1inch/aqua/src/interfaces/IAqua.sol` import and Aqua `v1.0.1`'s `contracts/interfaces/IAqua.sol` layout. Dependency files stay unmodified.
 
 ## Mainnet reference
 
@@ -88,13 +88,20 @@ cast code "$ROUTER" --rpc-url https://ethereum-rpc.publicnode.com | grep -oiE 'f
 
 ## Quote and fee behavior
 
-`AgentQuoteBoard` uses EIP-712 domain name `Upkeep AgentQuoteBoard`, version `1`. A maker can register or revoke its agent. Quotes bind the maker, token pair, rate, expiry, nonce, and `inferenceId`; relayers can post valid agent signatures. Nonces increase strictly per maker. Expired quotes can be recorded, then fail closed when a strategy tries to fill them.
+`AgentQuoteBoard` uses EIP-712 domain name `Upkeep AgentQuoteBoard`, version `1`. A maker can register or revoke its agent. Quotes bind the maker, token pair, rate, expiry, nonce, and `inferenceId`; relayers can post valid agent signatures. Posting rejects expired quotes, zero rates, zero or missing `inferenceId`, same-token pairs, and zero tokens. Nonces increase strictly per maker. Every `setAgent` call, including setting the same agent or revoking with zero, advances the maker's agent epoch and invalidates outstanding quotes. Fills check that the quote belongs to the current agent epoch and re-check expiry. Views include `getAgent`, `lastNonce`, and `isQuoteCurrent`.
 
 The quote rate is output token wei per `1e18` input token wei. For exact-in, the extruction floors gross output at the signed rate, then floors again after subtracting the output-side fee. For exact-out, it rounds up the gross output required before the fee, then rounds up the required input. `amountNetPulled` is preserved.
 
 For USDC (6 decimals) and WETH (18 decimals), a price of 1 USDC to 1/3000 WETH uses `rateE18 = 333333333333333333333333334` to produce exactly `1e18` gross WETH for `3000e6` input under the specified integer math. `rateE18 = 1e27` with `3000e6` input produces `3e18` gross WETH under the same formula.
 
-The `inferenceId` is the onchain audit link to the 0G Compute request. The 0G inference result stays outside this contract's validation boundary; fills validate the registered agent's EIP-712 signature, pair, nonce at posting, and quote expiry.
+The `inferenceId` is the onchain audit link to the 0G Compute request. The 0G inference result stays outside this contract's validation boundary; fills validate the current agent epoch, pair, nonzero rate and `inferenceId`, and quote expiry.
+
+## Verification evidence
+
+- SwapVM tag `v1.0.2` resolves to `32c687c2b73101fc26549e48fa1ff8a4d73afbac`; Aqua tag `v1.0.1` resolves to `7219b1763b0099e7ab1e76b0f21053d95a6b69e5`.
+- The deployed router `0x111111338c5091E8440b67B168bAe16a668AC0De` reports `1inch SwapVM v1.0` and `1.0.2` from `eip712Domain()`.
+- `cast code` on the deployed router contains selectors `f4d2d412`, `44aa5f14`, `f5d08521`, `ceb9a5d8`, `63fccba9`, `8da5cb5b`, `84b0196e`, and `f973a209`.
+- Contract runtime sizes must remain below 24,576 bytes. `forge build --sizes` measured `AgentQuoteBoard` at 4,012 bytes and `AgentQuoteExtruction` at 2,193 bytes.
 
 ## Test coverage
 

@@ -26,6 +26,7 @@ contract AgentQuoteTest is Test {
     uint256 private constant TAKER_KEY = 0xB0B;
     uint256 private constant SECOND_MAKER_KEY = 0xB0B1;
     uint256 private constant SECOND_AGENT_KEY = 0xA63E18;
+    uint256 private constant NEW_AGENT_KEY = 0xA63E19;
     uint16 private constant FEE_BPS = 30;
     uint256 private constant RATE_E18 = 333333333333333333333333334;
 
@@ -112,6 +113,63 @@ contract AgentQuoteTest is Test {
         _swap(order, 3_000e6, _takerTraits(true, taker));
     }
 
+    function test_missingQuoteFailsClosed() public {
+        ISwapVM.Order memory order = _ship(maker);
+        vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
+        _swap(order, 3_000e6, _takerTraits(true, taker));
+    }
+
+    function test_expiredQuoteCannotBePosted() public {
+        AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp), RATE_E18);
+        bytes memory sig = _sign(q, AGENT_KEY);
+        vm.expectRevert(abi.encodeWithSelector(AgentQuoteBoard.QuoteExpired.selector, uint64(block.timestamp)));
+        board.post(q, sig);
+    }
+
+    function test_agentRotationInvalidatesOutstandingQuote() public {
+        ISwapVM.Order memory order = _ship(maker);
+        uint64 expiry = uint64(block.timestamp + 1 days);
+        _post(maker, AGENT_KEY, 1, expiry, RATE_E18);
+        vm.prank(maker);
+        board.setAgent(vm.addr(NEW_AGENT_KEY));
+
+        vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
+        _swap(order, 3_000e6, _takerTraits(true, taker));
+
+        _post(maker, NEW_AGENT_KEY, 2, expiry, RATE_E18);
+        uint256 makerUsdcBefore = USDC.balanceOf(maker);
+        uint256 takerWethBefore = WETH.balanceOf(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = _swap(order, 3_000e6, _takerTraits(true, taker));
+        assertEq(swappedIn, 3_000e6);
+        assertEq(swappedOut, 0.997e18);
+        assertEq(USDC.balanceOf(maker) - makerUsdcBefore, swappedIn);
+        assertEq(WETH.balanceOf(taker) - takerWethBefore, swappedOut);
+    }
+
+    function test_feeAtOrAboveOneHundredPercentReverts() public {
+        ISwapVM.Order memory order = _ship(maker, 10_000);
+        _post(maker, AGENT_KEY, 1, uint64(block.timestamp + 1 days), RATE_E18);
+        vm.expectRevert(abi.encodeWithSelector(AgentQuoteExtruction.InvalidFeeBps.selector, uint16(10_000)));
+        _swap(order, 3_000e6, _takerTraits(true, taker));
+    }
+
+    function test_signatureIsBoundToTokenPair() public {
+        AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp + 1 days), RATE_E18);
+        bytes memory sig = _sign(q, AGENT_KEY);
+        q.tokenOut = address(0x1234);
+        vm.expectRevert(AgentQuoteBoard.InvalidAgentSignature.selector);
+        board.post(q, sig);
+    }
+
+    function test_revokedAgentCannotPost() public {
+        vm.prank(maker);
+        board.setAgent(address(0));
+        AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp + 1 days), RATE_E18);
+        bytes memory sig = _sign(q, AGENT_KEY);
+        vm.expectRevert(AgentQuoteBoard.InvalidAgentSignature.selector);
+        board.post(q, sig);
+    }
+
     function test_aquaOpcode33IsNotExtruction() public {
         MakerTraitsLib.Args memory args;
         args.maker = maker;
@@ -166,10 +224,14 @@ contract AgentQuoteTest is Test {
     }
 
     function _ship(address makerAddress) private returns (ISwapVM.Order memory order) {
+        return _ship(makerAddress, FEE_BPS);
+    }
+
+    function _ship(address makerAddress, uint16 feeBps) private returns (ISwapVM.Order memory order) {
         MakerTraitsLib.Args memory args;
         args.maker = makerAddress;
         args.useAquaInsteadOfSignature = true;
-        args.program = abi.encodePacked(bytes1(0x20), bytes1(uint8(22)), address(extruction), bytes2(FEE_BPS));
+        args.program = abi.encodePacked(bytes1(0x20), bytes1(uint8(22)), address(extruction), bytes2(feeBps));
         order = MakerTraitsLib.build(args);
 
         address[] memory tokens = new address[](2);
