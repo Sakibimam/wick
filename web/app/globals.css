@@ -1,0 +1,81 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Fuse tape over ticket · theme: Cobalt · nav: N1b bordered bar · footer: Ft2 inline */
+@import "tailwindcss";
+
+@theme {
+  --color-paper: oklch(98.5% 0.004 250);
+  --color-panel: oklch(99.4% 0.003 250);
+  --color-sunken: oklch(96% 0.006 250);
+  --color-rule: oklch(90% 0.01 252);
+  --color-rule-2: oklch(84% 0.014 254);
+  --color-ink: oklch(24% 0.02 258);
+  --color-ink-2: oklch(34% 0.018 257);
+  --color-muted: oklch(46% 0.02 256);
+  --color-graphite: oklch(22% 0.016 260);
+  --color-graphite-2: oklch(27% 0.018 260);
+  --color-graphite-rule: oklch(36% 0.02 260);
+  --color-on-graphite: oklch(95% 0.006 250);
+  --color-on-graphite-muted: oklch(76% 0.02 255);
+  --color-accent: oklch(55% 0.2 256);
+  --color-accent-hover: oklch(50% 0.2 256);
+  --color-on-accent: oklch(99% 0.003 250);
+  --color-ok: oklch(80% 0.17 155);
+  --color-ok-ink: oklch(46% 0.14 155);
+  --color-ok-tint: oklch(96% 0.04 155);
+  --color-warn: oklch(82% 0.15 85);
+  --color-warn-ink: oklch(48% 0.12 70);
+  --color-warn-tint: oklch(96% 0.05 85);
+  --color-danger: oklch(74% 0.17 25);
+  --color-danger-ink: oklch(50% 0.2 25);
+  --color-danger-tint: oklch(96% 0.03 25);
+
+  --font-display: var(--font-space-grotesk), "Helvetica Neue", sans-serif;
+  --font-sans: var(--font-schibsted), "Helvetica Neue", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --radius-control: 6px;
+  --radius-card: 10px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html, body { overflow-x: clip; }
+  html { background: var(--color-paper); }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink-2);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--color-ink); letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .on-graphite :focus-visible { outline-color: var(--color-on-graphite); }
+  ::selection { background: var(--color-accent); color: var(--color-on-accent); }
+}
+
+@layer components {
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 16px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .on-graphite .label { color: var(--color-on-graphite-muted); }
+  .readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; font-weight: 500; }
+  .fuse-fill { transform-origin: left center; transition: transform 1s linear; }
+  .skeleton { background: var(--color-sunken); border-radius: var(--radius-control); animation: breathe 1.6s ease-in-out infinite; }
+  .on-graphite .skeleton { background: var(--color-graphite-2); }
+}
+
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fuse-fill { transition: none; }
+  .skeleton { animation: none; }
+  * { scroll-behavior: auto !important; }
+}

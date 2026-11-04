@@ -1,0 +1,79 @@
+{
+ "title": "Exchange | PancakeSwap",
+ "h1": null,
+ "h2": null,
+ "h3": null,
+ "body": {
+  "text": "Trade\nPools\nDual Investment\nNew\nPortfolio\nSearch\n/\nConnect W",
+  "font": "Kanit, sans-serif",
+  "size": "16px",
+  "weight": "400",
+  "tracking": "normal",
+  "leading": "16px",
+  "color": "rgb(255, 255, 255)",
+  "bg": "rgb(8, 6, 11)",
+  "radius": "0px",
+  "padding": "0px",
+  "border": "0px none rgb(255, 255, 255)",
+  "transform": "none",
+  "features": "normal"
+ },
+ "p": null,
+ "a": {
+  "text": "Trade",
+  "font": "Kanit, sans-serif",
+  "size": "16px",
+  "weight": "600",
+  "tracking": "normal",
+  "leading": "24px",
+  "color": "rgb(168, 129, 252)",
+  "bg": "rgba(0, 0, 0, 0)",
+  "radius": "16px",
+  "padding": "0px 12px 0px 16px",
+  "border": "0px none rgb(168, 129, 252)",
+  "transform": "none",
+  "features": "normal"
+ },
+ "button": {
+  "text": "Search\n/",
+  "font": "Kanit, sans-serif",
+  "size": "16px",
+  "weight": "400",
+  "tracking": "normal",
+  "leading": "24px",
+  "color": "rgb(184, 173, 210)",
+  "bg": "rgb(30, 29, 32)",
+  "radius": "999px",
+  "padding": "8px 12px",
+  "border": "1px solid rgb(16, 12, 24)",
+  "transform": "none",
+  "features": "normal"
+ },
+ "input": {
+  "text": "",
+  "font": "Kanit, sans-serif",
+  "size": "24px",
+  "weight": "600",
+  "tracking": "-0.24px",
+  "leading": "36px",
+  "color": "rgb(244, 238, 255)",
+  "bg": "rgba(0, 0, 0, 0)",
+  "radius": "0px",
+  "padding": "0px",
+  "border": "0px none rgb(244, 238, 255)",
+  "transform": "none",
+  "features": "\"liga\" 0"
+ },
+ "loadedFonts": [
+  "Kanit"
+ ],
+ "htmlBg": "rgba(0, 0, 0, 0)",
+ "textLen": 1271,
+ "height": 1261,
+ "url": "https://pancakeswap.finance/swap",
+ "viewport": [
+  1440,
+  900
+ ],
+ "lumaStddev": 27.2
+}
