@@ -26,7 +26,7 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
     const content = body?.choices?.[0]?.message?.content;
     let value: any;
     try { if (typeof content !== "string" || content.trim().startsWith("``")) throw new Error(); value = JSON.parse(content); } catch { throw new BrainError("invalid_json"); }
-    if (!value || Array.isArray(value) || typeof value !== "object" || Object.keys(value).sort().join(",") !== "rateE18,reason,spreadBps") throw new BrainError("invalid_shape");
+    if (!value || Array.isArray(value) || typeof value !== "object" || !Object.hasOwn(value, "rateE18") || !Object.hasOwn(value, "spreadBps") || !Object.hasOwn(value, "reason")) throw new BrainError("invalid_shape");
     if (typeof value.rateE18 !== "number" || !Number.isFinite(value.rateE18) || typeof value.spreadBps !== "number" || !Number.isFinite(value.spreadBps) || typeof value.reason !== "string" || !value.reason.trim()) throw new BrainError("invalid_shape");
     if (!Number.isInteger(value.spreadBps) || value.spreadBps < 5 || value.spreadBps > 500) throw new BrainError("spread_out_of_range");
     if (!Number.isInteger(value.rateE18)) throw new BrainError("rate_out_of_range");

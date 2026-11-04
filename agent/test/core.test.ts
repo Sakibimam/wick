@@ -67,6 +67,7 @@ const answer = (rateE18 = 2e18, spreadBps = 30) => ({ rateE18, spreadBps, reason
 async function brainFail(code: BrainErrorCode, content: unknown) { try { await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(content) }); throw new Error("unexpected success"); } catch (e) { expect(e).toBeInstanceOf(BrainError); expect((e as BrainError).code).toBe(code); } }
 describe("brain protocol", () => {
   test("valid strict JSON and header request id", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer()) })).toMatchObject({ rateE18: 2_000_000_000_000_000_000n, requestId: "rid", model: "0gm-1.0-35b-a3b" }); });
+  test("required fields allow benign extra JSON keys", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher({ ...answer(), explanationCode: "balanced-inventory" }) })).toMatchObject({ spreadBps: 30, reason: "balanced" }); });
   test("spread bounds reject both sides", async () => { await brainFail("spread_out_of_range", answer(2e18, 4)); await brainFail("spread_out_of_range", answer(2e18, 501)); });
   test("rate beyond 3 percent rejects and boundary passes", async () => { await brainFail("rate_out_of_range", answer(2.061e18)); expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer(2.06e18)) })).rateE18).toBe(2_060_000_000_000_000_000n); });
   test("one wei over exact 3 percent boundary rejects", async () => { const tiny = { ...state, mid: 1e-14 }; expect((await askBrain(tiny, { apiKey: "x", fetchImpl: fetcher(answer(10300)) })).rateE18).toBe(10300n); await expect(askBrain(tiny, { apiKey: "x", fetchImpl: fetcher(answer(10301)) })).rejects.toMatchObject({ code: "rate_out_of_range" }); });
@@ -80,6 +81,7 @@ describe("price math", () => {
   test("both W0G/USDC token orders yield 0.25", () => { expect(midPriceUsdcPerW0g(sqrtFor(0.25, 18, 6), W0G, USDC, 18, 6)).toBeCloseTo(0.25, 8); expect(midPriceUsdcPerW0g(sqrtFor(4, 6, 18), USDC, W0G, 6, 18)).toBeCloseTo(0.25, 8); });
   test("known sqrtPriceX96 fixtures yield 0.25 in both token orders", () => { expect(midPriceUsdcPerW0g(39614081257132168796771n, W0G, USDC, 18, 6)).toBeCloseTo(0.25, 8); expect(midPriceUsdcPerW0g(2_000_000n * 2n ** 96n, USDC, W0G, 6, 18)).toBeCloseTo(0.25, 8); });
   test("zero sqrt and wrong pair reject", () => { expect(() => midPriceUsdcPerW0g(0n, W0G, USDC, 18, 6)).toThrow(); expect(() => midPriceUsdcPerW0g(2n ** 96n, addr, USDC, 18, 6)).toThrow(); });
+  test("decimals must match the W0G and USDC contracts", () => { expect(() => midPriceUsdcPerW0g(2n ** 96n, W0G, USDC, 6, 18)).toThrow(); });
 });
 
 describe("unsigned funding plan", () => {
