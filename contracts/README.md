@@ -10,13 +10,21 @@ Requires Foundry with solc 0.8.30. From this directory:
 forge fmt --check
 forge build --sizes
 forge test --match-contract AgentQuoteTest -vv
+forge test --match-contract BaseW0GTest -vv
 ```
 
-Fork tests use `https://ethereum-rpc.publicnode.com` by default. Set `ETH_RPC_URL` to use another Ethereum mainnet RPC:
+Ethereum fork tests use `https://ethereum-rpc.publicnode.com` by default. Set `ETH_RPC_URL` to use another Ethereum mainnet RPC:
 
 ```sh
 export ETH_RPC_URL=https://your-mainnet-rpc
 forge test --match-contract AgentQuoteTest -vv
+```
+
+Base fork tests use `https://base-rpc.publicnode.com` by default. Set `BASE_RPC_URL` to use another Base RPC:
+
+```sh
+export BASE_RPC_URL=https://your-base-rpc
+forge test --match-contract BaseW0GTest -vv
 ```
 
 The `lib/` sources are committed at the pinned revisions below. `forge-std` is a pinned Git submodule. Clone with `--recurse-submodules` to initialize it.
@@ -73,6 +81,63 @@ These selectors were found in the deployed bytecode by matching `cast code` outp
 | `0x6d58b4cc` | `rawBalances` |
 | `0x65f2fe14` | `safeBalances` |
 
+## Base
+
+The same `AgentQuoteBoard` and `AgentQuoteExtruction` run against the real W0G/USDC pair on Base mainnet. W0G is CCIP-bridged 0G with 18 decimals; USDC has 6 decimals. The board's EIP-712 domain uses Base chainId `8453`.
+
+### Base addresses
+
+| Contract | Address |
+| --- | --- |
+| Aqua | `0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a` |
+| AquaSwapVMRouter | `0x111111338c5091E8440b67B168bAe16a668AC0De` |
+| W0G | `0x23cd099eB438CcA50349EE2BC809196b1ae00861` |
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Uniswap v3 W0G/USDC 0.3% | `0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e` |
+
+At Base block `53521567`, Aqua runtime was 5,619 bytes and AquaSwapVMRouter runtime was 20,541 bytes. `router.AQUA()` returned the Aqua address above, and `router.eip712Domain()` reported chainId `8453`. W0G reported 18 decimals and symbol `W0G`; USDC reported 6 decimals. The pool reported token0 `W0G`, token1 `USDC`, and fee `3000`. The tests read the mid from `slot0().sqrtPriceX96`; that mid is a reference price, not an execution oracle.
+
+### Base commands
+
+```sh
+export BASE_RPC_URL=https://base-rpc.publicnode.com
+forge test --match-contract BaseW0GTest -vv
+```
+
+Deploy without a key. This uses Foundry's default sender and a broadcast-free simulation, so it reads no key and sends nothing:
+
+```sh
+forge script script/Deploy.s.sol --fork-url "$BASE_RPC_URL"
+```
+
+Deploy for real. The deployer key is read only from `DEPLOYER_PK` and is never written to a file:
+
+```sh
+DEPLOYER_PK=... forge script script/Deploy.s.sol --rpc-url "$BASE_RPC_URL" --broadcast
+```
+
+Ship the two-sided W0G/USDC strategy. `W0G_AMOUNT` and `USDC_AMOUNT` are raw units (18 and 6 decimals):
+
+```sh
+BOARD=0x... \
+EXTRUCTION=0x... \
+MAKER_PK=... \
+W0G_AMOUNT=50000000000000000000000 \
+USDC_AMOUNT=50000000000 \
+FEE_BPS=30 \
+forge script script/ShipStrategy.s.sol --rpc-url "$BASE_RPC_URL" --broadcast
+```
+
+The maker must hold at least `W0G_AMOUNT` W0G and `USDC_AMOUNT` USDC. `ship` records Aqua allowances; it does not move tokens. The script checks that `EXTRUCTION.board()` equals `BOARD`, approves Aqua for both tokens, and ships one strategy with a W0G balance and a USDC balance so the same order hash serves both directions. It prints the strategy hash and the taker order struct as JSON on stdout:
+
+```json
+{"strategyHash":"0x...","order":{"maker":"0x...","traits":"0x...","data":"0x..."},"pair":{"w0g":"0x23cd099eB438CcA50349EE2BC809196b1ae00861","usdc":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","feeBps":30},"amounts":{"w0g":"50000000000000000000000","usdc":"50000000000"}}
+```
+
+### Pricing trust
+
+Pricing trust sits with the agent signer. `AgentQuoteBoard` stores the signed `rateE18` and does not read the Uniswap pool, compute a mid, or enforce a deviation band. A quote arbitrarily far from the onchain mid still fills at the signed rate. `BaseW0GTest.test_quoteFarOutsideMidBandStillFillsAtQuotedRate` posts a 2x-mid quote and proves the fill pays exactly 2x mid minus the fee, and the board stores that rate verbatim. A compromised, buggy, or malicious agent key can therefore price a fill away from the market. Takers must compare the signed rate with their own reference before filling. The board enforces quote freshness, maker and pair binding, strictly increasing nonces, and agent rotation, not price correctness.
+
 ## Aqua opcode table
 
 Both `v1.0.2` `AquaOpcodes.sol` and the general `Opcodes.sol` build their opcode table as a fixed-size memory array, then return it as a dynamic array by setting `result := instructions` and writing `instructions.length - 1` to the first memory slot. That slot held source element 0, the first `_notInstruction`, so it is overwritten by the dynamic-array length; returned opcode 0 is source element 1.
@@ -102,7 +167,11 @@ The `inferenceId` is the onchain audit link to the 0G Compute request. The 0G in
 - The deployed router `0x111111338c5091E8440b67B168bAe16a668AC0De` reports `1inch SwapVM v1.0` and `1.0.2` from `eip712Domain()`.
 - `cast code` on the deployed router contains selectors `f4d2d412`, `44aa5f14`, `f5d08521`, `ceb9a5d8`, `63fccba9`, `8da5cb5b`, `84b0196e`, and `f973a209`.
 - Contract runtime sizes must remain below 24,576 bytes. `forge build --sizes` measured `AgentQuoteBoard` at 4,012 bytes and `AgentQuoteExtruction` at 2,193 bytes.
+- On Base at block `53521567`, `AquaSwapVMRouter` and `Aqua` at the addresses above returned the same Aqua runtime as Ethereum and a router `eip712Domain()` chainId of `8453`; `W0G` returned 18 decimals and the pool returned token0 `W0G`, token1 `USDC`, fee `3000`.
+- `BaseW0GTest` passes 5 tests against the real Base W0G/USDC pair. `ShipStrategy.s.sol` was also exercised end to end on a local Base fork: it printed a strategy hash, and Aqua reported both token balances with `tokensCount = 2`.
 
 ## Test coverage
 
 `AgentQuoteTest` forks Ethereum mainnet and calls the deployed Aqua and AquaSwapVMRouter. It checks that both `quote()` and `swap()` fail closed for missing, expired, or rotated-agent quotes, exact-in and exact-out quote/swap agreement at a non-default fee, token balance deltas, unregistered signer rejection, replayed and older nonce rejection, maker isolation, and the Aqua opcode dispatch. Test accounts use fixed numerical keys with `vm.addr` and `vm.sign` only.
+
+`BaseW0GTest` forks Base mainnet and exercises the real W0G/USDC pair through the deployed Aqua and AquaSwapVMRouter: one two-sided strategy, both exact-in directions priced from Uniswap v3 `slot0`, exact balance deltas against the signed quote minus fee, stale-quote failure, and the no-mid-check pricing-trust test.
