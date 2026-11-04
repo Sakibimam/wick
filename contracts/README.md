@@ -105,4 +105,4 @@ The `inferenceId` is the onchain audit link to the 0G Compute request. The 0G in
 
 ## Test coverage
 
-`AgentQuoteTest` forks Ethereum mainnet and calls the deployed Aqua and AquaSwapVMRouter. It checks exact-in and exact-out quote/swap agreement, token balance deltas, expiry rejection, unregistered signer rejection, replayed and older nonce rejection, maker isolation, and the Aqua opcode dispatch. Test accounts use fixed numerical keys with `vm.addr` and `vm.sign` only.
+`AgentQuoteTest` forks Ethereum mainnet and calls the deployed Aqua and AquaSwapVMRouter. It checks that both `quote()` and `swap()` fail closed for missing, expired, or rotated-agent quotes, exact-in and exact-out quote/swap agreement at a non-default fee, token balance deltas, unregistered signer rejection, replayed and older nonce rejection, maker isolation, and the Aqua opcode dispatch. Test accounts use fixed numerical keys with `vm.addr` and `vm.sign` only.

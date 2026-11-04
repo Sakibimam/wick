@@ -104,6 +104,51 @@ contract AgentQuoteTest is Test {
         assertEq(WETH.balanceOf(taker), amountOut);
     }
 
+    function test_exactInAndExactOutAgreeAtNonDefaultFee() public {
+        ISwapVM.Order memory order = _ship(maker, 100);
+        _post(maker, AGENT_KEY, 1, uint64(block.timestamp + 1 days), RATE_E18);
+
+        uint256 amountIn = 3_000e6;
+        uint256 grossOut = Math.mulDiv(amountIn, RATE_E18, 1e18);
+        uint256 netOut = Math.mulDiv(grossOut, 9_900, 10_000);
+        bytes memory exactInTraits = _takerTraits(true, taker);
+        uint256 makerUsdcBefore = USDC.balanceOf(maker);
+        uint256 makerWethBefore = WETH.balanceOf(maker);
+        uint256 takerUsdcBefore = USDC.balanceOf(taker);
+        uint256 takerWethBefore = WETH.balanceOf(taker);
+        (uint256 quotedIn, uint256 quotedOut,) =
+            routerView.quote(order, address(USDC), address(WETH), amountIn, exactInTraits);
+        (uint256 swappedIn, uint256 swappedOut,) = _swap(order, amountIn, exactInTraits);
+
+        assertEq(quotedIn, amountIn);
+        assertEq(quotedOut, netOut);
+        assertEq(swappedIn, quotedIn);
+        assertEq(swappedOut, quotedOut);
+        assertEq(USDC.balanceOf(maker) - makerUsdcBefore, quotedIn);
+        assertEq(makerWethBefore - WETH.balanceOf(maker), quotedOut);
+        assertEq(takerUsdcBefore - USDC.balanceOf(taker), quotedIn);
+        assertEq(WETH.balanceOf(taker) - takerWethBefore, quotedOut);
+
+        uint256 amountOut = 0.25e18;
+        uint256 noFeeAmountIn = Math.mulDiv(amountOut, 1e18, RATE_E18, Math.Rounding.Ceil);
+        bytes memory exactOutTraits = _takerTraits(false, taker);
+        makerUsdcBefore = USDC.balanceOf(maker);
+        makerWethBefore = WETH.balanceOf(maker);
+        takerUsdcBefore = USDC.balanceOf(taker);
+        takerWethBefore = WETH.balanceOf(taker);
+        (quotedIn, quotedOut,) = routerView.quote(order, address(USDC), address(WETH), amountOut, exactOutTraits);
+        (swappedIn, swappedOut,) = _swap(order, amountOut, exactOutTraits);
+
+        assertEq(quotedOut, amountOut);
+        assertEq(swappedOut, amountOut);
+        assertEq(swappedIn, quotedIn);
+        assertGt(quotedIn, noFeeAmountIn);
+        assertEq(USDC.balanceOf(maker) - makerUsdcBefore, quotedIn);
+        assertEq(makerWethBefore - WETH.balanceOf(maker), amountOut);
+        assertEq(takerUsdcBefore - USDC.balanceOf(taker), quotedIn);
+        assertEq(WETH.balanceOf(taker) - takerWethBefore, amountOut);
+    }
+
     function test_expiredQuoteFailsClosed() public {
         ISwapVM.Order memory order = _ship(maker);
         _post(maker, AGENT_KEY, 1, uint64(block.timestamp + 1), RATE_E18);
@@ -119,6 +164,20 @@ contract AgentQuoteTest is Test {
         _swap(order, 3_000e6, _takerTraits(true, taker));
     }
 
+    function test_quoteViewFailsClosedForMissingQuote() public {
+        ISwapVM.Order memory order = _ship(maker);
+        vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
+        routerView.quote(order, address(USDC), address(WETH), 3_000e6, _takerTraits(true, taker));
+    }
+
+    function test_quoteViewFailsClosedForExpiredQuote() public {
+        ISwapVM.Order memory order = _ship(maker);
+        _post(maker, AGENT_KEY, 1, uint64(block.timestamp + 1), RATE_E18);
+        vm.warp(block.timestamp + 2);
+        vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
+        routerView.quote(order, address(USDC), address(WETH), 3_000e6, _takerTraits(true, taker));
+    }
+
     function test_expiredQuoteCannotBePosted() public {
         AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp), RATE_E18);
         bytes memory sig = _sign(q, AGENT_KEY);
@@ -132,6 +191,9 @@ contract AgentQuoteTest is Test {
         _post(maker, AGENT_KEY, 1, expiry, RATE_E18);
         vm.prank(maker);
         board.setAgent(vm.addr(NEW_AGENT_KEY));
+
+        vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
+        routerView.quote(order, address(USDC), address(WETH), 3_000e6, _takerTraits(true, taker));
 
         vm.expectRevert(AgentQuoteExtruction.StaleQuote.selector);
         _swap(order, 3_000e6, _takerTraits(true, taker));
@@ -157,6 +219,18 @@ contract AgentQuoteTest is Test {
         AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp + 1 days), RATE_E18);
         bytes memory sig = _sign(q, AGENT_KEY);
         q.tokenOut = address(0x1234);
+        vm.expectRevert(AgentQuoteBoard.InvalidAgentSignature.selector);
+        board.post(q, sig);
+    }
+
+    function test_signatureIsBoundToMaker() public {
+        address secondMaker = vm.addr(SECOND_MAKER_KEY);
+        address secondAgent = vm.addr(SECOND_AGENT_KEY);
+        vm.prank(secondMaker);
+        board.setAgent(secondAgent);
+        AgentQuoteBoard.Quote memory q = _quote(maker, 1, uint64(block.timestamp + 1 days), RATE_E18);
+        bytes memory sig = _sign(q, AGENT_KEY);
+        q.maker = secondMaker;
         vm.expectRevert(AgentQuoteBoard.InvalidAgentSignature.selector);
         board.post(q, sig);
     }
