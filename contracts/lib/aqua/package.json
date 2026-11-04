@@ -1,0 +1,60 @@
+{
+  "name": "@1inch/aqua",
+  "version": "1.0.1",
+  "description": "Shared liquidity layer protocol",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "contracts",
+    "LICENSES",
+    "THIRD_PARTY_NOTICES"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "@1inch/solidity-utils": "6.9.9",
+    "@openzeppelin/contracts": "5.4.0"
+  },
+  "devDependencies": {
+    "forge-std": "github:foundry-rs/forge-std#v1.11.0",
+    "@nomicfoundation/hardhat-ignition-viem": "3.1.6",
+    "@nomicfoundation/hardhat-ignition": "3.1.8",
+    "@nomicfoundation/hardhat-keystore": "3.0.12",
+    "@nomicfoundation/hardhat-verify": "3.0.22",
+    "@nomicfoundation/hardhat-viem": "3.0.9",
+    "hardhat": "3.17.0",
+    "hardhat-ignore-warnings": "0.3.0",
+    "prettier": "3.8.3",
+    "prettier-plugin-solidity": "2.3.1",
+    "viem": "2.52.0",
+    "@noble/hashes": "1.8.0"
+  },
+  "resolutions": {
+    "elliptic": "6.6.1",
+    "@openzeppelin/contracts": "5.4.0",
+    "viem/@noble/hashes": "1.8.0",
+    "viem/@noble/curves/@noble/hashes": "1.8.0"
+  },
+  "scripts": {
+    "build": "npx hardhat build",
+    "test": "npx hardhat test solidity",
+    "snapshot": "npx hardhat test solidity --snapshot --grep-exclude testFuzz",
+    "snapshot:check": "npx hardhat test solidity --snapshot-check --tolerance 5 --grep-exclude testFuzz",
+    "format": "prettier --write \"{contracts,test,script,examples}/**/*.sol\"",
+    "lint": "prettier --check \"{contracts,test,script,examples}/**/*.sol\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1inch/aqua.git"
+  },
+  "author": "Degensoft Ltd.",
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/1inch/aqua/issues"
+  },
+  "homepage": "https://github.com/1inch/aqua#readme"
+}

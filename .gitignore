@@ -1,4 +1,5 @@
 node_modules/
+.agentctx/
 .env
 .env.*
 !.env.example
