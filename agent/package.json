@@ -1,0 +1,8 @@
+{
+  "name": "upkeep-agent",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit", "live-check": "bun run scripts/live-check.ts" },
+  "dependencies": { "viem": "^2.38.5" },
+  "devDependencies": { "@types/bun": "^1.2.20", "typescript": "^5.9.2" }
+}
