@@ -75,7 +75,16 @@ These selectors were found in the deployed bytecode by matching `cast code` outp
 
 ## Aqua opcode table
 
-The general SwapVM `Opcodes.sol` positional table places Extruction at index 33. The deployed AquaSwapVMRouter uses the shorter Aqua-specific table in `AquaOpcodes.sol`: its effective Extruction index is 32 (`0x20`). Index 33 (`0x21`) is `onlyTxOriginTokenBalanceNonZero`. `test_aquaOpcode33IsNotExtruction` verifies that dispatch against the deployed router on a mainnet fork, and the fill tests execute the quote guard through index 32.
+Both `v1.0.2` `AquaOpcodes.sol` and the general `Opcodes.sol` build their opcode table as a fixed-size memory array, then return it as a dynamic array by setting `result := instructions` and writing `instructions.length - 1` to the first memory slot. That slot held source element 0, the first `_notInstruction`, so it is overwritten by the dynamic-array length; returned opcode 0 is source element 1.
+
+In Aqua's `AquaOpcodes.sol`, Extruction is source element 33 and therefore effective opcode 32 (`0x20`). Source element 34, `Controls._onlyTxOriginTokenBalanceNonZero`, is effective opcode 33 (`0x21`). The general `Opcodes.sol` has Extruction at source element 34, effective index 33, but the deployed AquaSwapVMRouter uses the Aqua table. `test_aquaOpcode33IsNotExtruction` verifies that `0x21` dispatches to `Controls._onlyTxOriginTokenBalanceNonZero` on the deployed router; the fill tests verify that `0x20` dispatches to Extruction.
+
+To check the known selectors in the deployed router bytecode:
+
+```sh
+ROUTER=0x111111338c5091E8440b67B168bAe16a668AC0De
+cast code "$ROUTER" --rpc-url https://ethereum-rpc.publicnode.com | grep -oiE 'f4d2d412|44aa5f14|f5d08521|ceb9a5d8|63fccba9|8da5cb5b|84b0196e|f973a209'
+```
 
 ## Quote and fee behavior
 
