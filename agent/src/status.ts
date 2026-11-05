@@ -1,8 +1,8 @@
 import type { Address, Hex } from "viem";
 import { AQUA_ROUTER, type ShippedOrder } from "./taker.js";
-export type RuntimeState = { agent: Address; maker: Address; chainId: number; pair: { w0g: Address; usdc: Address }; mid: number | null; quotes: any[]; budget: any; fees: { accruedUsdc: string; accruedW0g: string }; funding: any[]; inferences: any[]; order: ShippedOrder };
+export type RuntimeState = { agent: Address; maker: Address; chainId: number; pair: { w0g: Address; usdc: Address }; mid: number | null; quotes: any[]; budget: any; fees: { accruedUsdc: string; accruedW0g: string }; funding: any[]; inferences: any[]; order: ShippedOrder; fundingThresholdUsdc?: string };
 export function statusSchema(state: RuntimeState) {
-  return { agent: state.agent, maker: state.maker, chainId: state.chainId, pair: state.pair, mid: state.mid, quotes: state.quotes.map(q => ({ tokenIn: q.tokenIn, tokenOut: q.tokenOut, rateE18: q.rateE18, expiry: q.expiry, inferenceId: q.inferenceId, requestId: q.requestId, postedTx: q.postedTx })), budget: state.budget, fees: state.fees, funding: state.funding.map(x => ({ step: x.step, txHash: x.txHash, chainId: x.chainId, time: x.time })), inferences: state.inferences.map(x => ({ requestId: x.requestId, model: x.model, costWei: x.costWei, time: x.time })), order: { ...state.order, traits: `0x${state.order.traits.toString(16).padStart(64, "0")}` } };
+  return { agent: state.agent, maker: state.maker, chainId: state.chainId, pair: state.pair, mid: state.mid, quotes: state.quotes.map(q => ({ tokenIn: q.tokenIn, tokenOut: q.tokenOut, rateE18: q.rateE18, expiry: q.expiry, inferenceId: q.inferenceId, requestId: q.requestId, postedTx: q.postedTx })), budget: state.budget, fees: state.fees, funding: state.funding.map(x => ({ step: x.step, txHash: x.txHash, chainId: x.chainId, time: x.time })), inferences: state.inferences.map(x => ({ requestId: x.requestId, model: x.model, costWei: x.costWei, time: x.time })), order: { ...state.order, traits: `0x${state.order.traits.toString(16).padStart(64, "0")}` }, fundingThresholdUsdc: state.fundingThresholdUsdc ?? null };
 }
 export function createStatusServer(getState: () => RuntimeState | Promise<RuntimeState>, getQuote: (amountIn: bigint, tokenIn: Address) => Promise<unknown>, port = Number(process.env.PORT ?? 8787)) {
   const allowed = process.env.WEB_ORIGIN ?? "";
@@ -17,7 +17,10 @@ export function createStatusServer(getState: () => RuntimeState | Promise<Runtim
       const raw = url.searchParams.get("amountIn"), tokenIn = url.searchParams.get("tokenIn") as Address | null;
       const pair = (await getState()).pair;
       if (!raw || !/^\d+$/.test(raw) || BigInt(raw) <= 0n || !tokenIn || !/^0x[0-9a-fA-F]{40}$/.test(tokenIn) || ![pair.w0g, pair.usdc].some(x => x.toLowerCase() === tokenIn.toLowerCase())) return Response.json({ error: "amountIn and a supported tokenIn are required" }, { status: 400, headers: cors });
-      return new Response(JSON.stringify(await getQuote(BigInt(raw), tokenIn), (_, value) => typeof value === "bigint" ? value.toString() : value), { headers: { "content-type": "application/json", ...cors } });
+      let routed: unknown;
+      try { routed = await getQuote(BigInt(raw), tokenIn); }
+      catch (e) { const msg = e instanceof Error ? (("shortMessage" in e && typeof e.shortMessage === "string") ? e.shortMessage : e.message) : String(e); const full = e instanceof Error ? e.message : String(e); return Response.json({ error: `router quote reverted: ${full.includes("0xb915daf5") || full.includes("StaleQuote") ? "StaleQuote, the signed price expired" : msg.split("\n")[0]}` }, { status: 409, headers: cors }); }
+      return new Response(JSON.stringify(routed, (_, value) => typeof value === "bigint" ? value.toString() : value), { headers: { "content-type": "application/json", ...cors } });
     }
     return Response.json({ error: "not found" }, { status: 404, headers: cors });
   } });

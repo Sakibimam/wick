@@ -133,7 +133,9 @@ describe("agent runtime contracts", () => {
   });
   test("status builder emits the agreed keys even with empty histories", () => {
     const s = statusSchema({ agent: addr, maker: addr, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: 1, quotes: [], budget: {}, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: { maker: addr, traits: 65n, data: "0x" } });
-    expect(Object.keys(s)).toEqual(["agent", "maker", "chainId", "pair", "mid", "quotes", "budget", "fees", "funding", "inferences", "order"]);
+    expect(Object.keys(s)).toEqual(["agent", "maker", "chainId", "pair", "mid", "quotes", "budget", "fees", "funding", "inferences", "order", "fundingThresholdUsdc"]);
+    expect(s.fundingThresholdUsdc).toBeNull();
+    expect(statusSchema({ agent: addr, maker: addr, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: 1, quotes: [], budget: {}, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: { maker: addr, traits: 65n, data: "0x" }, fundingThresholdUsdc: "10" }).fundingThresholdUsdc).toBe("10");
     expect(s.order.traits).toBe(`0x${"0".repeat(62)}41`);
   });
 });

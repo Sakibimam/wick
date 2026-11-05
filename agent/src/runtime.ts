@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createPublicClient, defineChain, formatUnits, http, keccak256, parseAbi, parseAbiItem, parseUnits, toHex, type Address, type Chain, type Hex, type PublicClient } from "viem";
 import { base } from "viem/chains";
@@ -37,17 +37,19 @@ export async function loadState(): Promise<Persisted> {
     return { ...saved, agent: saved.agent ?? requiredAddress(runtimeAddress, "AGENT_ADDRESS"), maker: saved.maker ?? requiredAddress(makerAddress, "MAKER_ADDRESS"), order: saved.order ? { ...saved.order, traits: BigInt(saved.order.traits) } : orderFromEnv() } as Persisted;
   } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; return initial(); }
 }
-async function save(s: Persisted) { await mkdir(dirname(statePath), { recursive: true }); await writeFile(statePath, JSON.stringify(s, (_, v) => typeof v === "bigint" ? v.toString() : v, 2) + "\n", { mode: 0o600 }); }
+// Write then rename, so the status server never reads a half-written file.
+async function save(s: Persisted) { await mkdir(dirname(statePath), { recursive: true }); const tmp = `${statePath}.tmp`; await writeFile(tmp, JSON.stringify(s, (_, v) => typeof v === "bigint" ? v.toString() : v, 2) + "\n", { mode: 0o600 }); await rename(tmp, statePath); }
 const tokenAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const paymentBalance = (client: PublicClient<any, any>, who: Address) => client.readContract({ address: ZERO_G_PAYMENT_LAYER, abi: fundingAbi.payment, functionName: "balanceOf", args: [who] });
-const swapEvent = parseAbiItem("event Swapped(bytes32 indexed orderHash,address indexed maker,address indexed taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut)");
+// SwapVM.sol declares Swapped with no indexed fields, so the maker filter runs on decoded args, not topics.
+const swapEvent = parseAbiItem("event Swapped(bytes32 orderHash,address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut)");
 async function recordFees(s: Persisted) {
   const latest = await baseClient.getBlockNumber();
   if (!s.lastFillBlock) { s.lastFillBlock = latest.toString(); return; }
   let from = BigInt(s.lastFillBlock) + 1n;
   while (from <= latest) {
     const to = from + 4_999n < latest ? from + 4_999n : latest;
-    const logs = await baseClient.getLogs({ address: AQUA_ROUTER, event: swapEvent, args: { maker: makerAddress }, fromBlock: from, toBlock: to });
+    const logs = (await baseClient.getLogs({ address: AQUA_ROUTER, event: swapEvent, fromBlock: from, toBlock: to })).filter(l => l.args.maker?.toLowerCase() === makerAddress.toLowerCase());
     for (const log of logs) {
       const q = [...s.quotes].filter(x => x.tokenIn.toLowerCase() === log.args.tokenIn!.toLowerCase() && x.tokenOut.toLowerCase() === log.args.tokenOut!.toLowerCase() && BigInt(x.postedBlock ?? 0) <= log.blockNumber!).sort((a, b) => BigInt(a.postedBlock ?? 0) < BigInt(b.postedBlock ?? 0) ? 1 : -1)[0];
       if (!q) continue;
@@ -132,6 +134,7 @@ export async function runTick(s: Persisted, now = Date.now()) {
   const deviation = s.lastMid === null ? 0 : deviationBps(s.lastMid, market.mid);
   const cap = BigInt(process.env.SPEND_CAP_PER_DAY_WEI ?? "1000000000000000000");
   const decision = decideBudget({ computeBalanceWei: balance, spendCapPerDayWei: cap, spentTodayWei: spent, priceDeviationBps: deviation, lastQuoteAgeMs: elapsed }, DEFAULT_BUDGET_CONFIG);
+  s.fundingThresholdUsdc = process.env.FUNDING_THRESHOLD_USDC ?? "10";
   s.mid = market.mid; s.budget = { tier: decision.tier, model: decision.model, computeBalanceWei: balance.toString(), spentTodayWei: spent.toString(), spendCapPerDayWei: cap.toString(), reason: decision.reason };
   s.recentMids = [...s.recentMids.slice(-19), market.mid];
   if (shouldRunInference(decision.tier, decision.requote)) {
