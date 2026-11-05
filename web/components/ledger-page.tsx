@@ -71,7 +71,7 @@ function GaugeBand({ status, loading, error, onRetry }: { status: AgentStatus | 
     <section aria-label="AI account balance" className="on-graphite border-y border-graphite-rule bg-graphite text-on-graphite">
       <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 md:py-8">
         {loading ? (
-          <div aria-busy="true" className="grid gap-8 md:grid-cols-3">
+          <div aria-busy="true" className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {[0, 1, 2].map((i) => <div key={i} className="space-y-3"><div className="skeleton h-4 w-40" /><div className="skeleton h-14 w-56" /><div className="skeleton h-4 w-full" /></div>)}
           </div>
         ) : error ? (
@@ -95,7 +95,7 @@ function GaugeLive({ status }: { status: AgentStatus }) {
   const pct = percentOf(spent, cap);
   const barTone = pct >= 90 ? "bg-danger" : pct >= 75 ? "bg-warn" : "bg-ok";
   return (
-    <div className="grid gap-8 md:grid-cols-[1.1fr_1fr_1.1fr] md:gap-10">
+    <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.1fr_1fr_1.1fr] md:gap-10">
       <div>
         <p className="label">AI account balance</p>
         <p className="mt-2 flex items-baseline gap-3"><span className="readout text-[40px] leading-none md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="num text-[16px] text-on-graphite-muted md:text-[20px]">0G</span></p>
@@ -182,7 +182,7 @@ function FeesRow({ loop }: { loop: Loop }) {
   if (none) return <EmptyBlock title="No fees collected yet." next="Every fill leaves a fee in the strategy. Once fills arrive, the total shows here before the agent turns it into 0G." />;
   return (
     <Rows>
-      <li className="grid gap-2 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <li className="grid grid-cols-1 gap-2 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div>
           <p className="text-[15px] font-medium text-ink">Fees accrued by the agent</p>
           <p className="mt-0.5 text-[14px] text-muted">The running total of fees takers have paid, split by token. This is the money the next funding step spends.</p>

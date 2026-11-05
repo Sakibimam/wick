@@ -46,7 +46,7 @@ export function QuoteTape(props: Props) {
 
 function TapeSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading the agent's prices" className="grid gap-8 md:grid-cols-2">
+    <div aria-busy="true" aria-label="Loading the agent's prices" className="grid grid-cols-1 gap-8 md:grid-cols-2">
       {[0, 1].map((i) => (
         <div key={i} className="space-y-3">
           <div className="skeleton h-4 w-40" />
@@ -85,7 +85,7 @@ function TapeLive({ status, priced, direction, onSelect, now, nowReady, updatedA
   return (
     <>
       {nothing ? <EmptyAgent status={status} /> : (
-        <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 md:gap-x-0">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2 md:gap-x-0">
           <Side d="sell-w0g" p={sell} status={status} active={direction === "sell-w0g"} onSelect={onSelect} now={now} nowReady={nowReady} />
           <Side d="buy-w0g" p={buy} status={status} active={direction === "buy-w0g"} onSelect={onSelect} now={now} nowReady={nowReady} className="md:border-l md:border-graphite-rule md:pl-8" />
         </div>
@@ -120,7 +120,7 @@ function EmptyAgent({ status }: { status: AgentStatus }) {
     "The agent asks its AI for a price and signs it. This tape fills in then.",
   ];
   return (
-    <div className="grid gap-6 md:grid-cols-[1.1fr_1fr] md:items-start">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-[1.1fr_1fr] md:items-start">
       <div>
         <h2 className="font-display text-[28px] font-medium leading-tight text-on-graphite">The agent has not signed a price yet.</h2>
         <p className="mt-2 max-w-[52ch] text-[14px] text-on-graphite-muted">{reasonText(status.budget.reason)} Until it signs, the pool refuses every swap, so there is nothing to trade against.</p>

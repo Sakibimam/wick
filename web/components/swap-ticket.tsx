@@ -115,7 +115,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
             value={typed}
             onChange={(e) => { if (/^\d*\.?\d*$/.test(e.target.value)) setTyped(e.target.value); }}
             aria-describedby="sell-hint"
-            className="num min-w-0 flex-1 bg-transparent text-[28px] leading-9 text-ink outline-none placeholder:text-muted/70"
+            className="num w-full min-w-0 flex-1 bg-transparent text-[28px] leading-9 text-ink outline-none placeholder:text-muted/70"
           />
           <span className="num flex shrink-0 items-center gap-2 text-[15px] text-ink"><TokenMark symbol={sell} />{sell}</span>
         </div>

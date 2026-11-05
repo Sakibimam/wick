@@ -16,7 +16,7 @@ type Props = {
 
 export function EvidenceRow({ title, plain, hash, hashLabel, href, chainId, timeMs, nowMs }: Props) {
   return (
-    <li className="grid gap-x-6 gap-y-2 px-4 py-3.5 transition-colors duration-150 hover:bg-sunken md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)_minmax(0,9.5rem)] md:items-center">
+    <li className="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3.5 transition-colors duration-150 hover:bg-sunken md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)_minmax(0,9.5rem)] md:items-center">
       <div className="min-w-0">
         <p className="text-[15px] font-medium text-ink">{title}</p>
         <p className="mt-0.5 text-[14px] text-muted">{plain}</p>

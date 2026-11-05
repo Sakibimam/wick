@@ -38,7 +38,7 @@ export function SwapPage() {
           nowReady={ready}
         />
       </div>
-      <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-8 sm:px-6 md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] md:gap-12 md:py-12">
+      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] md:gap-12 md:py-12">
         <SwapTicket status={status.data} priced={priced} direction={direction} setDirection={setDirection} now={now} nowReady={ready} />
         <BackingPanel status={status.data} loading={loading} priced={priced} direction={direction} nowMs={now * 1000} />
       </div>

@@ -53,7 +53,7 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
           <h2 id="wallet-dialog-title" className="text-[20px] font-medium">Choose a wallet</h2>
           <Button variant="ghost" size="sm" onClick={close} aria-label="Close"><X className="size-4" aria-hidden /></Button>
         </div>
-        <div className="grid gap-2 p-5">
+        <div className="grid grid-cols-1 gap-2 p-5">
           {connectors.length === 0 ? (
             <p className="text-[14px]">No browser wallet was found. Install a wallet extension that supports Base, then reload this page.</p>
           ) : (
