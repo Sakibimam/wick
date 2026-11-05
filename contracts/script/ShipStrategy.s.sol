@@ -22,8 +22,10 @@ contract ShipStrategy is Script {
     function run() external {
         address board = vm.envAddress("BOARD");
         address extruction = vm.envAddress("EXTRUCTION");
-        bool keyedMaker = vm.envExists("MAKER_PK") && !vm.envOr("FORK_UNLOCKED", false);
-        uint256 makerKey = keyedMaker ? vm.envUint("MAKER_PK") : 0;
+        bool forkUnlocked = vm.envOr("FORK_UNLOCKED", false);
+        // A separate MAKER_PK wins; otherwise the deployer key is the maker. Fork runs never use a key.
+        bool keyedMaker = !forkUnlocked && (vm.envExists("MAKER_PK") || vm.envExists("DEPLOYER_PK"));
+        uint256 makerKey = keyedMaker ? (vm.envExists("MAKER_PK") ? vm.envUint("MAKER_PK") : vm.envUint("DEPLOYER_PK")) : 0;
         address maker = keyedMaker ? vm.addr(makerKey) : vm.envAddress("MAKER_ADDRESS");
         uint256 w0gAmount = vm.envUint("W0G_AMOUNT");
         uint256 usdcAmount = vm.envUint("USDC_AMOUNT");
@@ -58,8 +60,9 @@ contract ShipStrategy is Script {
 
         if (keyedMaker) vm.startBroadcast(makerKey);
         else vm.startBroadcast(maker);
-        IERC20(w0g).approve(aqua, type(uint256).max);
-        IERC20(usdc).approve(aqua, type(uint256).max);
+        // Exact approvals: Aqua can pull at most what this strategy ships.
+        IERC20(w0g).approve(aqua, w0gAmount);
+        IERC20(usdc).approve(aqua, usdcAmount);
         bytes32 shippedHash = IAqua(aqua).ship(router, abi.encode(order), tokens, amounts);
         vm.stopBroadcast();
 

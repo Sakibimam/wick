@@ -11,10 +11,16 @@ export async function quote(client: PublicClient<any, any>, order: ShippedOrder,
 }
 export async function swap(client: PublicClient<any, any>, wallet: WalletClient<any, any>, order: ShippedOrder, input: { tokenIn: Address; tokenOut: Address; amountIn: bigint }) {
   const acct = wallet.account!;
-  const allowanceHash = await wallet.writeContract({ address: input.tokenIn, abi: erc20Abi, functionName: "approve", args: [AQUA_ROUTER, input.amountIn], account: acct, chain: null });
+  const allowanceHash = await wallet.writeContract({ address: input.tokenIn, abi: erc20Abi, functionName: "approve", args: [AQUA_ROUTER, input.amountIn], account: acct, chain: wallet.chain ?? null, ...(await client.estimateFeesPerGas()) });
   const approval = await client.waitForTransactionReceipt({ hash: allowanceHash, retryCount: 8, retryDelay: 1_000 });
   if (approval.status !== "success") throw new Error("taker token approval reverted");
-  const hash = await wallet.writeContract({ address: AQUA_ROUTER, abi: routerAbi, functionName: "swap", args: [order, input.tokenIn, input.tokenOut, input.amountIn, takerTraitsExactIn], account: acct, chain: null });
+  // Load-balanced RPCs can serve the swap estimate from a node behind the approval block (seen as STF on Base).
+  const allowanceAbi = parseAbi(["function allowance(address owner,address spender) view returns (uint256)"]);
+  for (let i = 0; (await client.readContract({ address: input.tokenIn, abi: allowanceAbi, functionName: "allowance", args: [acct.address, AQUA_ROUTER] })) < input.amountIn; i++) {
+    if (i >= 15) throw new Error("taker approval not visible on the RPC after 30 s");
+    await new Promise(r => setTimeout(r, 2_000));
+  }
+  const hash = await wallet.writeContract({ address: AQUA_ROUTER, abi: routerAbi, functionName: "swap", args: [order, input.tokenIn, input.tokenOut, input.amountIn, takerTraitsExactIn], account: acct, chain: wallet.chain ?? null, ...(await client.estimateFeesPerGas()) });
   const receipt = await client.waitForTransactionReceipt({ hash, retryCount: 8, retryDelay: 1_000 });
   if (receipt.status !== "success") {
     const trace = await client.request({ method: "debug_traceTransaction", params: [hash, {}] } as never).catch(() => undefined) as any;
