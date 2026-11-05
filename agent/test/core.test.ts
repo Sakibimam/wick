@@ -139,3 +139,16 @@ describe("agent runtime contracts", () => {
     expect(s.order.traits).toBe(`0x${"0".repeat(62)}41`);
   });
 });
+
+describe("brain against real router response shapes", () => {
+  test("comma-joined X-Request-ID resolves to the router UUID, body trace wins", async () => {
+    expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer(), "76201540f7c996da, faa70dea-ea6c-489a-9647-7b728df0c88c") })).requestId).toBe("faa70dea-ea6c-489a-9647-7b728df0c88c");
+    expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer(), "proxy, header-uuid", "body-uuid") })).requestId).toBe("body-uuid");
+  });
+  test("whitespace-padded and fenced JSON parse, strict checks still apply", async () => {
+    expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher("\n\n" + JSON.stringify(answer())) })).spreadBps).toBe(30);
+    expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher("```json\n" + JSON.stringify(answer()) + "\n```") })).spreadBps).toBe(30);
+    await brainFail("spread_out_of_range", "```json\n" + JSON.stringify(answer(2e18, 900)) + "\n```");
+  });
+  test("prose without an object is rejected", async () => { await brainFail("invalid_json", "I think the price is about two dollars."); });
+});
