@@ -57,6 +57,24 @@ cast keccak "5319a0b6-562e-4bbe-a141-dfb94fc20aaa0x833589fCD6eDb6E08f4c7C32D4f71
 # 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7
 ```
 
+## The brain pays for itself, onchain
+
+The agent's wallet funds its own 0G compute account through the same path the runtime takes, then its inference bills in 0G against that balance.
+
+| Step | Chain | Transaction |
+|---|---|---|
+| Native 0G for gas, 0.30 USDC in via LI.FI | Base | [0xa43b...883c](https://basescan.org/tx/0xa43b662266bd967afbeeb4feb17ea67fc3aa4c7804dfc379f47a27e29a44883c) |
+| `ccipSend` 1.0 W0G to 0G chain | Base | [0xd0b4...876e](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e) |
+| `W0G.withdraw` | 0G | [0x6e12...5a0d](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d) |
+| `PaymentLayer.depositFor(agent)`, credit 0 to 2.844 0G | 0G | [0x8b0b...3f68](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68) |
+
+Router request `798fb102-9f06-4bc5-9ec2-1dde3b716628` then billed `"currency":"0g"` for 0.00004166 0G, and the agent's Payment Layer balance moved from 2.844 to 2.344 0G as the router drew its working deposit from that vault:
+
+```sh
+cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256)" \
+  0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953 --rpc-url https://evmrpc.0g.ai
+```
+
 ## What the chain enforces
 
 The board and extruction check, on every fill: quote freshness, strictly increasing nonces per maker, the token pair, the maker, the registered agent and its epoch (any `setAgent` retires every outstanding quote), and a nonzero `inferenceId`. Pricing belongs to the agent by design: the board reads no oracle, and the brain rejects any rate more than 3% from the Uniswap mid before the signer sees it. Details in [ARCHITECTURE.md](ARCHITECTURE.md#trust-boundaries).
