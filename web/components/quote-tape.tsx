@@ -9,7 +9,7 @@ import { clock, freshness, offMidPct, secondsLeft, spreadPct, URGENT_SECONDS, ty
 import { formatPrice } from "@/lib/format";
 import { relativeTime } from "@/lib/format";
 import { AgentError } from "@/lib/agent-api";
-import { reasonText } from "@/lib/tiers";
+import { reasonText, TIERS } from "@/lib/tiers";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
@@ -86,7 +86,7 @@ function TapeLive({ status, priced, direction, onSelect, now, nowReady, updatedA
     <>
       {nothing ? <EmptyAgent status={status} /> : (
         <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2 md:gap-x-0">
-          <Side d="sell-w0g" p={sell} status={status} active={direction === "sell-w0g"} onSelect={onSelect} now={now} nowReady={nowReady} />
+          <Side d="sell-w0g" p={sell} status={status} active={direction === "sell-w0g"} onSelect={onSelect} now={now} nowReady={nowReady} className="md:pr-8" />
           <Side d="buy-w0g" p={buy} status={status} active={direction === "buy-w0g"} onSelect={onSelect} now={now} nowReady={nowReady} className="md:border-l md:border-graphite-rule md:pl-8" />
         </div>
       )}
@@ -107,7 +107,7 @@ function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="label">{label}</dt>
-      <dd className="num mt-1 truncate text-[14px] text-on-graphite">{value}</dd>
+      <dd className="num mt-1 break-words text-[14px] text-on-graphite">{value}</dd>
     </div>
   );
 }
@@ -176,7 +176,9 @@ function Side({ d, p, status, active, onSelect, now, nowReady, className }: { d:
       </span>
       <span className="mt-2 block text-[13px] text-on-graphite-muted">
         {state === "expired"
-          ? "The pool refuses fills at this price. Waiting for the agent to sign a new one."
+          ? status.budget.tier === "PAUSED" || status.budget.tier === "CRITICAL"
+            ? `The pool refuses fills at this price. The agent is ${TIERS[status.budget.tier].label.toLowerCase()} and signs no new price until its AI account is funded.`
+            : "The pool refuses fills at this price. Waiting for the agent to sign a new one."
           : state === "closing"
             ? "Closing soon. A swap that lands after this fails and costs only gas."
             : "Fresh. The pool fills at this price until the clock runs out."}

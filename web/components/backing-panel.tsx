@@ -38,15 +38,19 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
     <div className="space-y-6">
       <div>
         <h2 className="text-[20px] font-medium">What backs this price</h2>
-        <p className="mt-1 text-[14px]">The agent asked an AI for this price, signed the answer, and the pool only fills against that signature.</p>
+        <p className="mt-1 text-[14px]">{p?.quote.requestId === "price-only" ? "The agent signed this price from the Uniswap pool mid without an AI run. The pool only fills against that signature." : "The agent asked an AI for this price, signed the answer, and the pool only fills against that signature."}</p>
       </div>
 
       <section aria-label="The AI run behind this price" className="rounded-card border border-rule bg-panel p-4">
         <p className="label">AI run behind the {direction === "sell-w0g" ? "sell" : "buy"} price</p>
         {p ? (
           <dl className="mt-3 space-y-2.5 text-[14px]">
-            <Line k="Request id on 0G"><CopyLink value={p.quote.requestId} label="AI request id" head={10} tail={6} /></Line>
-            <Line k="Model"><span className="num text-[13px] text-ink">{status.budget.model ?? "none while paused"}</span></Line>
+            {p.quote.requestId === "price-only" ? (
+              <Line k="AI run"><span className="text-[13px] text-ink">none, signed from the pool mid</span></Line>
+            ) : (
+              <Line k="Request id on 0G"><CopyLink value={p.quote.requestId} label="AI request id" head={10} tail={6} /></Line>
+            )}
+            <Line k="Model now"><span className="num text-[13px] text-ink">{status.budget.model ?? `none while ${status.budget.tier.toLowerCase()}`}</span></Line>
             <Line k="Quote id on Base"><CopyLink value={p.quote.inferenceId} label="quote id" head={10} tail={6} /></Line>
             {p.quote.postedTx ? <Line k="Posted in"><CopyLink value={p.quote.postedTx} href={txUrl(BASE_CHAIN_ID, p.quote.postedTx)} label="posting transaction" head={10} tail={6} /></Line> : null}
           </dl>

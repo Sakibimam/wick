@@ -5,6 +5,7 @@ import { useConnect, useConnection, useConnectors, useDisconnect } from "wagmi";
 import { Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { truncateHex } from "@/lib/amounts";
+import { DEV_ACCOUNT, LOCAL_FORK } from "@/lib/config";
 
 type Ctx = { open: () => void };
 const WalletDialogContext = createContext<Ctx | null>(null);
@@ -55,7 +56,7 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
         </div>
         <div className="grid grid-cols-1 gap-2 p-5">
           {connectors.length === 0 ? (
-            <p className="text-[14px]">No browser wallet was found. Install a wallet extension that supports Base, then reload this page.</p>
+            <p className="text-[14px]">{LOCAL_FORK ? "This page runs on a local fork and has no test account. Start it with scripts/dev-fork.sh, which sets NEXT_PUBLIC_DEV_ACCOUNT." : "No browser wallet was found. Install a wallet extension that supports Base, then reload this page."}</p>
           ) : (
             connectors.map((c) => (
               <Button
@@ -66,7 +67,7 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
                 onClick={() => { setChosen(c.uid); connect({ connector: c }); }}
               >
                 {c.icon ? <img src={c.icon} alt="" className="size-5 rounded-sm" /> : <Wallet className="size-4" aria-hidden />}
-                {c.name}
+                {c.type === "mock" && DEV_ACCOUNT ? `Fork test account ${truncateHex(DEV_ACCOUNT, 6, 4)}` : c.name}
               </Button>
             ))
           )}

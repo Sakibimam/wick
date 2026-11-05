@@ -1,12 +1,20 @@
 import { getAddress, type Address, type Hex } from "viem";
 
 export const AGENT_URL = (process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787").replace(/\/+$/, "");
-export const BASE_RPC_URL = process.env.NEXT_PUBLIC_BASE_RPC_URL ?? "https://base-rpc.publicnode.com";
+export const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://base-rpc.publicnode.com";
+
+/** A local anvil fork of Base: explorer links are dropped (the hashes exist only on this machine) and the wallet is the fork's unlocked test account. */
+export const LOCAL_FORK = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/.test(BASE_RPC_URL);
+const devAccount = process.env.NEXT_PUBLIC_DEV_ACCOUNT ?? "";
+export const DEV_ACCOUNT: Address | null = LOCAL_FORK && /^0x[0-9a-fA-F]{40}$/.test(devAccount) ? getAddress(devAccount) : null;
 
 const MAX_LOOKBACK = 100_000;
 const lookback = Number(process.env.NEXT_PUBLIC_FILL_LOOKBACK_BLOCKS ?? "30000");
 export const FILL_LOOKBACK_BLOCKS = Number.isFinite(lookback) && lookback > 0 ? Math.min(Math.floor(lookback), MAX_LOOKBACK) : 30_000;
 export const LOG_CHUNK_BLOCKS = 10_000;
+/** Block the strategy was shipped in. No fill can predate it, so log scans start here when it is known. */
+const fromBlock = process.env.NEXT_PUBLIC_FILL_FROM_BLOCK ?? "";
+export const FILL_FROM_BLOCK: bigint | null = /^\d+$/.test(fromBlock) ? BigInt(fromBlock) : null;
 
 export const BASE_CHAIN_ID = 8453;
 export const ZERO_G_CHAIN_ID = 16661;
@@ -29,4 +37,4 @@ export const EXPLORERS: Record<number, { name: string; tx: (h: string) => string
   [ZERO_G_CHAIN_ID]: { name: "0G Chainscan", tx: (h) => `https://chainscan.0g.ai/tx/${h}`, address: (a) => `https://chainscan.0g.ai/address/${a}` },
 };
 
-export const CHAIN_NAMES: Record<number, string> = { [BASE_CHAIN_ID]: "Base", [ZERO_G_CHAIN_ID]: "0G" };
+export const CHAIN_NAMES: Record<number, string> = { [BASE_CHAIN_ID]: LOCAL_FORK ? "Base fork" : "Base", [ZERO_G_CHAIN_ID]: "0G" };

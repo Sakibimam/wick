@@ -1,4 +1,4 @@
-import { EXPLORERS } from "./config";
+import { BASE_CHAIN_ID, EXPLORERS, LOCAL_FORK } from "./config";
 import type { FundingStep } from "./schema";
 
 export type StageKind = "approve" | "swap" | "bridge" | "withdraw" | "deposit" | "other";
@@ -17,6 +17,7 @@ export function describeStep(step: string): StageInfo {
 }
 
 export function txUrl(chainId: number, hash: string): string | null {
+  if (LOCAL_FORK && chainId === BASE_CHAIN_ID) return null;
   return EXPLORERS[chainId]?.tx(hash) ?? null;
 }
 

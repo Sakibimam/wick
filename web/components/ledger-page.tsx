@@ -11,10 +11,13 @@ import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
 import { useTierHistory } from "@/hooks/use-tier-history";
 import { AgentError } from "@/lib/agent-api";
+import { parseUnits } from "viem";
 import { formatAmount, percentOf, truncateHex } from "@/lib/amounts";
 import { BASE_CHAIN_ID, FILL_LOOKBACK_BLOCKS, TOKENS } from "@/lib/config";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
-import { utcStamp } from "@/lib/format";
+import { formatPrice, relativeTime, utcStamp } from "@/lib/format";
+import { clock, directionOf, impliedPrice, secondsLeft } from "@/lib/quotes";
+import { usePostedAt } from "@/hooks/use-posted-at";
 import { buildLoop, loopSentence, type Loop } from "@/lib/ledger";
 import { reasonText } from "@/lib/tiers";
 import type { AgentStatus } from "@/lib/schema";
@@ -45,16 +48,19 @@ export function LedgerPage() {
       <div className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 md:py-12">
         {status.isPending ? <RailSkeleton /> : loop && status.data ? (
           <ol className="relative space-y-10 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-rule-2" aria-label="The money loop in order">
-            <Stage n={1} title="Outside takers filled swaps" caption={fills.data ? `Read from Base blocks ${fills.data.fromBlock} to ${fills.data.toBlock}, Swapped events of the router for this strategy.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
+            <Stage n={1} title="The agent shipped its order and signed prices" caption={readAt ? `Prices read from the agent status API, ${readAt}. Order hash read from the router on Base.` : undefined}>
+              <PriceRows status={status.data} orderHash={fills.data?.orderHash ?? null} nowMs={nowMs} />
+            </Stage>
+            <Stage n={2} title="Outside takers filled swaps" caption={fills.data ? `Read from Base blocks ${fills.data.fromBlock} to ${fills.data.toBlock}, Swapped events of the router for this strategy.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
               <FillsRows loop={loop} query={fills} nowMs={nowMs} />
             </Stage>
-            <Stage n={2} title="Fees collected from those fills" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
+            <Stage n={3} title="Fees collected from those fills" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
               <FeesRow loop={loop} />
             </Stage>
-            <Stage n={3} title="Fees turned into AI money" caption={readAt ? `Each step is a transaction. Read from the agent status API, ${readAt}.` : undefined}>
-              <FundingRows loop={loop} nowMs={nowMs} />
+            <Stage n={4} title="Fees turned into AI money" caption={readAt ? `Each step is a transaction. Read from the agent status API, ${readAt}.` : undefined}>
+              <FundingRows loop={loop} threshold={status.data.fundingThresholdUsdc ?? null} nowMs={nowMs} />
             </Stage>
-            <Stage n={4} title="AI runs paid from that balance" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
+            <Stage n={5} title="AI runs paid from that balance" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
               <RunRows loop={loop} nowMs={nowMs} />
             </Stage>
           </ol>
@@ -177,6 +183,50 @@ function FillsRows({ loop, query, nowMs }: { loop: Loop; query: ReturnType<typeo
   );
 }
 
+function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHash: string | null; nowMs: number }) {
+  const quotes = [...status.quotes].sort((a, b) => Number(BigInt(b.expiry) - BigInt(a.expiry)));
+  return (
+    <Rows>
+      <EvidenceRow
+        title="Aqua order on the router"
+        plain={<>Maker <span className="num text-[13px]">{truncateHex(status.order.maker, 6, 4)}</span> holds W0G and USDC in this order. It settles a fill only against a fresh price signed by agent <span className="num text-[13px]">{truncateHex(status.agent, 6, 4)}</span>.</>}
+        hash={orderHash ?? undefined}
+        hashLabel="order hash"
+        chainId={BASE_CHAIN_ID}
+        nowMs={nowMs}
+      />
+      {quotes.length === 0 ? (
+        <li className="px-4 py-4">
+          <p className="text-[15px] font-medium text-ink">No signed price yet.</p>
+          <p className="mt-0.5 text-[14px] text-muted">{reasonText(status.budget.reason)} The agent signs a price for each direction after an AI run, and each one lands here with its posting transaction.</p>
+        </li>
+      ) : quotes.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+    </Rows>
+  );
+}
+
+function PriceRow({ q, nowMs }: { q: AgentStatus["quotes"][number]; nowMs: number }) {
+  const postedAt = usePostedAt(q.postedTx);
+  const direction = directionOf(q);
+  const price = direction ? impliedPrice(direction, BigInt(q.rateE18)) : Number.NaN;
+  const expiryMs = Number(q.expiry) * 1000;
+  const left = secondsLeft(Number(q.expiry), nowMs / 1000);
+  const what = direction === "buy-w0g" ? `Buy price: 1 W0G costs ${formatPrice(price)} USDC` : direction === "sell-w0g" ? `Sell price: 1 W0G pays ${formatPrice(price)} USDC` : "Price for an unknown pair";
+  const source = q.requestId === "price-only" ? "Signed from the Uniswap pool mid, with no AI run behind it." : <>Signed after AI run <span className="num text-[13px]">{truncateHex(q.requestId, 10, 6)}</span>.</>;
+  return (
+    <EvidenceRow
+      title={<>{what} <span className={cn("num ml-1 text-[12px] font-normal", left > 0 ? "text-ok-ink" : "text-danger-ink")}>{left > 0 ? `expires in ${clock(left)}` : `expired ${relativeTime(expiryMs, nowMs)}`}</span></>}
+      plain={source}
+      hash={q.postedTx}
+      hashLabel="posting transaction"
+      href={q.postedTx ? txUrl(BASE_CHAIN_ID, q.postedTx) : null}
+      chainId={BASE_CHAIN_ID}
+      timeMs={postedAt ? postedAt * 1000 : null}
+      nowMs={nowMs}
+    />
+  );
+}
+
 function FeesRow({ loop }: { loop: Loop }) {
   const none = loop.accruedUsdc === 0n && loop.accruedW0g === 0n;
   if (none) return <EmptyBlock title="No fees collected yet." next="Every fill leaves a fee in the strategy. Once fills arrive, the total shows here before the agent turns it into 0G." />;
@@ -188,7 +238,7 @@ function FeesRow({ loop }: { loop: Loop }) {
           <p className="mt-0.5 text-[14px] text-muted">The running total of fees takers have paid, split by token. This is the money the next funding step spends.</p>
         </div>
         <p className="num text-right text-[20px] text-ink md:text-[28px]">
-          {formatAmount(loop.accruedUsdc, 6, 4)} <span className="text-[13px] text-muted">USDC</span>
+          {formatAmount(loop.accruedUsdc, 6, 6)} <span className="text-[13px] text-muted">USDC</span>
           <span className="mx-2 text-muted">+</span>
           {formatAmount(loop.accruedW0g, 18, 4)} <span className="text-[13px] text-muted">W0G</span>
         </p>
@@ -197,9 +247,22 @@ function FeesRow({ loop }: { loop: Loop }) {
   );
 }
 
-function FundingRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
+function FundingRows({ loop, threshold, nowMs }: { loop: Loop; threshold: string | null; nowMs: number }) {
   if (loop.funding.length === 0) {
-    return <EmptyBlock title="No funding step recorded yet." next="When enough fees build up, the agent swaps them to 0G on Uniswap, sends them over the CCIP bridge to the 0G chain, unwraps them and deposits them for AI runs. Each step appears here with its transaction." />;
+    const steps = "the agent swaps them to 0G on Uniswap, sends them over the CCIP bridge to the 0G chain, unwraps them and deposits them for AI runs. Each step appears here with its transaction.";
+    if (!threshold) return <EmptyBlock title="No funding step recorded yet." next={`When accrued fees reach the agent's funding threshold, ${steps}`} />;
+    const need = parseUnits(threshold, TOKENS.USDC.decimals);
+    const pct = percentOf(loop.accruedUsdc, need);
+    return (
+      <div className="rounded-card border border-dashed border-rule-2 bg-panel px-4 py-5">
+        <p className="text-[15px] font-medium text-ink">No funding step yet. The first one runs when accrued fees reach {threshold} USDC.</p>
+        <p className="mt-1 text-[14px] text-muted">Then {steps}</p>
+        <div className="mt-4 h-1.5 overflow-hidden rounded-sm bg-sunken" role="progressbar" aria-label="Accrued fees against the funding threshold" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+          <div className="h-full rounded-sm bg-accent" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="num mt-2 text-[13px] text-ink-2">{formatAmount(loop.accruedUsdc, TOKENS.USDC.decimals, 6)} of {threshold} USDC accrued ({pct.toFixed(pct < 1 ? 2 : 0)}%)</p>
+      </div>
+    );
   }
   return (
     <Rows>
@@ -230,12 +293,12 @@ function RunRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
   return (
     <Rows>
       {loop.inferences.map((r) => {
-        const cost = BigInt(r.costWei);
+        const cost = r.costWei === null ? null : BigInt(r.costWei);
         return (
           <EvidenceRow
             key={r.requestId}
             title="AI run paid"
-            plain={<><span className="num text-[13px]">{r.model}</span>, {cost === 0n ? "cost not metered yet" : `cost ${formatAmount(cost, 18, 6)} 0G`}.</>}
+            plain={<><span className="num text-[13px]">{r.model}</span>, {cost === null || cost === 0n ? "cost not metered by the router" : `cost ${formatAmount(cost, 18, 6)} 0G`}.</>}
             hash={r.requestId}
             hashLabel="AI request id"
             chainId={16661}

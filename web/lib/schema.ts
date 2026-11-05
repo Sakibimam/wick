@@ -31,7 +31,7 @@ export type FundingStep = z.infer<typeof fundingSchema>;
 export const inferenceSchema = z.object({
   requestId: z.string().min(1),
   model: z.string().min(1),
-  costWei: digits,
+  costWei: digits.nullable(),
   time: timeLike,
 });
 export type Inference = z.infer<typeof inferenceSchema>;
@@ -55,6 +55,7 @@ export const statusSchema = z.object({
   funding: z.array(fundingSchema),
   inferences: z.array(inferenceSchema),
   order: z.object({ maker: address, traits: hex, data: hex }),
+  fundingThresholdUsdc: z.string().regex(/^\d+(\.\d+)?$/, "decimal").nullable().optional(),
 });
 export type AgentStatus = z.infer<typeof statusSchema>;
 

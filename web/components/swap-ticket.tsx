@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConnection, useReadContract, useSwitchChain } from "wagmi";
 import { base } from "wagmi/chains";
-import { ArrowDownUp, ExternalLink } from "lucide-react";
+import { ArrowDownUp } from "lucide-react";
 import { Alert, AlertBody, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TokenMark } from "@/components/token-mark";
@@ -13,7 +13,8 @@ import { useSwapFlow } from "@/hooks/use-swap";
 import { AgentError, fetchRouterQuote } from "@/lib/agent-api";
 import { erc20Abi } from "@/lib/abis";
 import { formatAmount, parseTyped, truncateHex } from "@/lib/amounts";
-import { AQUA_ROUTER, BASE_CHAIN_ID, TOKENS, type TokenSymbol } from "@/lib/config";
+import { AQUA_ROUTER, BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
+import { CopyLink } from "@/components/copy-link";
 import { ctaFor } from "@/lib/cta";
 import { formatPrice, formatUsd } from "@/lib/format";
 import { clock, freshness, secondsLeft, URGENT_SECONDS, type Direction, type Priced } from "@/lib/quotes";
@@ -96,7 +97,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
     <section aria-label="Swap" className="rounded-card border border-rule bg-panel p-5 shadow-[0_1px_2px_oklch(24%_0.02_258/0.06)] sm:p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-[20px] font-medium">Swap</h2>
-        <span className="num rounded-control border border-rule-2 px-2 py-0.5 text-[12px] text-ink" title="Network this swap runs on">Base</span>
+        <span className="num rounded-control border border-rule-2 px-2 py-0.5 text-[12px] text-ink" title="Network this swap runs on">{CHAIN_NAMES[BASE_CHAIN_ID]}</span>
       </div>
 
       <div className="mt-4 rounded-control border border-rule-2 bg-sunken p-4 focus-within:border-ink-2">
@@ -138,7 +139,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
       <div className="rounded-control border border-rule-2 bg-sunken p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="label">You receive, about</p>
-          <span className="num text-[12px] text-muted">from the router quote</span>
+          <span className="num hidden text-[12px] text-muted sm:inline">from the router quote</span>
         </div>
         <div className="mt-2 flex items-center gap-3">
           <p className={cn("num min-w-0 flex-1 truncate text-[28px] leading-9", amountOut === null ? "text-muted/70" : "text-ink")} aria-live="polite">
@@ -174,10 +175,8 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
           <Alert tone="ok">
             <AlertTitle>Swapped {formatAmount(flow.result.amountIn, TOKENS[flow.result.tokenIn].decimals, 6)} {flow.result.tokenIn} for {formatAmount(flow.result.amountOut, TOKENS[flow.result.tokenOut].decimals, 6)} {flow.result.tokenOut}.</AlertTitle>
             <AlertBody>
-              <a className="inline-flex items-center gap-1 underline underline-offset-2" href={txUrl(BASE_CHAIN_ID, flow.result.hash) ?? "#"} target="_blank" rel="noreferrer">
-                <span className="num">{truncateHex(flow.result.hash, 10, 8)}</span><ExternalLink className="size-3.5" aria-hidden />
-              </a>
-              {" "}confirmed on Base. Your fee went to the agent's AI budget; see it on the ledger.
+              <CopyLink value={flow.result.hash} href={txUrl(BASE_CHAIN_ID, flow.result.hash)} label="swap transaction" head={10} tail={8} />
+              {" "}confirmed on {CHAIN_NAMES[BASE_CHAIN_ID]}. Your fee went to the agent's AI budget; see it on the ledger.
             </AlertBody>
           </Alert>
         ) : null}

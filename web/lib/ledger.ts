@@ -20,6 +20,7 @@ export type Loop = {
   accruedW0g: bigint;
   funding: FundingStep[];
   inferences: Inference[];
+  signedPrices: number;
 };
 
 /** Fee fields may be raw base units or decimal strings; both are read into base units. */
@@ -30,6 +31,7 @@ export function buildLoop(status: AgentStatus, fills: Fill[]): Loop {
     accruedW0g: toBaseUnits(status.fees.accruedW0g, TOKENS.W0G.decimals),
     funding: sortFunding(status.funding),
     inferences: [...status.inferences].sort((a, b) => (toMillis(b.time) ?? 0) - (toMillis(a.time) ?? 0)),
+    signedPrices: status.quotes.length,
   };
 }
 
@@ -47,8 +49,12 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** One sentence that states the loop result from the rows beneath it, nothing else. */
 export function loopSentence(loop: Loop): string {
   const state = loopState(loop);
-  const usdc = `${formatAmount(loop.accruedUsdc, TOKENS.USDC.decimals, 4)} USDC`;
-  if (state === "no-activity") return "No fill has paid the agent yet, so there is nothing to trace.";
+  const usdc = `${formatAmount(loop.accruedUsdc, TOKENS.USDC.decimals, 6)} USDC`;
+  if (state === "no-activity") {
+    return loop.signedPrices > 0
+      ? `The agent has signed ${plural(loop.signedPrices, "price", "prices")}. No taker has filled against them yet, so no fee has reached its AI account.`
+      : "No fill has paid the agent yet, so there is nothing to trace.";
+  }
   if (state === "fees-only") return `Takers have paid ${usdc} in fees. It has not been turned into AI money yet.`;
   const steps = plural(loop.funding.length, "funding step", "funding steps");
   if (state === "funded") return `Takers paid ${usdc} in fees and the agent recorded ${steps}. No AI run has been paid yet.`;

@@ -110,6 +110,7 @@ describe("funding and ledger", () => {
   });
   test("loop sentence only claims what the rows show", () => {
     expect(loopSentence(buildLoop(status(), []))).toContain("nothing to trace");
+    expect(loopSentence(buildLoop(status({ quotes: [quote(USDC, W0G, "1", 10), quote(W0G, USDC, "1", 10, "bb")] }), []))).toContain("signed 2 prices");
     expect(loopSentence(buildLoop(status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" } }), []))).toContain("2.5 USDC");
     const tx = sig("b");
     const funded = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: [{ step: "deposit-payment-layer", txHash: tx, chainId: 16661, time: 1 }] });
