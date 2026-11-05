@@ -137,7 +137,9 @@ contract BaseW0GTest is Test {
         uint256 w0gToUsdc = _midRate(address(W0G), address(USDC));
         assertGt(usdcToW0g, 0);
         assertGt(w0gToUsdc, 0);
-        assertApproxEqRel(Math.mulDiv(usdcToW0g, w0gToUsdc, 1e18), 1e18, 1e12);
+        // Each rate is floor-truncated to an integer, so the round trip can lose up to 1/rate of each leg.
+        uint256 maxRel = Math.ceilDiv(1e18, w0gToUsdc) + Math.ceilDiv(1e18, usdcToW0g);
+        assertApproxEqRel(Math.mulDiv(usdcToW0g, w0gToUsdc, 1e18), 1e18, maxRel);
     }
 
     function test_usdcToW0GFillMatchesQuoteMinusFee() public {
