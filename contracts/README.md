@@ -1,6 +1,8 @@
 # Upkeep contracts
 
-Upkeep's Aqua strategy executes only when the maker's registered agent has posted a signed quote for the same maker and token pair, and the quote has not expired. Each accepted quote stores the 0G Compute `inferenceId` used to produce it.
+Upkeep's Aqua strategy executes only when the maker's registered agent has posted a signed quote for the same maker and token pair, and the quote has not expired.
+
+Each accepted quote stores the 0G Compute `inferenceId` used to produce it.
 
 ## Build and test
 
@@ -136,7 +138,13 @@ The maker must hold at least `W0G_AMOUNT` W0G and `USDC_AMOUNT` USDC. `ship` rec
 
 ### Pricing trust
 
-Pricing trust sits with the agent signer. `AgentQuoteBoard` stores the signed `rateE18` and does not read the Uniswap pool, compute a mid, or enforce a deviation band. A quote arbitrarily far from the onchain mid still fills at the signed rate. `BaseW0GTest.test_quoteFarOutsideMidBandStillFillsAtQuotedRate` posts a 2x-mid quote and proves the fill pays exactly 2x mid minus the fee, and the board stores that rate verbatim. A compromised, buggy, or malicious agent key can therefore price a fill away from the market. Takers must compare the signed rate with their own reference before filling. The board enforces quote freshness, maker and pair binding, strictly increasing nonces, and agent rotation, not price correctness.
+Pricing trust sits with the agent signer. 
+
+`AgentQuoteBoard` stores the signed `rateE18` and does not read the Uniswap pool, compute a mid, or enforce a deviation band. A quote arbitrarily far from the onchain mid still fills at the signed rate.
+
+`BaseW0GTest.test_quoteFarOutsideMidBandStillFillsAtQuotedRate` posts a 2x-mid quote and proves the fill pays exactly 2x mid minus the fee, and the board stores that rate verbatim. 
+
+A compromised, buggy, or malicious agent key can therefore price a fill away from the market. Takers must compare the signed rate with their own reference before filling. The board enforces quote freshness, maker and pair binding, strictly increasing nonces, and agent rotation, not price correctness.
 
 ## Aqua opcode table
 
