@@ -11,13 +11,13 @@ import { boardAbi, post } from "./poster.js";
 import { AQUA_ROUTER, type ShippedOrder } from "./taker.js";
 import { createStatusServer, type RuntimeState } from "./status.js";
 
-const ZG = defineChain({ id: 16661, name: "0G Mainnet", nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 }, rpcUrls: { default: { http: [process.env.ZG_RPC_URL ?? "https://evmrpc.0g.ai"] } } });
+const ZG = defineChain({ id: 16661, name: "0G Mainnet", nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 }, rpcUrls: { default: { http: [process.env.ZG_RPC_URL || "https://evmrpc.0g.ai"] } } });
 const board = process.env.BOARD_ADDRESS as Address;
 const maker = process.env.MAKER_ADDRESS as Address;
 const boardAbiRuntime = [...boardAbi, ...parseAbi(["function getAgent(address) view returns (address)", "function lastNonce(address) view returns (uint64)"])];
-const baseClient = createPublicClient({ chain: base, transport: http(process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com") });
-const zeroClient = createPublicClient({ chain: ZG, transport: http(process.env.ZG_RPC_URL ?? "https://evmrpc.0g.ai") });
-const statePath = process.env.STATE_PATH ?? "./state/upkeep.json";
+const baseClient = createPublicClient({ chain: base, transport: http(process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com") });
+const zeroClient = createPublicClient({ chain: ZG, transport: http(process.env.ZG_RPC_URL || "https://evmrpc.0g.ai") });
+const statePath = process.env.STATE_PATH || "./state/upkeep.json";
 const requiredAddress = (v: string | undefined, name: string) => { if (!v || !/^0x[\da-fA-F]{40}$/.test(v)) throw new Error(`${name} must be a valid address`); return v as Address; };
 const runtimeAddress = process.env.AGENT_ADDRESS as Address;
 const makerAddress = maker;
@@ -30,7 +30,7 @@ const orderFromEnv = (): ShippedOrder => {
   return { maker: v.maker, traits: BigInt(v.traits), data: v.data } as ShippedOrder;
 };
 export type Persisted = RuntimeState & { recentMids: number[]; lastMid: number | null; quoteTimes: Record<string, number>; lastNonce: string; lastComputeBalanceWei: string; spentTodayWei: string; day: string; lastFillBlock: string; pendingFunding?: { bridgeAmount: string; usdcFees: string; ccipHash: Hex; zeroGBalanceBefore: string } };
-function initial(): Persisted { return { agent: requiredAddress(runtimeAddress, "AGENT_ADDRESS"), maker: requiredAddress(makerAddress, "MAKER_ADDRESS"), chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: null, quotes: [], budget: { tier: "PAUSED", model: null, computeBalanceWei: "0", spentTodayWei: "0", spendCapPerDayWei: process.env.SPEND_CAP_PER_DAY_WEI ?? "0", reason: "not_started" }, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: orderFromEnv(), recentMids: [], lastMid: null, quoteTimes: {}, lastNonce: "0", lastComputeBalanceWei: "", spentTodayWei: "0", day: "", lastFillBlock: "" }; }
+function initial(): Persisted { return { agent: requiredAddress(runtimeAddress, "AGENT_ADDRESS"), maker: requiredAddress(makerAddress, "MAKER_ADDRESS"), chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: null, quotes: [], budget: { tier: "PAUSED", model: null, computeBalanceWei: "0", spentTodayWei: "0", spendCapPerDayWei: process.env.SPEND_CAP_PER_DAY_WEI || "0", reason: "not_started" }, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: orderFromEnv(), recentMids: [], lastMid: null, quoteTimes: {}, lastNonce: "0", lastComputeBalanceWei: "", spentTodayWei: "0", day: "", lastFillBlock: "" }; }
 export async function loadState(): Promise<Persisted> {
   try {
     const saved = JSON.parse(await readFile(statePath, "utf8"));
@@ -63,12 +63,12 @@ async function recordFees(s: Persisted) {
 }
 async function fundPaymentLayer(s: Persisted, mid: number) {
   const usdcFees = BigInt(s.fees.accruedUsdc), w0gFees = BigInt(s.fees.accruedW0g);
-  const threshold = parseUnits(process.env.FUNDING_THRESHOLD_USDC ?? "10", 6);
+  const threshold = parseUnits(process.env.FUNDING_THRESHOLD_USDC || "10", 6);
   const priceE18 = BigInt(Math.round(mid * 1e18));
   const accruedValueUsdc = usdcFees + w0gFees * priceE18 / 10n ** 30n;
   if (!s.pendingFunding && !(await thresholdTriggered(accruedValueUsdc, threshold))) return;
   if (runtimeAddress.toLowerCase() !== makerAddress.toLowerCase()) throw new Error("fee funding requires the agent signer to control the maker fee inventory");
-  const gasReserve = BigInt(process.env.ZG_GAS_RESERVE_WEI ?? "10000000000000000");
+  const gasReserve = BigInt(process.env.ZG_GAS_RESERVE_WEI || "10000000000000000");
   const { wallet } = await signerFor();
   const planFor = (amount: bigint, usdc: bigint) => buildFundingPlan({ agent: runtimeAddress, agentOwner: runtimeAddress, usdcAmountIn: usdc || 1n, w0gAmountOut: amount, slippageBps: 0, ccipFeeWei: 0n, nativeGasReserveWei: gasReserve });
   const writeStep = async (step: ReturnType<typeof buildFundingPlan>["steps"][number], client: PublicClient<any, any>, signer: any) => {
@@ -98,10 +98,10 @@ async function fundPaymentLayer(s: Persisted, mid: number) {
   const bridgePlan = planFor(bridgeAmount, BigInt(s.pendingFunding.usdcFees));
   const { wallet: zeroWallet } = await signerFor(true);
   const w0gBefore = BigInt(s.pendingFunding.zeroGBalanceBefore);
-  const deadline = Date.now() + Number(process.env.CCIP_TIMEOUT_MS ?? "1200000");
+  const deadline = Date.now() + Number(process.env.CCIP_TIMEOUT_MS || "1200000");
   let received = 0n;
   while (Date.now() < deadline) { const now = await zeroClient.readContract({ address: W0G_ZERO_G, abi: tokenAbi, functionName: "balanceOf", args: [runtimeAddress] }); received = now - w0gBefore; if (received >= bridgeAmount) break; await Bun.sleep(10_000); }
-  if (received < bridgeAmount) throw new Error(`CCIP delivery timed out after ${process.env.CCIP_TIMEOUT_MS ?? "1200000"}ms`);
+  if (received < bridgeAmount) throw new Error(`CCIP delivery timed out after ${process.env.CCIP_TIMEOUT_MS || "1200000"}ms`);
   await writeStep(bridgePlan.steps[4]!, zeroClient, zeroWallet); await writeStep(bridgePlan.steps[5]!, zeroClient, zeroWallet);
   s.fees.accruedUsdc = "0"; s.fees.accruedW0g = "0"; delete s.pendingFunding; await save(s);
 }
@@ -117,7 +117,7 @@ async function signerFor(zeroG = false) {
     if (signer.account.address.toLowerCase() !== runtimeAddress.toLowerCase()) throw new Error("AGENT_PK does not match AGENT_ADDRESS");
     return { ...signer, mode: "local" as const };
   }
-  return { ...unlockedSigner(zeroG ? process.env.ZG_RPC_URL ?? "https://evmrpc.0g.ai" : process.env.BASE_RPC_URL ?? "http://127.0.0.1:8545", runtimeAddress, chain), mode: "unlocked" as const };
+  return { ...unlockedSigner(zeroG ? process.env.ZG_RPC_URL || "https://evmrpc.0g.ai" : process.env.BASE_RPC_URL || "http://127.0.0.1:8545", runtimeAddress, chain), mode: "unlocked" as const };
 }
 export async function runTick(s: Persisted, now = Date.now()) {
   const market = await readMarket(baseClient); const balance = await paymentBalance(zeroClient, runtimeAddress);
@@ -132,9 +132,9 @@ export async function runTick(s: Persisted, now = Date.now()) {
   const spent = BigInt(s.spentTodayWei || "0");
   const elapsed = s.lastMid === null ? null : now - (s.quoteTimes.mid ?? now);
   const deviation = s.lastMid === null ? 0 : deviationBps(s.lastMid, market.mid);
-  const cap = BigInt(process.env.SPEND_CAP_PER_DAY_WEI ?? "1000000000000000000");
+  const cap = BigInt(process.env.SPEND_CAP_PER_DAY_WEI || "1000000000000000000");
   const decision = decideBudget({ computeBalanceWei: balance, spendCapPerDayWei: cap, spentTodayWei: spent, priceDeviationBps: deviation, lastQuoteAgeMs: elapsed }, DEFAULT_BUDGET_CONFIG);
-  s.fundingThresholdUsdc = process.env.FUNDING_THRESHOLD_USDC ?? "10";
+  s.fundingThresholdUsdc = process.env.FUNDING_THRESHOLD_USDC || "10";
   s.mid = market.mid; s.budget = { tier: decision.tier, model: decision.model, computeBalanceWei: balance.toString(), spentTodayWei: spent.toString(), spendCapPerDayWei: cap.toString(), reason: decision.reason };
   s.recentMids = [...s.recentMids.slice(-19), market.mid];
   if (shouldRunInference(decision.tier, decision.requote)) {
@@ -148,7 +148,7 @@ export async function runTick(s: Persisted, now = Date.now()) {
     const { wallet } = await signerFor(); let next = BigInt(nonce);
     const rates = directionalRates(result.rateE18, result.spreadBps);
     for (const [tokenIn, tokenOut, rate] of [[USDC, W0G, rates.usdcToW0g], [W0G, USDC, rates.w0gToUsdc]] as const) {
-      next++; const q: Quote = { maker: makerAddress, tokenIn, tokenOut, rateE18: rate, expiry: BigInt(Math.floor(now / 1000) + Number(process.env.QUOTE_TTL_SECONDS ?? "3600")), nonce: next, inferenceId: keccak256(toHex(result.requestId + tokenIn + tokenOut)) };
+      next++; const q: Quote = { maker: makerAddress, tokenIn, tokenOut, rateE18: rate, expiry: BigInt(Math.floor(now / 1000) + Number(process.env.QUOTE_TTL_SECONDS || "3600")), nonce: next, inferenceId: keccak256(toHex(result.requestId + tokenIn + tokenOut)) };
       const sig = await signQuote(wallet, 8453, boardAddress, q); const sent = await post(baseClient, wallet, boardAddress, q, sig);
       s.quotes.push({ tokenIn, tokenOut, rateE18: rate.toString(), expiry: q.expiry.toString(), inferenceId: q.inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString() });
     }

@@ -13,7 +13,8 @@ import {AgentQuoteExtruction} from "../src/AgentQuoteExtruction.sol";
 /// without a key.
 contract Deploy is Script {
     function run() external {
-        if (vm.envExists("DEPLOYER_PK")) {
+        // FORK_UNLOCKED=true forces the unlocked default sender so local-fork runs never sign with a real key from .env.
+        if (vm.envExists("DEPLOYER_PK") && !vm.envOr("FORK_UNLOCKED", false)) {
             vm.startBroadcast(vm.envUint("DEPLOYER_PK"));
         } else {
             vm.startBroadcast();

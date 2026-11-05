@@ -4,8 +4,8 @@ export type RuntimeState = { agent: Address; maker: Address; chainId: number; pa
 export function statusSchema(state: RuntimeState) {
   return { agent: state.agent, maker: state.maker, chainId: state.chainId, pair: state.pair, mid: state.mid, quotes: state.quotes.map(q => ({ tokenIn: q.tokenIn, tokenOut: q.tokenOut, rateE18: q.rateE18, expiry: q.expiry, inferenceId: q.inferenceId, requestId: q.requestId, postedTx: q.postedTx })), budget: state.budget, fees: state.fees, funding: state.funding.map(x => ({ step: x.step, txHash: x.txHash, chainId: x.chainId, time: x.time })), inferences: state.inferences.map(x => ({ requestId: x.requestId, model: x.model, costWei: x.costWei, time: x.time })), order: { ...state.order, traits: `0x${state.order.traits.toString(16).padStart(64, "0")}` }, fundingThresholdUsdc: state.fundingThresholdUsdc ?? null };
 }
-export function createStatusServer(getState: () => RuntimeState | Promise<RuntimeState>, getQuote: (amountIn: bigint, tokenIn: Address) => Promise<unknown>, port = Number(process.env.PORT ?? 8787)) {
-  const allowed = process.env.WEB_ORIGIN ?? "";
+export function createStatusServer(getState: () => RuntimeState | Promise<RuntimeState>, getQuote: (amountIn: bigint, tokenIn: Address) => Promise<unknown>, port = Number(process.env.PORT || 8787)) {
+  const allowed = process.env.WEB_ORIGIN || "";
   return Bun.serve({ port, async fetch(req) {
     const origin = req.headers.get("origin");
     const cors: Record<string, string> = origin && origin === allowed ? { "access-control-allow-origin": allowed, "access-control-allow-methods": "GET,OPTIONS", "access-control-allow-headers": "content-type", vary: "Origin" } : {};
@@ -31,9 +31,9 @@ if (import.meta.main) {
   const { createPublicClient, http } = await import("viem");
   const { base } = await import("viem/chains");
   const { quote } = await import("./taker.js");
-  const statePath = process.env.STATE_PATH ?? "./state/upkeep.json";
+  const statePath = process.env.STATE_PATH || "./state/upkeep.json";
   const load = async () => { const s = JSON.parse(await readFile(statePath, "utf8")) as RuntimeState; s.order.traits = BigInt(s.order.traits as unknown as string); return s; };
-  const client = createPublicClient({ chain: base, transport: http(process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com") });
+  const client = createPublicClient({ chain: base, transport: http(process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com") });
   const server = createStatusServer(load, async (amountIn, tokenIn) => {
     const s = await load(); const tokenOut = tokenIn.toLowerCase() === s.pair.w0g.toLowerCase() ? s.pair.usdc : s.pair.w0g;
     return quote(client, { ...s.order, traits: BigInt(s.order.traits as unknown as string) }, { tokenIn, tokenOut, amountIn });

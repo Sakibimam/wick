@@ -22,7 +22,7 @@ contract ShipStrategy is Script {
     function run() external {
         address board = vm.envAddress("BOARD");
         address extruction = vm.envAddress("EXTRUCTION");
-        bool keyedMaker = vm.envExists("MAKER_PK");
+        bool keyedMaker = vm.envExists("MAKER_PK") && !vm.envOr("FORK_UNLOCKED", false);
         uint256 makerKey = keyedMaker ? vm.envUint("MAKER_PK") : 0;
         address maker = keyedMaker ? vm.addr(makerKey) : vm.envAddress("MAKER_ADDRESS");
         uint256 w0gAmount = vm.envUint("W0G_AMOUNT");

@@ -48,12 +48,12 @@ export type ForkDeployment = { board: Address; extruction: Address; order: Shipp
 export async function deployAndShip(url: string, client: PublicClient<any, any>, inventory = { w0g: 50_000n * 10n ** 18n, usdc: 50_000n * 10n ** 6n }): Promise<ForkDeployment> {
   const [deployer, maker, agent, taker] = ACCOUNTS as [Address, Address, Address, Address];
   const deployBlock = await client.getBlockNumber();
-  const deployOut = await run("forge", ["script", "script/Deploy.s.sol", "--rpc-url", url, "--unlocked", "--sender", deployer, "--broadcast"]);
+  const deployOut = await run("forge", ["script", "script/Deploy.s.sol", "--rpc-url", url, "--unlocked", "--sender", deployer, "--broadcast"], { FORK_UNLOCKED: "true" });
   const boardMatch = deployOut.match(/AgentQuoteBoard\s+(0x[\da-fA-F]{40})/), extMatch = deployOut.match(/AgentQuoteExtruction\s+(0x[\da-fA-F]{40})/);
   if (!boardMatch || !extMatch) throw new Error(`deployment addresses missing\n${deployOut}`);
   const board = boardMatch[1] as Address, extruction = extMatch[1] as Address;
   await fundToken(url, client, W0G, maker, inventory.w0g); await fundToken(url, client, USDC, maker, inventory.usdc);
-  const shipOut = await run("forge", ["script", "script/ShipStrategy.s.sol", "--rpc-url", url, "--unlocked", "--sender", maker, "--broadcast"], { BOARD: board, EXTRUCTION: extruction, MAKER_ADDRESS: maker, W0G_AMOUNT: String(inventory.w0g), USDC_AMOUNT: String(inventory.usdc), FEE_BPS: "30" });
+  const shipOut = await run("forge", ["script", "script/ShipStrategy.s.sol", "--rpc-url", url, "--unlocked", "--sender", maker, "--broadcast"], { FORK_UNLOCKED: "true", BOARD: board, EXTRUCTION: extruction, MAKER_ADDRESS: maker, W0G_AMOUNT: String(inventory.w0g), USDC_AMOUNT: String(inventory.usdc), FEE_BPS: "30" });
   const order = decodeOrder(shipOut);
   await rpc(url, "anvil_impersonateAccount", [maker]);
   const makerWallet = unlockedSigner(url, maker).wallet;
@@ -72,9 +72,9 @@ export async function signAndPost(url: string, client: PublicClient<any, any>, b
 
 /** Dev flow for the web app: deploy, ship, post both signed prices, fund a taker, write runtime state and a shell env file. */
 async function main() {
-  const url = process.env.RPC_URL ?? "http://127.0.0.1:8545";
-  const statePath = process.env.STATE_PATH ?? "./state/fork.json";
-  const ttl = Number(process.env.QUOTE_TTL_SECONDS ?? "600");
+  const url = process.env.RPC_URL || "http://127.0.0.1:8545";
+  const statePath = process.env.STATE_PATH || "./state/fork.json";
+  const ttl = Number(process.env.QUOTE_TTL_SECONDS || "600");
   if (!Number.isInteger(ttl) || ttl <= 0) throw new Error("QUOTE_TTL_SECONDS must be a positive integer");
   const chainId = await waitForRpc(url);
   if (Number(chainId) !== 8453) throw new Error(`expected a Base fork (8453), got chain ${Number(chainId)}`);
@@ -100,7 +100,7 @@ async function main() {
   }
   await fundToken(url, client, USDC, d.taker, 1_000n * 10n ** 6n);
   await fundToken(url, client, W0G, d.taker, 1_000n * 10n ** 18n);
-  const state: Persisted = { agent: d.agent, maker: d.maker, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: market.mid, quotes, budget: { tier: "PAUSED", model: null, computeBalanceWei: "0", spentTodayWei: "0", spendCapPerDayWei: process.env.SPEND_CAP_PER_DAY_WEI ?? "0", reason: "not_started" }, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: d.order, recentMids: [market.mid], lastMid: market.mid, quoteTimes: { mid: Number(head.timestamp) * 1000 }, lastNonce: nonce.toString(), lastComputeBalanceWei: "", spentTodayWei: "0", day: "", lastFillBlock: "" };
+  const state: Persisted = { agent: d.agent, maker: d.maker, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: market.mid, quotes, budget: { tier: "PAUSED", model: null, computeBalanceWei: "0", spentTodayWei: "0", spendCapPerDayWei: process.env.SPEND_CAP_PER_DAY_WEI || "0", reason: "not_started" }, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: d.order, recentMids: [market.mid], lastMid: market.mid, quoteTimes: { mid: Number(head.timestamp) * 1000 }, lastNonce: nonce.toString(), lastComputeBalanceWei: "", spentTodayWei: "0", day: "", lastFillBlock: "" };
   await mkdir(dirname(statePath), { recursive: true });
   await writeFile(statePath, JSON.stringify(state, (_, v) => typeof v === "bigint" ? v.toString() : v, 2) + "\n", { mode: 0o600 });
   const orderJson = JSON.stringify({ maker: d.order.maker, traits: `0x${d.order.traits.toString(16).padStart(64, "0")}`, data: d.order.data });

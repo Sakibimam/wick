@@ -9,7 +9,7 @@ import { quoteDomain, unlockedSigner, type Quote } from "../src/signer.js";
 import { swap as takerSwap, takerTraitsExactIn, AQUA_ROUTER } from "../src/taker.js";
 import { deployAndShip, fundToken, PRICE_ONLY_REASON, rpc, signAndPost, waitForRpc } from "./fork-setup.js";
 
-const rpcUrl = process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com";
+const rpcUrl = process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com";
 async function main() {
   const port = 18545 + Math.floor(Math.random() * 1000), url = `http://127.0.0.1:${port}`;
   const anvil = Bun.spawn(["anvil", "--fork-url", rpcUrl, "--port", String(port)], { stdout: "ignore", stderr: "pipe" });

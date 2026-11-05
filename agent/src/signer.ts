@@ -9,9 +9,9 @@ export function quoteTypedData(chainId: number, board: Address, quote: Quote) { 
 export function localSigner(pk = process.env.AGENT_PK, chain: Chain = base): { account: PrivateKeyAccount; wallet: WalletClient } {
   if (!pk) throw new Error("AGENT_PK is required for local signing");
   const account = privateKeyToAccount(pk as Hex);
-  return { account, wallet: createWalletClient({ account, chain, transport: http(chain.id === 8453 ? process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com" : process.env.ZG_RPC_URL ?? "https://evmrpc.0g.ai") }) };
+  return { account, wallet: createWalletClient({ account, chain, transport: http(chain.id === 8453 ? process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com" : process.env.ZG_RPC_URL || "https://evmrpc.0g.ai") }) };
 }
-export function unlockedSigner(rpcUrl = process.env.BASE_RPC_URL ?? "http://127.0.0.1:8545", address = process.env.AGENT_ADDRESS as Address, chain: Chain = base): { account: { address: Address }; wallet: WalletClient } {
+export function unlockedSigner(rpcUrl = process.env.BASE_RPC_URL || "http://127.0.0.1:8545", address = process.env.AGENT_ADDRESS as Address, chain: Chain = base): { account: { address: Address }; wallet: WalletClient } {
   if (!address) throw new Error("AGENT_ADDRESS is required for unlocked signing");
   return { account: { address }, wallet: createWalletClient({ account: address, chain, transport: custom({ request: ({ method, params }) => fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }).then(async r => { const j = await r.json(); if (j.error) throw new Error(j.error.message); return j.result; }) }) }) };
 }
