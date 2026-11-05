@@ -1,0 +1,366 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Upkeep: a market maker that pays for its own brain",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1360,
+      680
+    ],
+    "repository": {
+      "url": "https://github.com/Sakibimam/upkeep",
+      "revision": "fb309b843a60c587e2e57799a7b2a86919ef5dc7"
+    }
+  },
+  "components": [
+    {
+      "id": "taker",
+      "type": "external",
+      "label": "Taker",
+      "sublabel": "Any EOA",
+      "pos": [
+        30,
+        100
+      ],
+      "size": [
+        120,
+        68
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Web app",
+      "sublabel": "Swap ticket, brain ledger",
+      "pos": [
+        210,
+        100
+      ],
+      "size": [
+        160,
+        68
+      ],
+      "sources": [
+        {
+          "path": "web/components/swap-ticket.tsx"
+        },
+        {
+          "path": "web/components/ledger-page.tsx"
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "type": "backend",
+      "label": "Status API",
+      "sublabel": "/api/status, /api/quote",
+      "pos": [
+        690,
+        100
+      ],
+      "size": [
+        150,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/status.ts"
+        }
+      ]
+    },
+    {
+      "id": "router",
+      "type": "cloud",
+      "label": "0G Private Computer",
+      "sublabel": "Router, request ids",
+      "pos": [
+        920,
+        100
+      ],
+      "size": [
+        170,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/brain.ts"
+        }
+      ]
+    },
+    {
+      "id": "aqua",
+      "type": "backend",
+      "label": "AquaSwapVMRouter",
+      "sublabel": "Aqua, SwapVM v1.0.2",
+      "pos": [
+        210,
+        330
+      ],
+      "size": [
+        160,
+        68
+      ]
+    },
+    {
+      "id": "board",
+      "type": "security",
+      "label": "AgentQuoteBoard",
+      "sublabel": "AgentQuoteExtruction",
+      "pos": [
+        450,
+        330
+      ],
+      "size": [
+        160,
+        68
+      ],
+      "sources": [
+        {
+          "path": "contracts/src/AgentQuoteBoard.sol"
+        },
+        {
+          "path": "contracts/src/AgentQuoteExtruction.sol"
+        }
+      ]
+    },
+    {
+      "id": "signer",
+      "type": "security",
+      "label": "Signer and poster",
+      "sublabel": "EIP-712 Quote",
+      "pos": [
+        690,
+        330
+      ],
+      "size": [
+        150,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/signer.ts"
+        },
+        {
+          "path": "agent/src/poster.ts"
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Agent runtime",
+      "sublabel": "Brain, budget tiers",
+      "pos": [
+        920,
+        330
+      ],
+      "size": [
+        160,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/runtime.ts"
+        },
+        {
+          "path": "agent/src/budget.ts"
+        }
+      ]
+    },
+    {
+      "id": "uniswap",
+      "type": "database",
+      "label": "Uniswap v3 pool",
+      "sublabel": "W0G/USDC 0.3%, Base",
+      "pos": [
+        920,
+        560
+      ],
+      "size": [
+        160,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/price.ts"
+        }
+      ]
+    },
+    {
+      "id": "ccip",
+      "type": "messagebus",
+      "label": "Chainlink CCIP",
+      "sublabel": "Base to 0G chain",
+      "pos": [
+        1170,
+        560
+      ],
+      "size": [
+        160,
+        68
+      ],
+      "sources": [
+        {
+          "path": "agent/src/funding.ts"
+        }
+      ]
+    },
+    {
+      "id": "payment",
+      "type": "cloud",
+      "label": "0G Payment Layer",
+      "sublabel": "W0G.withdraw, depositFor",
+      "pos": [
+        1170,
+        330
+      ],
+      "size": [
+        160,
+        68
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Agent runtime: pricing trust",
+      "wraps": [
+        "signer",
+        "runtime"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Base: onchain enforcement",
+      "wraps": [
+        "aqua",
+        "board"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "taker-web",
+      "from": "taker",
+      "to": "web",
+      "label": "swap"
+    },
+    {
+      "id": "web-aqua",
+      "from": "web",
+      "to": "aqua",
+      "label": "swap(order)",
+      "variant": "emphasis",
+      "labelAt": [
+        290,
+        249
+      ]
+    },
+    {
+      "id": "aqua-board",
+      "from": "aqua",
+      "to": "board",
+      "label": "opcode 0x20",
+      "variant": "security"
+    },
+    {
+      "id": "signer-board",
+      "from": "signer",
+      "to": "board",
+      "label": "post"
+    },
+    {
+      "id": "runtime-signer",
+      "from": "runtime",
+      "to": "signer",
+      "label": "rate"
+    },
+    {
+      "id": "runtime-router",
+      "from": "runtime",
+      "to": "router",
+      "label": "inference",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        1055,
+        249
+      ]
+    },
+    {
+      "id": "status-web",
+      "from": "status",
+      "to": "web",
+      "label": "GET /api/status"
+    },
+    {
+      "id": "runtime-status",
+      "from": "runtime",
+      "to": "status",
+      "label": "state",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "runtime-uniswap",
+      "from": "runtime",
+      "to": "uniswap",
+      "label": "mid, fee swap",
+      "labelAt": [
+        1000,
+        479
+      ]
+    },
+    {
+      "id": "uniswap-ccip",
+      "from": "uniswap",
+      "to": "ccip",
+      "label": "W0G"
+    },
+    {
+      "id": "ccip-payment",
+      "from": "ccip",
+      "to": "payment",
+      "label": "W0G on 0G"
+    },
+    {
+      "id": "payment-router",
+      "from": "payment",
+      "to": "router",
+      "label": "pays inference",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "right"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Trust boundaries",
+      "items": [
+        "Signer owns pricing trust",
+        "Board enforces freshness, nonce, pair, maker, agent epoch",
+        "Stale or missing quote reverts StaleQuote"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Budget tiers",
+      "items": [
+        "NORMAL 0gm-1.0-35b-a3b, requote at 25 bps move",
+        "LOW qwen3.7-flash, requote at 100 bps move",
+        "CRITICAL stops inference, PAUSED at the spend cap"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Fee loop",
+      "items": [
+        "Fill fees swap to W0G on Uniswap",
+        "CCIP to 0G, unwrap, depositFor",
+        "Payment Layer funds the next inference"
+      ]
+    }
+  ]
+}
