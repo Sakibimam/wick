@@ -62,11 +62,11 @@ describe("budget policy", () => {
 });
 
 const state = { mid: 2, recentMids: [2], inventory: { w0g: 1, usdc: 2 }, budgetTier: "NORMAL" as const };
-function fetcher(content: unknown, requestId = "rid", bodyId?: string): typeof fetch { return (async (_u, init) => { JSON.parse(String(init?.body)); return new Response(JSON.stringify({ choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], ...(bodyId ? { x_0g_trace: { request_id: bodyId } } : {}) }), { status: 200, headers: requestId ? { "X-Request-ID": requestId } : {} }); }) as typeof fetch; }
+function fetcher(content: unknown, requestId = "rid", bodyId?: string): typeof fetch { return (async (_u, init) => { JSON.parse(String(init?.body)); return new Response(JSON.stringify({ usage: { total_tokens: 19 }, choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], ...(bodyId ? { x_0g_trace: { request_id: bodyId } } : {}) }), { status: 200, headers: requestId ? { "X-Request-ID": requestId } : {} }); }) as typeof fetch; }
 const answer = (rateE18 = 2e18, spreadBps = 30) => ({ rateE18, spreadBps, reason: "balanced" });
 async function brainFail(code: BrainErrorCode, content: unknown) { try { await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(content) }); throw new Error("unexpected success"); } catch (e) { expect(e).toBeInstanceOf(BrainError); expect((e as BrainError).code).toBe(code); } }
 describe("brain protocol", () => {
-  test("valid strict JSON and header request id", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer()) })).toMatchObject({ rateE18: 2_000_000_000_000_000_000n, requestId: "rid", model: "0gm-1.0-35b-a3b" }); });
+  test("valid strict JSON, token usage, and header request id", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer()) })).toMatchObject({ rateE18: 2_000_000_000_000_000_000n, requestId: "rid", model: "0gm-1.0-35b-a3b", tokens: 19 }); });
   test("required fields allow benign extra JSON keys", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher({ ...answer(), explanationCode: "balanced-inventory" }) })).toMatchObject({ spreadBps: 30, reason: "balanced" }); });
   test("spread bounds reject both sides", async () => { await brainFail("spread_out_of_range", answer(2e18, 4)); await brainFail("spread_out_of_range", answer(2e18, 501)); });
   test("rate beyond 3 percent rejects and boundary passes", async () => { await brainFail("rate_out_of_range", answer(2.061e18)); expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer(2.06e18)) })).rateE18).toBe(2_060_000_000_000_000_000n); });
@@ -93,4 +93,47 @@ describe("unsigned funding plan", () => {
   test("withdraw and deposit use correct selectors, amount, owner and reserve", () => { const p = buildFundingPlan({ ...params, nativeGasReserveWei: 10n }); expect(p.withdrawTx.data.slice(0, 10)).toBe("0x2e1a7d4d"); expect(decodeFunctionData({ abi: fundingAbi.token, data: p.withdrawTx.data }).args[0]).toBe(params.w0gAmountOut); expect(p.depositTx.data.slice(0, 10)).toBe("0xaa67c919"); expect(decodeFunctionData({ abi: fundingAbi.payment, data: p.depositTx.data }).args[0]).toBe(params.agentOwner); expect(p.depositTx.value).toBe(params.w0gAmountOut - 10n); expect(buildFundingPlan(params).depositTx.value).toBe(params.w0gAmountOut); expect(p.withdrawTx.to).toBe(W0G_ZERO_G); expect(p.depositTx.to).toBe(ZERO_G_PAYMENT_LAYER); });
   test("invalid slippage, amounts and reserve reject", () => { for (const slippageBps of [-1, 10000]) expect(() => buildFundingPlan({ ...params, slippageBps })).toThrow(); expect(() => buildFundingPlan({ ...params, usdcAmountIn: 0n })).toThrow(); expect(() => buildFundingPlan({ ...params, w0gAmountOut: 0n })).toThrow(); expect(() => buildFundingPlan({ ...params, nativeGasReserveWei: params.w0gAmountOut })).toThrow(); });
   test("zero agent and agent owner reject", () => { const zero = "0x0000000000000000000000000000000000000000" as const; expect(() => buildFundingPlan({ ...params, agent: zero })).toThrow(); expect(() => buildFundingPlan({ ...params, agentOwner: zero })).toThrow(); });
+});
+
+import { hashTypedData } from "viem";
+import { quoteDomain, quoteTypes, quoteTypedData } from "../src/signer.js";
+import { statusSchema } from "../src/status.js";
+import { directionalRates, shouldRunInference, tickPolicy, thresholdTriggered } from "../src/runtime.js";
+import { takerTraitsExactIn } from "../src/taker.js";
+
+describe("agent runtime contracts", () => {
+  test("typed quote matches the board domain and ordered struct fields", () => {
+    const q = { maker: addr, tokenIn: USDC, tokenOut: W0G, rateE18: 123n, expiry: 456n, nonce: 7n, inferenceId: `0x${"11".repeat(32)}` as const };
+    const typed = quoteTypedData(8453, addr, q);
+    expect(typed.domain).toEqual(quoteDomain(8453, addr));
+    expect(typed.types).toBe(quoteTypes);
+    expect(Object.keys(typed.types.Quote.map(x => ({ [x.name]: x.type })).reduce((a, b) => Object.assign(a, b), {}))).toEqual(["maker", "tokenIn", "tokenOut", "rateE18", "expiry", "nonce", "inferenceId"]);
+    expect(hashTypedData(typed)).toMatch(/^0x[\da-f]{64}$/);
+  });
+  test("runtime inference only follows policy requotes, and never runs in CRITICAL or PAUSED", () => {
+    const normal = { computeBalanceWei: 2n * 10n ** 18n, spendCapPerDayWei: 1000n, spentTodayWei: 0n, priceDeviationBps: 24, lastQuoteAgeMs: 1000 };
+    expect(tickPolicy(normal).shouldInfer).toBe(false);
+    expect(tickPolicy({ ...normal, priceDeviationBps: 25 }).shouldInfer).toBe(true);
+    expect(tickPolicy({ ...normal, computeBalanceWei: c.pauseBalanceWei }).shouldInfer).toBe(false);
+    expect(tickPolicy({ ...normal, spendCapPerDayWei: 1n, spentTodayWei: 1n }).shouldInfer).toBe(false);
+    expect(shouldRunInference("CRITICAL", true)).toBe(false);
+    expect(shouldRunInference("PAUSED", true)).toBe(false);
+    expect(shouldRunInference("NORMAL", false)).toBe(false);
+    expect(shouldRunInference("LOW", true)).toBe(true);
+  });
+  test("funding threshold triggers at the boundary only", async () => {
+    expect(await thresholdTriggered(999n, 1000n)).toBe(false);
+    expect(await thresholdTriggered(1000n, 1000n)).toBe(true);
+    await expect(thresholdTriggered(1n, 0n)).rejects.toThrow();
+  });
+  test("directional rates preserve Base token scaling and taker traits width", () => {
+    expect(directionalRates(2n * 10n ** 18n, 30)).toEqual({ w0gToUsdc: 1_994_000n, usdcToW0g: 4_985n * 10n ** 26n });
+    expect((takerTraitsExactIn.length - 2) / 2).toBe(22);
+    expect(takerTraitsExactIn.slice(-4)).toBe("0041");
+  });
+  test("status builder emits the agreed keys even with empty histories", () => {
+    const s = statusSchema({ agent: addr, maker: addr, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: 1, quotes: [], budget: {}, fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: { maker: addr, traits: 65n, data: "0x" } });
+    expect(Object.keys(s)).toEqual(["agent", "maker", "chainId", "pair", "mid", "quotes", "budget", "fees", "funding", "inferences", "order"]);
+    expect(s.order.traits).toBe(`0x${"0".repeat(62)}41`);
+  });
 });

@@ -2,7 +2,7 @@
   "name": "upkeep-agent",
   "private": true,
   "type": "module",
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit", "live-check": "bun run scripts/live-check.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit", "live-check": "bun run scripts/live-check.ts", "runtime": "bun run src/runtime.ts", "status": "bun run src/status.ts", "fork-e2e": "bun run scripts/fork-e2e.ts" },
   "dependencies": { "viem": "^2.38.5" },
   "devDependencies": { "@types/bun": "^1.2.20", "typescript": "^5.9.2" }
 }

@@ -7,7 +7,13 @@ Production Bun and TypeScript service for the Base W0G/USDC market and 0G Paymen
 - `src/price.ts` reads the Base Uniswap v3 pool, computes USDC per W0G from either token order, and quotes exact USDC input with QuoterV2.
 - `src/brain.ts` requests a strictly validated rate and spread from the 0G router and requires a request ID for reconciliation. It never logs the API key.
 - `src/budget.ts` applies pure balance and spend policy, spread multipliers, and price-deviation requote thresholds.
-- `src/funding.ts` quotes CCIP fees and constructs unsigned Base and 0G transactions. `simulate` sends `eth_call` requests with state overrides; it does not sign or send transactions.
+- `src/funding.ts` quotes CCIP fees and builds the Base USDC swap, Base CCIP transfer, 0G unwrap, and Payment Layer deposit transactions. The runtime waits for every receipt and for CCIP delivery before advancing.
+- `src/signer.ts` signs the board's EIP-712 `Quote` using `AGENT_PK` or an RPC unlocked account. Private keys are read only from the process environment.
+- `src/poster.ts` posts quotes and checks the mined receipt, decoding board errors when the RPC provides revert data.
+- `src/taker.ts` builds the router's 22-byte exact-in traits encoding, reads `quote()`, approves the input token, and submits the shipped order to AquaSwapVMRouter.
+- `src/runtime.ts` reads Base market state and the 0G Payment Layer balance on each tick, applies the budget policy, requests and validates inference only for policy requotes, persists state, and accounts for fills from router events.
+- `src/status.ts` serves the persisted state at `/api/status` and the current router quote at `/api/quote`.
+- `scripts/fork-e2e.ts` deploys and ships the exact Solidity strategy on a local Base fork, signs and posts a price-only quote, fills 5 USDC, checks both token deltas, verifies stale rejection, and reads the HTTP schema.
 - `scripts/live-check.ts` reads live chain state and simulates the Payment Layer deposit success and zero-value failure paths. It is read-only and never makes an inference call.
 
 ## Environment
@@ -16,9 +22,16 @@ Production Bun and TypeScript service for the Base W0G/USDC market and 0G Paymen
 - `ZG_RPC_URL`: 0G JSON-RPC endpoint.
 - `ZG_API_KEY`: 0G router bearer key. It is never logged or written by this package.
 - `ZG_API_BASE`: 0G router API base URL.
-- `AGENT_ADDRESS`: receiver address for the CCIP fee check.
-- `AGENT_OWNER`: intended Payment Layer beneficiary address for callers building a plan.
 - `PAYMENT_LOG_LOOKBACK_BLOCKS`: maximum backward scan window for recent Payment Layer deposits.
+- `AGENT_PK`: optional local EIP-712 and transaction signer. When absent, the configured RPC account must be unlocked.
+- `AGENT_ADDRESS`, `MAKER_ADDRESS`, `BOARD_ADDRESS`: registered board agent, shipped order maker, and quote board.
+- `ORDER_JSON`: the `order` object printed by `ShipStrategy.s.sol`, containing `maker`, `traits`, and `data`.
+- `STATE_PATH`: state JSON path, default `./state/upkeep.json`.
+- `PORT` and `WEB_ORIGIN`: status server port (8787) and the one allowed browser origin.
+- `SPEND_CAP_PER_DAY_WEI`: daily 0G compute balance spend cap.
+- `QUOTE_TTL_SECONDS`: signed quote lifetime.
+- `INFERENCE_COST_PER_TOKEN_WEI`: optional cost conversion for the inference token usage returned by the 0G router.
+- `FUNDING_THRESHOLD_USDC`, `FUNDING_SLIPPAGE_BPS`, `ZG_GAS_RESERVE_WEI`, `CCIP_TIMEOUT_MS`: funding threshold, swap slippage, 0G gas reserve, and CCIP delivery timeout.
 
 ## Install and run
 
@@ -28,9 +41,12 @@ bun test
 bunx tsc --noEmit
 bun run scripts/live-check.ts
 bun run live-check
+bun run src/runtime.ts --once
+bun run status
+bun run fork-e2e
 ```
 
-`live-check` performs live reads only, with no signing or sends. It needs no `ZG_API_KEY`.
+`live-check` performs live reads only, with no signing or sends. It needs no `ZG_API_KEY`. The runtime loops every 15 seconds and quotes only after the budget policy's price-deviation trigger. For fee funding, the signing account must be the maker account because accrued inventory remains under maker ownership.
 
 ## Verified contracts
 
@@ -59,4 +75,4 @@ The configured model ids are `0gm-1.0-35b-a3b` (NORMAL) and `qwen3.7-flash` (LOW
 
 ## Funding flow
 
-The unsigned plan approves USDC, swaps USDC to W0G on Base, approves W0G to the Base CCIP router, sends W0G to 0G, withdraws wrapped W0G to native 0G, then deposits native 0G for the owner in the Payment Layer. This package only builds unsigned transactions. Base steps require Base ETH for gas. The 0G withdraw and deposit steps require native 0G for gas; `nativeGasReserveWei` withholds that amount from the Payment Layer deposit so it remains available after the W0G withdrawal. CCIP also requires the separately quoted fee in Base native ETH.
+The runtime converts accrued USDC fee inventory to W0G on Base, adds accrued W0G inventory, approves and sends the combined amount through CCIP, waits for the 0G wrapped token balance to increase, withdraws it to native 0G, then deposits the amount minus the configured gas reserve into the Payment Layer. Base steps require Base ETH for gas. CCIP requires its separately quoted fee in Base native ETH.

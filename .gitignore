@@ -10,3 +10,6 @@ broadcast/
 gtm/
 spikes/
 .DS_Store
+
+/contracts/broadcast/
+/contracts/cache/

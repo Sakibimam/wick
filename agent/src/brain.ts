@@ -40,6 +40,7 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
     if (rateE18 <= 0n) throw new BrainError("rate_out_of_range");
     const diff = rateE18 > midE18 ? rateE18 - midE18 : midE18 - rateE18;
     if (diff * 10_000n > midE18 * 300n) throw new BrainError("rate_out_of_range");
-    return { rateE18, spreadBps: value.spreadBps, reason: value.reason, requestId, model };
+    const tokens = Number.isSafeInteger(body?.usage?.total_tokens) && body.usage.total_tokens >= 0 ? body.usage.total_tokens as number : null;
+    return { rateE18, spreadBps: value.spreadBps, reason: value.reason, requestId, model, tokens };
   } finally { clearTimeout(timeout); }
 }
