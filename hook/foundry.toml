@@ -22,7 +22,7 @@ remappings = [
 ]
 
 [fuzz]
-runs = 64
+runs = 256
 
 [rpc_endpoints]
 base = "${BASE_RPC_URL}"

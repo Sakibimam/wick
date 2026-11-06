@@ -5,7 +5,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {CustomRevert} from "@uniswap/v4-core/src/libraries/CustomRevert.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
@@ -41,6 +41,16 @@ contract AquaAggregatorHookForkTest is AquaHookBase {
             W0G.balanceOf(address(PM)),
             USDC.balanceOf(address(PM))
         );
+    }
+
+    function _containsBytes(bytes memory hay, bytes memory needle) internal pure returns (bool) {
+        if (hay.length < needle.length) return false;
+        for (uint256 i; i <= hay.length - needle.length; ++i) {
+            bool hit = true;
+            for (uint256 j; j < needle.length && hit; ++j) hit = hay[i + j] == needle[j];
+            if (hit) return true;
+        }
+        return false;
     }
 
     function _assertHookFlat() internal view {
@@ -280,6 +290,31 @@ contract AquaAggregatorHookForkTest is AquaHookBase {
         (bool ok, bytes memory ret) = _tryExactIn(false, amountIn, expectedOut + 1, false);
         assertFalse(ok, "router min-out protects the swapper");
         assertEq(ret, abi.encodeWithSelector(V4TooLittleReceived.selector, expectedOut + 1, expectedOut));
+    }
+
+    function test_revert_quoteUnknownPool_PoolDoesNotExist() public {
+        _postBothMid();
+        PoolId unknown = PoolId.wrap(keccak256("not a registered pool"));
+        vm.expectRevert(IAggregatorHook.PoolDoesNotExist.selector);
+        hook.quote(false, -int256(10e6), unknown);
+        vm.expectRevert(IAggregatorHook.PoolDoesNotExist.selector);
+        hook.pseudoTotalValueLocked(unknown);
+    }
+
+    /// @notice Exact-out takes the router's quoted input from the PoolManager before swapping; a router whose swap then
+    /// reports a different input must revert the whole swap rather than leave the difference unaccounted.
+    function test_revert_exactOut_routerAmountMismatch() public {
+        _postBothMid();
+        uint256 amountOut = 500e18;
+        uint256 quotedIn = _grossIn(amountOut, _rate(address(USDC), address(W0G)));
+        vm.mockCall(address(ROUTER), abi.encodeWithSelector(IAquaSwapVMRouter.swap.selector), abi.encode(quotedIn - 1, amountOut, bytes32(0)));
+        Balances memory b = _snap();
+        (bool ok, bytes memory ret) = _tryExactOut(false, amountOut, type(uint256).max, false);
+        assertFalse(ok, "mismatched router input must revert");
+        assertTrue(_containsBytes(ret, abi.encodeWithSelector(AquaAggregatorHook.RouterAmountMismatch.selector, quotedIn, quotedIn - 1)), "RouterAmountMismatch(quoted, swapped) surfaced");
+        Balances memory a = _snap();
+        assertEq(abi.encode(a), abi.encode(b), "no balance moved");
+        _assertHookFlat();
     }
 
     function test_revert_quoteBeyondAquaDepth() public {
