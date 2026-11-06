@@ -199,9 +199,10 @@ describe("x402 revenue joins the funding leg, earned-only", () => {
     expect(d.spendableUsdc).toBe("0");
   });
 });
-test("the cron never spends Base ETH below the operator's 0.00009 ETH reserve", async () => {
+test("the gas floor keeps at least two postPair transactions of Base ETH in reserve", async () => {
   const { GAS_FLOOR_WEI } = await import("../src/policy.js");
   const { DEFAULT_FUNDING_ENV } = await import("../src/worker-tick.js");
-  expect(GAS_FLOOR_WEI >= 90_000_000_000_000n).toBe(true);
-  expect(DEFAULT_FUNDING_ENV.gasTopUpBelowWei >= 90_000_000_000_000n).toBe(true);
+  // one v2 postPair measured at 82,443 gas; at a 0.15 gwei worst case that is ~12,400 gwei, so 30,000 gwei covers two
+  expect(GAS_FLOOR_WEI >= 2n * 82_443n * 150_000_000n).toBe(true);
+  expect(DEFAULT_FUNDING_ENV.gasTopUpBelowWei > GAS_FLOOR_WEI).toBe(true);
 });

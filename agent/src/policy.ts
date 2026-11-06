@@ -10,7 +10,7 @@ export function shouldRunInference(tier: BudgetTier, requote: boolean) { return 
 export function tickPolicy(input: BudgetInput) { const decision = decideBudget(input); return { ...decision, shouldInfer: shouldRunInference(decision.tier, decision.requote) }; }
 
 /** Base ETH the agent never spends below: the operator reserve (0.00009 ETH, a Uniswap v4 hook deploy plus headroom) with margin. */
-export const GAS_FLOOR_WEI = 100_000_000_000_000n;
+export const GAS_FLOOR_WEI = 30_000_000_000_000n; // ~2 postPair txs of headroom; the hook-deploy reserve is spent
 /** A live quote this close to expiry is renewed even when the price has not moved, so the strategy never goes dark between price moves. */
 export const EXPIRY_REQUOTE_WINDOW_SECONDS = 600;
 

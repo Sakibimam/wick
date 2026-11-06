@@ -41,7 +41,9 @@ contract Deploy is Script {
 
     function run() external returns (AquaAggregatorHook hook, PoolId poolId) {
         require(block.chainid == 8453, "Base only");
-        address owner = msg.sender;
+        // DEPLOYER_PK (env, never argv) signs on mainnet; without it the script simulates as --sender.
+        uint256 pk = vm.envOr("DEPLOYER_PK", uint256(0));
+        address owner = pk == 0 ? msg.sender : vm.addr(pk);
         bytes32 salt = vm.envBytes32("SALT");
 
         string memory json = vm.readFile(vm.envOr("ORDER_JSON", string("../.progress/live-order.json")));
@@ -68,7 +70,8 @@ contract Deploy is Script {
             hooks: IHooks(predicted)
         });
 
-        vm.startBroadcast(owner);
+        if (pk == 0) vm.startBroadcast(owner);
+        else vm.startBroadcast(pk);
         hook = new AquaAggregatorHook{salt: salt}(PM, ROUTER, owner);
         hook.setOrder(o);
         PM.initialize(key, sqrtPriceX96);
