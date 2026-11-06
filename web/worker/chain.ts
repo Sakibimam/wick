@@ -9,10 +9,12 @@ export const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 export const BASE_LOGS_RPC = process.env.BASE_LOGS_RPC_URL || "https://base-rpc.publicnode.com";
 export const ZG_RPC = process.env.ZG_RPC_URL || "https://evmrpc.0g.ai";
 
-export const baseClient = createPublicClient({ transport: fallback([http(BASE_RPC, { retryCount: 1 }), http(BASE_LOGS_RPC, { retryCount: 1 })]) });
+// Clients are built per request: a module-level viem client shares cached promises (getBlockNumber) across
+// concurrent Worker requests, and a request awaiting another request's promise hangs until Cloudflare cancels it.
+export const baseClient = () => createPublicClient({ transport: fallback([http(BASE_RPC, { retryCount: 1 }), http(BASE_LOGS_RPC, { retryCount: 1 })]) });
 // One short attempt: a throttled log scan must fall back to the saved index, not hold the status route open.
-export const logsClient = createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 0, timeout: 6_000 }) });
-export const zeroGClient = createPublicClient({ transport: http(ZG_RPC, { retryCount: 2 }) });
+export const logsClient = () => createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 0, timeout: 6_000 }) });
+export const zeroGClient = () => createPublicClient({ transport: http(ZG_RPC, { retryCount: 2 }) });
 
 export const liveOrder: ShippedOrder = { maker: order.order.maker as Address, traits: BigInt(order.order.traits), data: order.order.data as Hex };
 export { routerQuote };
@@ -41,14 +43,15 @@ export async function readLogIndex(kv: Kv | null): Promise<LogIndex> {
   if (memo && Date.now() - memo.at < 10_000) return memo.idx;
   const saved = (memo?.idx ?? (kv ? ((await kv.get("log-index", "json")) as LogIndex | null) : null)) ?? { cursor: (BOARD_DEPLOY_BLOCK - 1n).toString(), posts: [], fills: [] };
   const ranges: Array<[bigint, bigint]> = [];
+  const logs = logsClient();
   let pages;
   try {
-    const latest = await logsClient.getBlockNumber();
+    const latest = await logs.getBlockNumber();
     for (let from = BigInt(saved.cursor) + 1n; from <= latest && ranges.length < MAX_CHUNKS; from += CHUNK) ranges.push([from, from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n]);
     if (ranges.length === 0) return saved;
     pages = await Promise.all(ranges.map(([fromBlock, toBlock]) => Promise.all([
-      logsClient.getLogs({ address: BOARD, event: postedEvent, args: { maker: AGENT }, fromBlock, toBlock }),
-      logsClient.getLogs({ address: AQUA_ROUTER, event: swappedEvent, fromBlock, toBlock }),
+      logs.getLogs({ address: BOARD, event: postedEvent, args: { maker: AGENT }, fromBlock, toBlock }),
+      logs.getLogs({ address: AQUA_ROUTER, event: swappedEvent, fromBlock, toBlock }),
     ])));
   } catch (e) {
     // publicnode throttles bursts of range scans; the saved index is exact up to its cursor, which the route reports as toBlock.
@@ -58,7 +61,7 @@ export async function readLogIndex(kv: Kv | null): Promise<LogIndex> {
   const posts: Post[] = pages.flatMap(([p]) => p.map((l) => ({ tokenIn: l.args.tokenIn!, tokenOut: l.args.tokenOut!, rateE18: l.args.rateE18!.toString(), expiry: l.args.expiry!.toString(), inferenceId: l.args.inferenceId!, postedTx: l.transactionHash, block: l.blockNumber.toString() })));
   const swaps = pages.flatMap(([, s]) => s).filter((l) => l.args.maker?.toLowerCase() === AGENT.toLowerCase());
   const times = new Map<bigint, number>();
-  await Promise.all([...new Set(swaps.map((l) => l.blockNumber))].map(async (n) => times.set(n, Number((await logsClient.getBlock({ blockNumber: n })).timestamp) * 1000)));
+  await Promise.all([...new Set(swaps.map((l) => l.blockNumber))].map(async (n) => times.set(n, Number((await logs.getBlock({ blockNumber: n })).timestamp) * 1000)));
   const fills: FillRow[] = swaps.map((l) => ({ txHash: l.transactionHash, logIndex: l.logIndex, block: l.blockNumber.toString(), timeMs: times.get(l.blockNumber) ?? null, orderHash: l.args.orderHash!, taker: l.args.taker!, tokenIn: l.args.tokenIn!, tokenOut: l.args.tokenOut!, amountIn: l.args.amountIn!.toString(), amountOut: l.args.amountOut!.toString() }));
   const idx: LogIndex = { cursor: ranges.at(-1)![1].toString(), posts: [...saved.posts, ...posts], fills: [...saved.fills, ...fills] };
   if (kv && (posts.length > 0 || fills.length > 0 || BigInt(idx.cursor) - BigInt(saved.cursor) >= PERSIST_LAG)) await kv.put("log-index", JSON.stringify(idx));
@@ -68,15 +71,17 @@ export async function readLogIndex(kv: Kv | null): Promise<LogIndex> {
 
 /** Live reads the status page needs, each from its system of record, with the block it was read at. */
 export async function readChain() {
+  const baseC = baseClient();
+  const zg = zeroGClient();
   const [market, current, strategy, vaultWei, gasWei, baseBlock, zeroGBlock] = await Promise.all([
     // The agent package resolves its own viem types; the runtime module is the same viem via resolveAlias.
-    readMarket(baseClient as never),
-    Promise.all([[USDC, W0G], [W0G, USDC]].map(([a, b]) => baseClient.readContract({ address: BOARD, abi, functionName: "getQuote", args: [AGENT, a as Address, b as Address] }))),
-    baseClient.readContract({ address: AQUA, abi, functionName: "safeBalances", args: [AGENT, AQUA_ROUTER, order.strategyHash as Hex, W0G, USDC] }),
-    zeroGClient.readContract({ address: PAYMENT_LAYER, abi, functionName: "balanceOf", args: [AGENT] }),
-    baseClient.getBalance({ address: AGENT }),
-    baseClient.getBlockNumber(),
-    zeroGClient.getBlockNumber(),
+    readMarket(baseC as never),
+    Promise.all([[USDC, W0G], [W0G, USDC]].map(([a, b]) => baseC.readContract({ address: BOARD, abi, functionName: "getQuote", args: [AGENT, a as Address, b as Address] }))),
+    baseC.readContract({ address: AQUA, abi, functionName: "safeBalances", args: [AGENT, AQUA_ROUTER, order.strategyHash as Hex, W0G, USDC] }),
+    zg.readContract({ address: PAYMENT_LAYER, abi, functionName: "balanceOf", args: [AGENT] }),
+    baseC.getBalance({ address: AGENT }),
+    baseC.getBlockNumber(),
+    zg.getBlockNumber(),
   ]);
   return { mid: market.mid, current: current.filter((q) => q.expiry > 0n), strategy: { w0g: strategy[0], usdc: strategy[1] }, vaultWei, gasWei, baseBlock, zeroGBlock };
 }

@@ -35,7 +35,7 @@ async function quote(url: URL): Promise<Response> {
     return json({ error: "amountIn and a supported tokenIn are required" }, 400);
   const tokenOut: Address = getAddress(tokenIn) === W0G ? USDC : W0G;
   try {
-    const q = await routerQuote(baseClient as never, liveOrder, { tokenIn: getAddress(tokenIn), tokenOut, amountIn: BigInt(raw) });
+    const q = await routerQuote(baseClient() as never, liveOrder, { tokenIn: getAddress(tokenIn), tokenOut, amountIn: BigInt(raw) });
     return json({ amountIn: q.amountIn.toString(), amountOut: q.amountOut.toString(), orderHash: q.orderHash });
   } catch (e) {
     const full = e instanceof Error ? e.message : String(e);
