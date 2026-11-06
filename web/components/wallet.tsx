@@ -47,11 +47,11 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
       <dialog
         ref={ref}
         aria-labelledby="wallet-dialog-title"
-        className="m-auto w-[min(92vw,380px)] rounded-card border border-rule-2 bg-panel p-0 text-ink-2 shadow-[0_1px_2px_oklch(24%_0.02_258/0.12)] backdrop:bg-graphite/60"
+        className="m-auto w-[min(92vw,380px)] rounded-card border border-rule-2 bg-panel p-0 text-ink-2 backdrop:bg-paper/80"
         onClick={(e) => { if (e.target === ref.current) close(); }}
       >
         <div className="flex items-center justify-between border-b border-rule px-5 py-4">
-          <h2 id="wallet-dialog-title" className="text-[20px] font-medium">Choose a wallet</h2>
+          <h2 id="wallet-dialog-title" className="text-[24px]">Choose a wallet</h2>
           <Button variant="ghost" size="sm" onClick={close} aria-label="Close"><X className="size-4" aria-hidden /></Button>
         </div>
         <div className="grid grid-cols-1 gap-2 p-5">
@@ -84,14 +84,14 @@ export function WalletButton({ className }: { className?: string }) {
   const { disconnect } = useDisconnect();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <Button size="sm" className={className} disabled>Connect wallet</Button>;
+  if (!mounted) return <Button variant="secondary" size="sm" className={className} disabled>Connect wallet</Button>;
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="num hidden rounded-control border border-rule-2 px-2.5 py-1.5 text-[13px] text-ink sm:inline" title={address}>{truncateHex(address, 6, 4)}</span>
+        <span className="mono hidden rounded-control bg-panel px-2.5 py-1.5 text-[13px] text-ink sm:inline" title={address}>{truncateHex(address, 6, 4)}</span>
         <Button variant="ghost" size="sm" onClick={() => disconnect()}>Disconnect</Button>
       </div>
     );
   }
-  return <Button size="sm" className={className} onClick={open}>Connect wallet</Button>;
+  return <Button variant="secondary" size="sm" className={className} onClick={open}>Connect wallet</Button>;
 }

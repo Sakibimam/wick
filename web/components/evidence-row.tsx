@@ -18,13 +18,13 @@ export function EvidenceRow({ title, plain, hash, hashLabel, href, chainId, time
   return (
     <li className="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3.5 transition-colors duration-150 hover:bg-sunken md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)_minmax(0,9.5rem)] md:items-center">
       <div className="min-w-0">
-        <p className="text-[15px] font-medium text-ink">{title}</p>
+        <p className="text-[15px] font-semibold text-ink">{title}</p>
         <p className="mt-0.5 text-[14px] text-muted">{plain}</p>
       </div>
       <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} head={10} tail={8} /> : <span className="text-[13px] text-muted">No transaction, read from the agent</span>}</div>
       <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1">
-        {chainId !== undefined ? <span className="num rounded-control border border-rule-2 px-1.5 py-0.5 text-[11px] text-ink-2">{CHAIN_NAMES[chainId] ?? `Chain ${chainId}`}</span> : null}
-        {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[12px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}
+        {chainId !== undefined ? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-ink-2">{CHAIN_NAMES[chainId] ?? `Chain ${chainId}`}</span> : null}
+        {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[13px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}
       </div>
     </li>
   );

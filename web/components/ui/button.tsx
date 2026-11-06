@@ -5,16 +5,20 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-11 items-center justify-center gap-2 rounded-control px-4 text-[15px] font-medium transition-[background-color,border-color,color,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:active:translate-y-0 aria-disabled:pointer-events-none",
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-control px-5 text-[15px] font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] disabled:pointer-events-none disabled:active:scale-100 aria-disabled:pointer-events-none",
   {
     variants: {
       variant: {
         primary: "bg-accent text-on-accent hover:bg-accent-hover disabled:bg-sunken disabled:text-muted aria-disabled:bg-sunken aria-disabled:text-muted",
-        secondary: "border border-rule-2 bg-panel text-ink hover:border-ink-2 disabled:text-muted",
+        secondary: "border border-rule-2 text-ink hover:border-ink hover:bg-sunken disabled:text-muted",
         ghost: "text-ink-2 hover:bg-sunken hover:text-ink disabled:text-muted",
-        inverse: "border border-graphite-rule text-on-graphite hover:border-on-graphite-muted",
       },
-      size: { default: "h-11", sm: "h-9 px-3 text-[13px]", chip: "h-8 rounded-control border border-rule-2 bg-panel px-3 text-[13px] text-ink-2 hover:border-ink-2 hover:text-ink" },
+      size: {
+        default: "h-11",
+        lg: "h-14 text-[16px]",
+        sm: "h-9 px-3 text-[13px]",
+        chip: "h-8 rounded-control bg-panel px-3 text-[13px] font-medium text-ink-2 hover:bg-rule hover:text-ink disabled:opacity-50",
+      },
     },
     defaultVariants: { variant: "primary", size: "default" },
   },

@@ -1,87 +1,68 @@
-# Upkeep design system
+# Upkeep design system: Night circuit
 
-Source theme: Hallmark catalog theme **Cobalt** (modern-minimal genre, cool engineered paper, one cobalt signal, hairline structure, tight 6px radii, one graphite band per page). Adapted for a money screen: the graphite band is the live quote tape on the swap route and the compute gauge on the ledger route. Body face swapped from Inter to Schibsted Grotesk because the project bans Inter-led pages.
+Source: the DESIGN.md library slug `spacex` (`~/.config/design-md/designs/spacex.md`), adapted. Hallmark stamp: genre atmospheric, macrostructure 19 Map / Diagram, theme studied-DNA (spacex), nav N9 edge-aligned minimal, footer Ft1 mast-headed.
 
-Hallmark stamp: genre modern-minimal, macrostructure Fuse tape over ticket, theme Cobalt, enrichment none (typography and drawn gauge only), nav N1b adapted as a bordered bar with route tabs, footer Ft2 inline.
+## Why this system fits a machine that feeds itself
 
-## Art direction
+Upkeep is a closed metabolism: fills pay fees, fees cross from Base to 0G, the 0G balance pays for the AI run that signs the next price, and the price expires. That is a mission, not a dashboard, and the SpaceX language was built for exactly one kind of screen: a vehicle with a countdown over its name and telemetry for each stage. We keep its night canvas, its condensed DIN voice in capitals for names, its clock set directly above the thing it counts down to, and its refusal of decoration. We drop its photography (we have no photograph of an agent) and let the drawn circuit be the picture. Colour is spent only on state: the circuit glows in the agent's budget tier, the price fuse turns amber then red as it burns down, and white is the one action.
 
-A drafting sheet for one price that expires. Cool paper, ruler hairlines, a graphite tape band where the agent's two signed prices burn down as fuses. Every number is a mono readout with a unit and a comparison. Nothing decorative moves; the only continuous motion is the fuse draining.
-
-## Design Read
-
-- Job of the main screen: swap against the agent's current signed price before it expires, and know why it is safe.
-- Job of the ledger screen: prove where the agent's AI money came from, step by step, with a link for every step.
-- Density 7, variance 6, motion 4.
+The page has one picture: the loop, drawn as a transit circuit across two lanes, Base on top and the 0G chain one tone lighter below. Each station is a real contract, each hop links its real transaction, and the price leg is a fuse. When the fuse is out, the circuit is visibly open, which is the product's whole argument: no fresh price, no fill.
 
 ## Tokens
 
-All tokens live in `app/globals.css` as CSS variables and are exposed to Tailwind through `@theme`. Components never carry raw colours.
+All colours are OKLCH custom properties in `app/globals.css`, exposed to Tailwind through `@theme`. Components never carry raw colours.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| paper | oklch(98.5% 0.004 250) | page |
-| panel | oklch(99.4% 0.003 250) | ticket and rows, hairline framed |
-| sunken | oklch(96% 0.006 250) | input wells, table headers |
-| rule | oklch(90% 0.01 252) | hairlines |
-| rule-2 | oklch(84% 0.014 254) | input borders, hover borders |
-| ink | oklch(24% 0.02 258) | headings, numbers |
-| ink-2 | oklch(34% 0.018 257) | body |
-| muted | oklch(46% 0.02 256) | labels, helper text |
-| graphite | oklch(22% 0.016 260) | the one dark band |
-| graphite-2 | oklch(27% 0.018 260) | inset on graphite |
-| graphite-rule | oklch(36% 0.02 260) | hairlines on graphite |
-| on-graphite | oklch(95% 0.006 250) | text on graphite |
-| on-graphite-muted | oklch(76% 0.02 255) | labels on graphite |
-| accent | oklch(55% 0.20 256) | the one primary button, focus ring, active tab, links |
-| on-accent | oklch(99% 0.003 250) | text on accent |
-| ok / ok-ink / ok-tint | oklch(80% 0.17 155) on graphite, oklch(46% 0.14 155) on paper, oklch(96% 0.04 155) | fresh quote, Normal tier, confirmed |
-| warn / warn-ink / warn-tint | oklch(82% 0.15 85), oklch(48% 0.12 70), oklch(96% 0.05 85) | Low tier, expiring under 60 seconds, pending |
-| danger / danger-ink / danger-tint | oklch(74% 0.17 25), oklch(50% 0.20 25), oklch(96% 0.03 25) | expired quote, Critical tier, errors |
+| paper | oklch(14.5% 0.005 270) | page canvas and the Base lane |
+| lane | oklch(17.5% 0.006 270) | the 0G lane, one tone step lighter |
+| panel | oklch(19.5% 0.007 270) | ticket body |
+| sunken | oklch(23% 0.008 270) | amount wells, chips |
+| rule | oklch(30% 0.008 270) | circuit track at rest, control edges |
+| rule-2 | oklch(42% 0.01 270) | hover edges, empty node rings |
+| ink | oklch(95.5% 0.008 280) | names, numbers, primary text (SpaceX #f0f0fa) |
+| ink-2 | oklch(84% 0.008 280) | body |
+| muted | oklch(70% 0.01 280) | labels, helper text |
+| accent | oklch(95.5% 0.008 280) | the one filled action (white), focus ring |
+| on-accent | oklch(14.5% 0.005 270) | text on the white action |
+| ok / warn / danger | oklch(80% 0.17 152), oklch(84% 0.15 82), oklch(70% 0.19 25) | NORMAL, LOW and fuse under 60 s, CRITICAL and expired |
+| quiet | oklch(78% 0.01 280) | PAUSED: the circuit drawn in plain light |
+| *-tint | L 24% at the same hue | alert grounds |
 
-Status colour is semantic only. Paused uses muted ink with a bordered chip. Contrast of every text and surface pair is computed by `scripts/contrast.mjs` (red on a deliberately failing pair, green on this palette).
+Status colour is semantic only and is applied to live data: node fills, the lit track, the fuse, the fuel needle. Chrome stays neutral.
 
 ## Type
 
-- Display: Space Grotesk 500 and 600, tracking -0.02em on 28px and up. Headings only.
-- Body: Schibsted Grotesk 400 and 500, 15px, line-height 1.55.
-- Data: JetBrains Mono 400 and 500 with `tabular-nums` for every amount, address, hash, id and time. Labels in mono use 11px uppercase with +0.06em tracking, at most one per section.
-- Scale: 11 / 13 / 15 / 20 / 28 / 40 and the readout size 56 (mobile 40) in mono at -0.02em.
-- Not every heading bold: h1 600, section heads 500, row labels 500.
+- Display: Barlow Condensed 600, capitals, tracking +0.02em, leading 0.95. h1 72px desktop, 44px phone. Station names 15px at +0.04em.
+- Body: Barlow 400 and 500, 16px, leading 1.5. Numbers in Barlow with `tabular-nums`.
+- Clocks and hashes: Roboto Mono 500, never for labels.
+- Scale: 13 / 16 / 20 / 28 / 44 / 72, readout 56.
+- Labels are sentence case in Barlow 13px muted. No monospace small caps anywhere.
 
-## Spacing, radius, borders
+## Spacing, radius
 
-- 4px scale: 4, 8, 12, 16, 24, 32, 48, 64.
-- Radius 6px on controls, 10px on cards and the tape band. No pills.
-- 1px hairlines define every surface. No shadows except a 0 1px 2px lift on the ticket.
-- Page max width 1200px, 24px gutters on desktop, 16px on 375px.
+- 4px scale: 4, 8, 12, 16, 24, 32, 48, 64, 96.
+- Radius 4px on every control, panel and chip. Node dots are circles. No pills.
+- No shadows at rest, no gradients, no glass. Surfaces separate by tone steps.
 
 ## Components
 
-- Button: primary (accent fill, one per group), secondary (hairline, panel fill), ghost (text). Heights 44px, mono-free labels with a verb ("Swap 20 USDC for W0G"). States: default, hover, focus-visible (2px accent ring, offset 2px, instant), active (translateY 1px), disabled (sunken fill, muted text), loading (inline spinner, label kept), error (danger border plus inline cause), success (ok tint with tx link).
-- Fuse: a 4px track on graphite-2 with a fill that drains right to left. Colour ok above 60s, warn 15 to 60s, danger under 15s. At zero the track is gone, the price is struck through and the swap control locks.
-- Tier meter: four notches Normal, Low, Critical, Paused, current one filled, one plain sentence of consequence.
-- Evidence row: stage name, one-line plain description, mono hash with copy and explorer link, chain chip, time. Rail on the left with one marker per row.
-- Amount field: sunken well, 28px mono amount, token chip right, balance and Max, 25, 50 chips under.
-- Alert: bordered with semantic tint, title plus cause plus next step. Never plain text.
-
-## Layout
-
-- Swap route `/`: nav bar, title sentence with two lines of explanation, graphite quote tape (two fuses with the spread between them), then a two column band: the ticket on the left, "What backs this price" on the right (AI run, budget tier, latest funding step, link to ledger). On 375px: tape, ticket, backing, stacked, tape shows one row per direction.
-- Ledger route `/ledger`: title sentence with the loop result, graphite gauge band (compute balance, today's spend against cap, tier meter), then the chronology rail with fills, fees, funding steps and AI runs, then tier changes seen by this browser.
+- Circuit: an SVG layer measured from the station nodes in the DOM, straight segments only, 2px track. Lit segments carry the tier colour; segments with no evidence yet stay at `rule`. The price leg is drawn as a fuse whose length is the time left on the signed price.
+- Station: node dot, name in condensed capitals, one value at 20 to 28px, one plain sentence, and the evidence link (mono hash plus explorer icon).
+- Fuel gauge: a log-scale bar from 0.01 to 10 0G with the agent's three lines (pause 0.05, critical 0.1, low 0.5) and the balance needle in the tier colour, with days of runway at the daily cap.
+- Heartbeat: a 48 hour strip; each billed AI run is a spike labelled with its request id; after the last run the line is flat.
+- Ticket: Uniswap anatomy (pay well, flip square straddling the seam, receive well, one full width 56px action), plus a summary block before signing: signed rate, rate after the maker fee, the fuse with T-minus clock, and the AI run behind the price.
+- Buttons: primary is the white fill (one per screen region), secondary is a 1px ink outline, ghost is text. 4px radius. States: hover, focus-visible (2px ink ring, offset 2px, instant), active scale 0.97, disabled, loading, error, success.
 
 ## Motion
 
-- Settle then reveal: skeleton to content in 160ms opacity. Fuse drains continuously in transform (scaleX) at 1s steps, not animated at zero or under reduced motion (static fill, number still ticks).
-- Count-up on the receive amount when a quote lands, 400ms, transform free (number swap only).
-- Keyboard actions: no animation. All motion honours `prefers-reduced-motion`.
+- On load the circuit draws once in the direction money travels (pathLength, 1.2s), then the real fills enter at the pool as pulses and the recorded funding run travels the four hops once, stopping at each station. The fuse drains in real seconds. The heartbeat strip only moves when a run is recent.
+- transform, opacity and SVG path length only. Every motion stops under `prefers-reduced-motion`: the circuit renders complete, pulses are drawn at rest, clocks still tick.
 
-## Copy rules
+## Copy
 
-- Plain English first. W0G is glossed once as "wrapped 0G". An inference request is an "AI run". The Payment Layer is "the 0G Payment Layer, the account that pays for AI runs".
-- Verbs on buttons. No celebratory toasts. Errors name the cause and the next step.
-- No em dashes, no filler words, no invented numbers. Any figure comes from the agent API or the chain with its read time beside it.
+Plain English for a judge who has never seen 0G. Station names are the contract or protocol (AQUA POOL, UNISWAP, CCIP, PAYMENT LAYER), the sentence under each says what happens to the money there. Every figure comes from `/api/status`, `/api/fills`, `/api/quote` or the chain clock, with its block beside it.
 
 ## Refusals
 
-No chart. No sparkline. No gradients. No glass. No icon tiles. No second accent. No token selector (the pair is fixed because the Aqua strategy holds exactly W0G and USDC). No slippage setting (the fill price is the signed quote and stale quotes revert).
+No stat-grid band. No three equal cards. No token selector (the strategy holds exactly W0G and USDC). No slippage setting (the fill price is the signed quote and stale quotes revert). No eyebrow labels, no index numbers, no emoji, no purple.

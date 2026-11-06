@@ -33,33 +33,33 @@ export function LedgerPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-[1200px] px-4 pt-8 sm:px-6 md:pt-12">
-        <h1 className="max-w-[18ch] text-[40px] font-semibold leading-[1.05] sm:max-w-none">Where the agent's AI money comes from.</h1>
-        <p className="mt-3 max-w-[62ch] text-[15px]" aria-live="polite">
+      <div className="mx-auto max-w-[1312px] px-4 pt-12 sm:px-6 lg:px-12 lg:pt-16">
+        <h1 className="max-w-[18ch] text-[44px] sm:text-[60px] lg:text-[72px]">The loop, unrolled</h1>
+        <p className="mt-5 max-w-[62ch] text-[17px] text-ink-2" aria-live="polite">
           {loop ? loopSentence(loop) : status.isError ? "The agent is not answering, so the loop cannot be traced right now." : "Reading the agent's records."}
         </p>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-10">
         <GaugeBand status={status.data} loading={status.isPending} error={status.isError && !status.data ? status.error : null} onRetry={() => void status.refetch()} />
       </div>
 
-      <div className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 md:py-12">
+      <div className="mx-auto max-w-[1312px] px-4 py-14 sm:px-6 lg:px-12 lg:py-20">
         {status.isPending ? <RailSkeleton /> : loop && status.data ? (
-          <ol className="relative space-y-10 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-rule-2" aria-label="The money loop in order">
-            <Stage n={1} title="The agent shipped its order and signed prices" caption={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt?.baseBlock ?? "latest"}. Order hash read from the router.`}>
+          <ol className="relative space-y-14 before:absolute before:bottom-3 before:left-[6px] before:top-3 before:w-0.5 before:bg-rule" aria-label="The money loop in order">
+            <Stage name="Signed price" lit={status.data.quotes.length > 0} title="The agent shipped its order and signed prices" caption={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt?.baseBlock ?? "latest"}. Order hash read from the router.`}>
               <PriceRows status={status.data} orderHash={fills.data?.orderHash ?? null} nowMs={nowMs} />
             </Stage>
-            <Stage n={2} title="Swaps filled against the strategy" caption={fills.data ? `Swapped events of the router from Base block ${fills.data.fromBlock} to ${fills.data.toBlock}, decoded and matched on maker and order hash.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
+            <Stage name="Aqua pool" lit={loop.fills.length > 0} title="Swaps filled against the strategy" caption={fills.data ? `Swapped events of the router from Base block ${fills.data.fromBlock} to ${fills.data.toBlock}, decoded and matched on maker and order hash.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
               <FillsRows loop={loop} query={fills} nowMs={nowMs} />
             </Stage>
-            <Stage n={3} title="Fees collected from those fills" caption={status.data.strategy ? `Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input, computed from the amounts in its Swapped event.` : undefined}>
+            <Stage name="Fees" lit={loop.accruedUsdc > 0n || loop.accruedW0g > 0n} title="Fees collected from those fills" caption={status.data.strategy ? `Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input, computed from the amounts in its Swapped event.` : undefined}>
               <FeesRow loop={loop} />
             </Stage>
-            <Stage n={4} title="Money moved into the AI account" caption="Mainnet transactions on Base and the 0G chain: a LI.FI gas leg, the CCIP bridge, the unwrap, depositFor, and the router drawing on the vault.">
+            <Stage name="Uniswap, CCIP, unwrap, depositFor" lit={loop.funding.length > 0} title="Money moved into the AI account" caption="Mainnet transactions on Base and the 0G chain: a LI.FI gas leg, the CCIP bridge, the unwrap, depositFor, and the router drawing on the vault.">
               <FundingRows loop={loop} threshold={status.data.fundingThresholdUsdc ?? null} nowMs={nowMs} />
             </Stage>
-            <Stage n={5} title="AI runs billed by the 0G router" caption="Billed cost and currency from each run's x_0g_trace.billing block.">
+            <Stage name="0G compute" lit={loop.inferences.length > 0} title="AI runs billed by the 0G router" caption="Billed cost and currency from each run's x_0g_trace.billing block.">
               <RunRows loop={loop} nowMs={nowMs} />
             </Stage>
           </ol>
@@ -73,8 +73,8 @@ export function LedgerPage() {
 
 function GaugeBand({ status, loading, error, onRetry }: { status: AgentStatus | undefined; loading: boolean; error: Error | null; onRetry: () => void }) {
   return (
-    <section aria-label="AI account balance" className="on-graphite border-y border-graphite-rule bg-graphite text-on-graphite">
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 md:py-8">
+    <section aria-label="AI account balance" className="bg-lane">
+      <div className="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-12 lg:py-12">
         {loading ? (
           <div aria-busy="true" className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {[0, 1, 2].map((i) => <div key={i} className="space-y-3"><div className="skeleton h-4 w-40" /><div className="skeleton h-14 w-56" /><div className="skeleton h-4 w-full" /></div>)}
@@ -82,10 +82,10 @@ function GaugeBand({ status, loading, error, onRetry }: { status: AgentStatus | 
         ) : error ? (
           <div role="alert" className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="font-display text-[20px] font-medium">{error instanceof AgentError && error.kind === "unreachable" ? "The agent is not answering." : "The agent's answer could not be read."}</p>
-              <p className="num mt-2 text-[12px] text-on-graphite-muted">{error.message}</p>
+              <p className="text-[20px] font-semibold text-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent is not answering." : "The agent's answer could not be read."}</p>
+              <p className="mono mt-2 text-[12px] text-muted">{error.message}</p>
             </div>
-            <Button variant="inverse" onClick={onRetry}><RefreshCw className="size-4" aria-hidden />Try again</Button>
+            <Button variant="secondary" onClick={onRetry}><RefreshCw className="size-4" aria-hidden />Try again</Button>
           </div>
         ) : status ? <GaugeLive status={status} /> : null}
       </div>
@@ -98,48 +98,49 @@ function GaugeLive({ status }: { status: AgentStatus }) {
   const spent = BigInt(status.budget.spentTodayWei);
   const cap = BigInt(status.budget.spendCapPerDayWei);
   const pct = percentOf(spent, cap);
-  const barTone = pct >= 90 ? "bg-danger" : pct >= 75 ? "bg-warn" : "bg-ok";
+  const barTone = pct >= 90 ? "tone-danger" : pct >= 75 ? "tone-warn" : "tone-ok";
   return (
-    <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.1fr_1fr_1.1fr] md:gap-10">
+    <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.1fr_1fr_1.1fr] md:gap-12">
       <div>
-        <p className="label">AI account balance</p>
-        <p className="mt-2 flex items-baseline gap-3"><span className="readout text-[40px] leading-none md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="num text-[16px] text-on-graphite-muted md:text-[20px]">0G</span></p>
-        <p className="mt-2 text-[13px] text-on-graphite-muted">Held in the 0G Payment Layer. The router bills the agent's AI runs from this number.</p>
-        {status.readAt ? <p className="num mt-1 text-[12px] text-on-graphite-muted">balanceOf(agent) on 0G block {status.readAt.zeroGBlock}</p> : null}
+        <p className="label">Fuel in the 0G Payment Layer</p>
+        <p className="mt-2 flex items-baseline gap-3"><span className="num text-[44px] font-medium leading-none text-ink md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="text-[18px] text-muted">0G</span></p>
+        <p className="mt-3 text-[14px] text-ink-2">The router bills every AI run from this balance.</p>
+        {status.readAt ? <p className="num mt-1 text-[13px] text-muted">balanceOf(agent), 0G block {Number(status.readAt.zeroGBlock).toLocaleString("en-US")}</p> : null}
       </div>
-      <div>
+      <div className={barTone}>
         <p className="label">Spent today against the daily cap</p>
-        <p className="mt-2 flex items-baseline gap-3"><span className="readout text-[28px] leading-none">{formatAmount(spent, 18, 4)}</span><span className="num text-[14px] text-on-graphite-muted">{cap === 0n ? "no cap set" : `of ${formatAmount(cap, 18, 4)} 0G`}</span></p>
-        <div className="mt-4 h-1.5 overflow-hidden rounded-sm bg-graphite-2" role="progressbar" aria-label="Share of the daily cap spent" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
-          <div className={cn("h-full rounded-sm", barTone)} style={{ width: `${pct}%` }} />
+        <p className="mt-2 flex items-baseline gap-3"><span className="num text-[28px] font-medium leading-none text-ink">{formatAmount(spent, 18, 4)}</span><span className="text-[14px] text-muted">{cap === 0n ? "no cap set" : `of ${formatAmount(cap, 18, 4)} 0G`}</span></p>
+        <div className="mt-4 h-1.5 overflow-hidden rounded-[2px] bg-sunken" role="progressbar" aria-label="Share of the daily cap spent" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+          <div className="h-full origin-left bg-[var(--tone)]" style={{ transform: `scaleX(${pct / 100})` }} />
         </div>
-        <p className="num mt-2 text-[13px] text-on-graphite-muted">{cap === 0n ? "A zero cap pauses the agent." : `${pct.toFixed(0)}% of today's cap used. At the cap the agent pauses.`}</p>
+        <p className="num mt-2 text-[13px] text-muted">{cap === 0n ? "A zero cap pauses the agent." : `${pct.toFixed(0)}% of today's cap used. At the cap the agent pauses.`}</p>
       </div>
       <div>
         <p className="label mb-3">Budget tier now</p>
-        <TierMeter tier={status.budget.tier} reason={status.budget.reason} tone="graphite" />
+        <TierMeter tier={status.budget.tier} reason={status.budget.reason} />
       </div>
     </div>
   );
 }
 
-function Stage({ n, title, caption, children }: { n: number; title: string; caption?: string; children: ReactNode }) {
+function Stage({ name, lit, title, caption, children }: { name: string; lit: boolean; title: string; caption?: string; children: ReactNode }) {
   return (
-    <li className="relative pl-11">
-      <span className="num absolute left-0 top-0 grid size-7 place-items-center rounded-full border border-rule-2 bg-paper text-[12px] text-ink">{n}</span>
-      <h2 className="text-[20px] font-medium leading-7">{title}</h2>
-      <div className="mt-3">{children}</div>
-      {caption ? <p className="num mt-2 text-[12px] text-muted">{caption}</p> : null}
+    <li className="relative pl-10">
+      <span aria-hidden className={cn("absolute left-0 top-1 size-3.5 rounded-full border-2", lit ? "border-ink bg-ink" : "border-rule-2 bg-paper")} />
+      <p className="station text-muted">{name}</p>
+      <h2 className="mt-1 text-[28px]">{title}</h2>
+      <div className="mt-4">{children}</div>
+      {caption ? <p className="mt-2 text-[13px] text-muted">{caption}</p> : null}
     </li>
   );
 }
 
-const Rows = ({ children }: { children: ReactNode }) => <ul className="divide-y divide-rule overflow-hidden rounded-card border border-rule bg-panel">{children}</ul>;
+const Rows = ({ children }: { children: ReactNode }) => <ul className="divide-y divide-rule overflow-hidden rounded-card bg-panel">{children}</ul>;
 
 function EmptyBlock({ title, next }: { title: string; next: string }) {
   return (
-    <div className="rounded-card border border-dashed border-rule-2 bg-panel px-4 py-5">
-      <p className="text-[15px] font-medium text-ink">{title}</p>
+    <div className="rounded-card border border-dashed border-rule-2 px-4 py-5">
+      <p className="text-[15px] font-semibold text-ink">{title}</p>
       <p className="mt-1 text-[14px] text-muted">{next}</p>
     </div>
   );
@@ -315,13 +316,13 @@ function RunRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
 function TierHistory({ history, current }: { history: ReturnType<typeof useTierHistory>; current: AgentStatus["budget"] }) {
   const entries = [...history].reverse();
   return (
-    <section aria-label="Tier changes seen by this browser" className="mt-14 border-t border-rule pt-8">
-      <h2 className="text-[20px] font-medium">Tier changes this browser has seen</h2>
+    <section aria-label="Tier changes seen by this browser" className="mt-20">
+      <h2 className="text-[28px]">Tier changes this browser has seen</h2>
       <p className="mt-1 max-w-[62ch] text-[14px] text-muted">The agent reports only its current tier. This list starts the first time this browser opened the page and adds a line whenever the tier changes.</p>
       {entries.length === 0 ? (
         <p className="mt-4 text-[14px] text-muted">Reading the first tier.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-rule overflow-hidden rounded-card border border-rule bg-panel">
+        <ul className="mt-4 divide-y divide-rule overflow-hidden rounded-card bg-panel">
           {entries.map((e, i) => (
             <li key={`${e.atMs}-${e.tier}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
               <TierChip tier={e.tier} />
@@ -339,7 +340,7 @@ function TierHistory({ history, current }: { history: ReturnType<typeof useTierH
 function RailSkeleton() {
   return (
     <div aria-busy="true" aria-label="Reading the agent's records" className="space-y-10">
-      {[0, 1, 2].map((i) => <div key={i} className="pl-11"><div className="skeleton mb-3 h-6 w-64" /><div className="skeleton h-20 w-full" /></div>)}
+      {[0, 1, 2].map((i) => <div key={i} className="pl-10"><div className="skeleton mb-3 h-6 w-64" /><div className="skeleton h-20 w-full" /></div>)}
     </div>
   );
 }

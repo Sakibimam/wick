@@ -3,35 +3,42 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { WalletButton } from "@/components/wallet";
+import { useAgentStatus } from "@/hooks/use-agent-status";
+import { TIER_TONE, tierWord } from "@/lib/machine";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { href: "/", label: "Swap" },
-  { href: "/ledger", label: "Brain ledger" },
+const LINKS = [
+  { href: "/", label: "Machine" },
+  { href: "/ledger", label: "Ledger" },
 ] as const;
 
 export function NavBar() {
   const path = usePathname();
+  const status = useAgentStatus();
+  const tier = status.data?.budget.tier;
   return (
-    <header className="border-b border-rule bg-paper">
-      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-x-6 px-4 sm:px-6">
-        <Link href="/" className="font-display text-[20px] font-semibold tracking-tight text-ink py-3.5">Upkeep</Link>
-        <nav aria-label="Primary" className="order-3 -mb-px flex w-full gap-6 sm:order-none sm:w-auto sm:flex-1">
-          {TABS.map((t) => {
-            const active = t.href === "/" ? path === "/" : path.startsWith(t.href);
+    <header className="relative z-20 bg-paper">
+      <div className="mx-auto flex h-16 max-w-[1312px] items-center gap-6 px-4 sm:px-6 lg:px-12">
+        <Link href="/" className="font-display text-[22px] font-semibold uppercase tracking-[0.12em] text-ink">Upkeep</Link>
+        <nav aria-label="Primary" className="flex gap-5">
+          {LINKS.map((l) => {
+            const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
             return (
-              <Link
-                key={t.href}
-                href={t.href}
-                aria-current={active ? "page" : undefined}
-                className={cn("border-b-2 py-3 text-[15px] transition-colors duration-150", active ? "border-accent font-medium text-ink" : "border-transparent text-muted hover:text-ink")}
-              >
-                {t.label}
+              <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined} className={cn("text-[15px] font-medium transition-colors duration-150", active ? "text-ink" : "text-muted hover:text-ink")}>
+                {l.label}
               </Link>
             );
           })}
         </nav>
-        <WalletButton />
+        <div className="ml-auto flex items-center gap-4">
+          {tier ? (
+            <span className={cn("hidden items-center gap-2 text-[13px] text-ink-2 md:inline-flex", `tone-${TIER_TONE[tier]}`)} title={`Budget tier ${tier}`}>
+              <span aria-hidden className="size-2 rounded-full bg-[var(--tone)]" />
+              Agent {tierWord(tier).toLowerCase()}
+            </span>
+          ) : null}
+          <WalletButton />
+        </div>
       </div>
     </header>
   );

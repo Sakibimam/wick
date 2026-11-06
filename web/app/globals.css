@@ -1,81 +1,73 @@
-/* Hallmark · genre: modern-minimal · macrostructure: Fuse tape over ticket · theme: Cobalt · nav: N1b bordered bar · footer: Ft2 inline */
+/* Hallmark · macrostructure: Map / Diagram (the money loop as a transit circuit) · genre: atmospheric · theme: studied-DNA (spacex) · nav: N9 edge-aligned · footer: Ft1 mast-headed
+ * pre-emit critique: P5 H4 E4 S5 R4 V5 */
 @import "tailwindcss";
 
 @theme {
-  --color-paper: oklch(98.5% 0.004 250);
-  --color-panel: oklch(99.4% 0.003 250);
-  --color-sunken: oklch(96% 0.006 250);
-  --color-rule: oklch(90% 0.01 252);
-  --color-rule-2: oklch(84% 0.014 254);
-  --color-ink: oklch(24% 0.02 258);
-  --color-ink-2: oklch(34% 0.018 257);
-  --color-muted: oklch(46% 0.02 256);
-  --color-graphite: oklch(22% 0.016 260);
-  --color-graphite-2: oklch(27% 0.018 260);
-  --color-graphite-rule: oklch(36% 0.02 260);
-  --color-on-graphite: oklch(95% 0.006 250);
-  --color-on-graphite-muted: oklch(76% 0.02 255);
-  --color-accent: oklch(55% 0.2 256);
-  --color-accent-hover: oklch(50% 0.2 256);
-  --color-on-accent: oklch(99% 0.003 250);
-  --color-ok: oklch(80% 0.17 155);
-  --color-ok-ink: oklch(46% 0.14 155);
-  --color-ok-tint: oklch(96% 0.04 155);
-  --color-warn: oklch(82% 0.15 85);
-  --color-warn-ink: oklch(48% 0.12 70);
-  --color-warn-tint: oklch(96% 0.05 85);
-  --color-danger: oklch(74% 0.17 25);
-  --color-danger-ink: oklch(50% 0.2 25);
-  --color-danger-tint: oklch(96% 0.03 25);
+  --color-paper: oklch(14.5% 0.005 270);
+  --color-lane: oklch(17.5% 0.006 270);
+  --color-panel: oklch(19.5% 0.007 270);
+  --color-sunken: oklch(23% 0.008 270);
+  --color-rule: oklch(30% 0.008 270);
+  --color-rule-2: oklch(42% 0.01 270);
+  --color-ink: oklch(95.5% 0.008 280);
+  --color-ink-2: oklch(84% 0.008 280);
+  --color-muted: oklch(70% 0.01 280);
+  --color-accent: oklch(95.5% 0.008 280);
+  --color-accent-hover: oklch(86% 0.008 280);
+  --color-on-accent: oklch(14.5% 0.005 270);
+  --color-ok: oklch(80% 0.17 152);
+  --color-ok-ink: oklch(84% 0.15 152);
+  --color-ok-tint: oklch(24% 0.05 152);
+  --color-warn: oklch(84% 0.15 82);
+  --color-warn-ink: oklch(87% 0.13 82);
+  --color-warn-tint: oklch(25% 0.05 82);
+  --color-danger: oklch(70% 0.19 25);
+  --color-danger-ink: oklch(78% 0.15 25);
+  --color-danger-tint: oklch(24% 0.06 25);
+  --color-quiet: oklch(78% 0.01 280);
 
-  --font-display: var(--font-space-grotesk), "Helvetica Neue", sans-serif;
-  --font-sans: var(--font-schibsted), "Helvetica Neue", sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-display: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
+  --font-sans: var(--font-barlow), "Arial", sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, monospace;
 
-  --radius-control: 6px;
-  --radius-card: 10px;
+  --radius-control: 4px;
+  --radius-card: 4px;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
   html, body { overflow-x: clip; }
-  html { background: var(--color-paper); }
+  html { background: var(--color-paper); color-scheme: dark; }
   body {
     background: var(--color-paper);
     color: var(--color-ink-2);
     font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.55;
+    font-size: 16px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
   }
-  h1, h2, h3 { font-family: var(--font-display); color: var(--color-ink); letter-spacing: -0.02em; }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--color-ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; line-height: 0.95; }
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-  .on-graphite :focus-visible { outline-color: var(--color-on-graphite); }
   ::selection { background: var(--color-accent); color: var(--color-on-accent); }
 }
 
 @layer components {
-  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  .label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 16px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-  .on-graphite .label { color: var(--color-on-graphite-muted); }
-  .readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; font-weight: 500; }
-  .fuse-fill { transform-origin: left center; transition: transform 1s linear; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .station { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink); font-size: 15px; line-height: 1.1; }
+  .label { font-size: 13px; line-height: 18px; color: var(--color-muted); }
   .skeleton { background: var(--color-sunken); border-radius: var(--radius-control); animation: breathe 1.6s ease-in-out infinite; }
-  .on-graphite .skeleton { background: var(--color-graphite-2); }
+  .tone-ok { --tone: var(--color-ok); }
+  .tone-warn { --tone: var(--color-warn); }
+  .tone-danger { --tone: var(--color-danger); }
+  .tone-quiet { --tone: var(--color-quiet); }
 }
 
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fuse-fill { transition: none; }
   .skeleton { animation: none; }
   * { scroll-behavior: auto !important; }
 }

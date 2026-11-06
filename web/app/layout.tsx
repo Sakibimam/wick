@@ -1,20 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Schibsted_Grotesk, Space_Grotesk } from "next/font/google";
+import { Barlow, Barlow_Condensed, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { NavBar } from "@/components/nav-bar";
 import { SiteFooter } from "@/components/site-footer";
 
-const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-space-grotesk", display: "swap" });
-const sans = Schibsted_Grotesk({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-schibsted", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jetbrains", display: "swap" });
+const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600"], variable: "--font-barlow-condensed", display: "swap" });
+const sans = Barlow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-barlow", display: "swap" });
+const mono = Roboto_Mono({ subsets: ["latin"], weight: ["500"], variable: "--font-roboto-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Upkeep: swap at a price that expires",
-  description: "Swap W0G and USDC on Base against a price an AI agent signed, then trace how the fees pay for the agent's next AI run.",
+  title: "Upkeep: the market maker that pays for its own brain",
+  description: "Trade W0G and USDC on Base against a price an AI agent signed. Every fill pays a fee that crosses to 0G and buys the agent's next AI run.",
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f9fafc" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0d0d10" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

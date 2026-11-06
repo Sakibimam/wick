@@ -132,3 +132,47 @@ describe("funding and ledger", () => {
     expect(() => status({ pair: undefined })).toThrow();
   });
 });
+
+import { DEFAULT_BUDGET_CONFIG } from "../../agent/src/budget";
+import { FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, priceLeg } from "./machine";
+import { FUNDING_EVIDENCE } from "./evidence";
+
+describe("machine", () => {
+  test("fuel lines are the agent's own budget lines", () => {
+    expect(FUEL_LINES.pauseWei).toBe(DEFAULT_BUDGET_CONFIG.pauseBalanceWei);
+    expect(FUEL_LINES.criticalWei).toBe(DEFAULT_BUDGET_CONFIG.criticalBalanceWei);
+    expect(FUEL_LINES.lowWei).toBe(DEFAULT_BUDGET_CONFIG.lowBalanceWei);
+  });
+  test("gauge is log scale from 0.01 to 10 0G, clamped", () => {
+    expect(gaugePosition(10n ** 16n)).toBeCloseTo(0);
+    expect(gaugePosition(10n ** 18n)).toBeCloseTo(2 / 3);
+    expect(gaugePosition(10n ** 20n)).toBe(1);
+    expect(gaugePosition(0n)).toBe(0);
+  });
+  test("each funding hop maps to its recorded transaction", () => {
+    const hops = hopEvidence(FUNDING_EVIDENCE.map((f) => ({ ...f })));
+    expect(hops.swap).toBeNull();
+    expect(hops.bridge?.step).toBe("ccip-send-w0g");
+    expect(hops.withdraw?.step).toBe("withdraw-w0g-0g");
+    expect(hops.deposit?.step).toBe("deposit-payment-layer");
+  });
+  test("fuse drains with time and the leg opens when every price is expired", () => {
+    expect(fuseLeft(1000, 100, 3600)).toBeCloseTo(0.25);
+    expect(fuseLeft(1000, 2000, 3600)).toBe(0);
+    const q = (tokenIn: string, tokenOut: string, expiry: number) => ({ tokenIn, tokenOut, rateE18: "153625", expiry: String(expiry), inferenceId: "0x01", requestId: null });
+    const W = "0x23cd099eB438CcA50349EE2BC809196b1ae00861", U = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const status = { quotes: [q(W, U, 500), q(U, W, 500)] } as never;
+    expect(priceLeg(status, 400).open).toBe(false);
+    expect(priceLeg(status, 600).open).toBe(true);
+  });
+  test("heartbeat keeps only runs inside the window, oldest first", () => {
+    const now = Date.parse("2026-11-06T12:00:00Z");
+    const beats = heartbeat([
+      { requestId: "b", model: null, time: "2026-11-06T06:00:00Z" },
+      { requestId: "a", model: null, time: "2026-11-05T13:00:00Z" },
+      { requestId: "old", model: null, time: "2026-11-03T00:00:00Z" },
+    ], now, 48 * 3600_000);
+    expect(beats.map((b) => b.requestId)).toEqual(["a", "b"]);
+    expect(beats[1]!.x).toBeCloseTo(42 / 48);
+  });
+});
