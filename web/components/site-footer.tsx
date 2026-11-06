@@ -1,11 +1,13 @@
 import { CopyLink } from "@/components/copy-link";
 import { ChainChip, Tk, WickMark } from "@/components/token-mark";
 import { AQUA_ROUTER, BASE_CHAIN_ID, EXPLORERS, ZERO_G_CHAIN_ID } from "@/lib/config";
-import { AGENT, BOARD, PAYMENT_LAYER } from "@/lib/evidence";
+import { AGENT, PAYMENT_LAYER } from "@/lib/evidence";
+import v2 from "@/worker/live-order-v2.json";
 
 const CONTRACTS = [
   { name: "Aqua router", chainId: BASE_CHAIN_ID, address: AQUA_ROUTER },
-  { name: "Quote board", chainId: BASE_CHAIN_ID, address: BOARD },
+  { name: "Quote board", chainId: BASE_CHAIN_ID, address: v2.board },
+  { name: "Quote check", chainId: BASE_CHAIN_ID, address: v2.extruction },
   { name: "Agent", chainId: BASE_CHAIN_ID, address: AGENT },
   { name: "Payment Layer", chainId: ZERO_G_CHAIN_ID, address: PAYMENT_LAYER },
 ] as const;

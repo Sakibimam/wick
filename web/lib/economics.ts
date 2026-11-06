@@ -104,7 +104,9 @@ export function maxFillIn(direction: Direction, status: AgentStatus, price: Pric
   if (rate <= 0n) return null;
   const out = BigInt(direction === "buy-w0g" ? status.strategy.w0g : status.strategy.usdc);
   const keep = 10_000n - BigInt(status.strategy.feeBps);
-  return (out * 10n ** 18n * 10_000n * 995n) / (rate * keep * 1000n);
+  const byDepth = (out * 10n ** 18n * 10_000n * 995n) / (rate * keep * 1000n);
+  const signed = price.quote.maxAmountIn ? BigInt(price.quote.maxAmountIn) : null;
+  return signed !== null && signed > 0n && signed < byDepth ? signed : byDepth;
 }
 
 /** A run's cost the same way everywhere: 0G first with the USD equivalent; a run the router billed in USD says so. */

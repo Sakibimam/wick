@@ -23,6 +23,8 @@ export const quoteSchema = z.object({
   inferenceId: hex,
   requestId: z.string().min(1).nullable(),
   postedTx: txHash.optional(),
+  // Per-quote fill cap the agent signs on the v2 board.
+  maxAmountIn: soft(digits.nullable()),
 });
 export type AgentQuote = z.infer<typeof quoteSchema>;
 
