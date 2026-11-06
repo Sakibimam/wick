@@ -125,6 +125,17 @@ contract AgentQuoteV2Test is V2Fixture {
         board.postPair(bad, badSig);
     }
 
+    function test_eip7702DelegatedEoaAgentStillSignsWithItsKey() public {
+        address delegated = vm.addr(NEW_AGENT_KEY);
+        vm.etch(delegated, abi.encodePacked(hex"ef0100", address(0xdead)));
+        assertGt(delegated.code.length, 0);
+        vm.prank(maker);
+        board.setAgent(delegated);
+        AgentQuoteBoardV2.Pair memory p = _pair(_mid01(), _mid10(), 1, 1, uint64(block.timestamp + 60), 1);
+        board.postPair(p, _signPair(p, NEW_AGENT_KEY));
+        assertTrue(board.isQuoteCurrent(maker, T0, T1));
+    }
+
     // ---------- MAX_TTL and expiry edges (findings 5, 6) ----------
 
     function test_postAcceptsExactlyMaxTtl() public {

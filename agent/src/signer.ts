@@ -16,3 +16,10 @@ export function unlockedSigner(rpcUrl = process.env.BASE_RPC_URL || "http://127.
   return { account: { address }, wallet: createWalletClient({ account: address, chain, transport: custom({ request: ({ method, params }) => fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }).then(async r => { const j = await r.json(); if (j.error) throw new Error(j.error.message); return j.result; }) }) }) };
 }
 export async function signQuote(wallet: WalletClient, chainId: number, board: Address, quote: Quote): Promise<Hex> { return wallet.signTypedData({ ...quoteTypedData(chainId, board, quote), account: wallet.account! }); }
+
+// v2 board: one signature carries both directions of token0 < token1 (W0G < USDC), bound to the agent epoch.
+export const pairTypes = { Pair: [{ name: "maker", type: "address" }, { name: "token0", type: "address" }, { name: "token1", type: "address" }, { name: "rate01E18", type: "uint256" }, { name: "rate10E18", type: "uint256" }, { name: "maxIn0", type: "uint256" }, { name: "maxIn1", type: "uint256" }, { name: "expiry", type: "uint64" }, { name: "epoch", type: "uint64" }, { name: "nonce", type: "uint64" }, { name: "inferenceId", type: "bytes32" }] } as const;
+export type Pair = { maker: Address; token0: Address; token1: Address; rate01E18: bigint; rate10E18: bigint; maxIn0: bigint; maxIn1: bigint; expiry: bigint; epoch: bigint; nonce: bigint; inferenceId: Hex };
+export const pairDomain = (chainId: number, board: Address) => ({ name: "Wick AgentQuoteBoard", version: "2", chainId, verifyingContract: board }) as const;
+export function pairTypedData(chainId: number, board: Address, pair: Pair) { return { domain: pairDomain(chainId, board), types: pairTypes, primaryType: "Pair" as const, message: pair }; }
+export async function signPair(wallet: WalletClient, chainId: number, board: Address, pair: Pair): Promise<Hex> { return wallet.signTypedData({ ...pairTypedData(chainId, board, pair), account: wallet.account! }); }

@@ -36,3 +36,26 @@ export async function quoteUsdcForW0g(client: PublicClient<any, any>, input: { u
   const result = await client.readContract({ address: QUOTER_V2, abi: quoterAbi, functionName: "quoteExactInputSingle", args: [{ tokenIn: USDC, tokenOut: W0G, amountIn: input.usdcAmountIn, fee: input.fee, sqrtPriceLimitX96: 0n }] });
   return { amountIn: input.usdcAmountIn, amountOut: result[0], sqrtPriceX96After: result[1], initializedTicksCrossed: Number(result[2]), gasEstimate: result[3] };
 }
+
+export const oracleAbi = parseAbi(["function observe(uint32[] secondsAgos) view returns (int56[] tickCumulatives,uint160[] secondsPerLiquidityCumulativeX128s)"]);
+export const TWAP_WINDOW_SECONDS = 600;
+/** Agent holds instead of quoting when the pool's spot and its TWAP disagree by more than this. */
+export const MAX_SPOT_TWAP_GAP_BPS = 150;
+/** Mean tick over the window, rounded toward negative infinity like Uniswap's OracleLibrary (and AgentQuoteExtructionV2). */
+export function meanTick(cumulatives: readonly bigint[], window = TWAP_WINDOW_SECONDS): number {
+  if (cumulatives.length !== 2 || window <= 0) throw new RangeError("need two tick cumulatives and a positive window");
+  const delta = cumulatives[1]! - cumulatives[0]!, w = BigInt(window);
+  let t = delta / w; if (delta < 0n && delta % w !== 0n) t--;
+  return Number(t);
+}
+/** USDC per W0G at a tick of the W0G(token0)/USDC(token1) pool: 1.0001^tick raw, times 1e12 for the decimals gap. */
+export function midFromTick(tick: number): number { const v = Math.pow(1.0001, tick) * 1e12; if (!Number.isFinite(v) || v <= 0) throw new RangeError("tick price out of range"); return v; }
+export function spotTwapGapBps(spot: number, twap: number): number { if (!(spot > 0 && twap > 0)) throw new RangeError("prices must be positive"); return Math.abs(spot - twap) / twap * 10_000; }
+export type TwapSnapshot = MarketSnapshot & { spotMid: number; twapMid: number; twapTick: number; gapBps: number };
+export async function readTwapMarket(client: PublicClient<any, any>): Promise<TwapSnapshot> {
+  const [market, observed] = await Promise.all([readMarket(client), client.readContract({ address: POOL, abi: oracleAbi, functionName: "observe", args: [[TWAP_WINDOW_SECONDS, 0]] })]);
+  if (market.token0.toLowerCase() !== W0G.toLowerCase()) throw new Error("pool token0 must be W0G");
+  const twapTick = meanTick(observed[0] as readonly bigint[]);
+  const twapMid = midFromTick(twapTick);
+  return { ...market, mid: twapMid, spotMid: market.mid, twapMid, twapTick, gapBps: spotTwapGapBps(market.mid, twapMid) };
+}

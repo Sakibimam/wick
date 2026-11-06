@@ -23,3 +23,28 @@ export function cronPolicy(input: BudgetInput & { gasWei: bigint; secondsToExpir
   const requote = d.requote || (expiring && d.allowInference);
   return { ...d, requote, shouldInfer: shouldRunInference(d.tier, requote) };
 }
+
+/** The cron fires every 5 minutes; a quote inside this window of its expiry is renewed. Every allowed TTL is longer, so a fresh quote is never born stale. */
+export const QUOTE_TTL_BAND = [700, 900] as const;
+export const MAX_TTL_SECONDS = 900;
+export const BAND_SAFE_BPS = 790;
+export function tierSpreadBps(tier: BudgetTier, base = DEFAULT_BUDGET_CONFIG.baseSpreadBps): number { return base * ({ NORMAL: 1, LOW: 2, CRITICAL: 4, PAUSED: 4 } as const)[tier]; }
+/** The model proposes a spread; the budget tier sets a floor. The posted spread is the larger, so a degraded tier always widens. */
+export function postedSpreadBps(modelSpreadBps: number, tier: BudgetTier): number { return Math.max(modelSpreadBps, tierSpreadBps(tier)); }
+export type ComposedPair = { rate01E18: bigint; rate10E18: bigint; maxIn0: bigint; maxIn1: bigint; deviation01Bps: number; deviation10Bps: number };
+/** Both directions around the TWAP mid (USDC per W0G): skew moves the centre, spread widens each side. Raw-unit rates for the v2 board. */
+export function composePair(p: { twapMid: number; spreadBps: number; skewBps: number; maxAmountInUsdc: number }): ComposedPair {
+  if (!(p.twapMid > 0) || !Number.isFinite(p.twapMid) || !Number.isInteger(p.spreadBps) || p.spreadBps < 0 || !Number.isInteger(p.skewBps) || !(p.maxAmountInUsdc > 0)) throw new RangeError("invalid pair inputs");
+  const centre = p.twapMid * (1 - p.skewBps / 10_000), s = p.spreadBps / 10_000;
+  const sell = centre * (1 - s), buyBack = (1 - s) / centre;
+  const deviation01Bps = Math.abs(sell / p.twapMid - 1) * 10_000, deviation10Bps = Math.abs(buyBack * p.twapMid - 1) * 10_000;
+  if (Math.max(deviation01Bps, deviation10Bps) > BAND_SAFE_BPS) throw new RangeError(`pair leaves the on-chain band: ${Math.max(deviation01Bps, deviation10Bps).toFixed(1)} bps`);
+  return { rate01E18: BigInt(Math.round(sell * 1e6)), rate10E18: BigInt(Math.round(buyBack * 1e30)), maxIn0: BigInt(Math.floor(p.maxAmountInUsdc / p.twapMid * 1e18)), maxIn1: BigInt(Math.floor(p.maxAmountInUsdc * 1e6)), deviation01Bps, deviation10Bps };
+}
+/** Annualisation-free realized volatility: standard deviation of log returns between consecutive mids, in bps. */
+export function realizedVolBps(mids: number[]): number {
+  const r: number[] = []; for (let i = 1; i < mids.length; i++) if (mids[i]! > 0 && mids[i - 1]! > 0) r.push(Math.log(mids[i]! / mids[i - 1]!));
+  if (r.length < 2) return 0;
+  const mean = r.reduce((a, b) => a + b, 0) / r.length;
+  return Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length - 1)) * 10_000;
+}

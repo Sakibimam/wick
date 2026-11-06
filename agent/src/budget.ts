@@ -18,3 +18,18 @@ export function decideBudget(i: BudgetInput, c = DEFAULT_BUDGET_CONFIG): BudgetD
   return out("NORMAL", PRIMARY_MODEL, 1, "normal", i.lastQuoteAgeMs === null || i.priceDeviationBps >= c.normalRequoteDeviationBps, false);
 }
 export function deviationBps(previousMid: number, currentMid: number): number { if (![previousMid, currentMid].every(x => Number.isFinite(x) && x > 0)) throw new RangeError("mids must be positive finite numbers"); return Math.abs(currentMid - previousMid) / previousMid * 10000; }
+
+export type SpendLedger = { day: string; spentTodayWei: string; lastVaultWei: string; routerDepositWei: string };
+export const emptySpendLedger = (): SpendLedger => ({ day: "", spentTodayWei: "0", lastVaultWei: "", routerDepositWei: "0" });
+/** Spend is what the router billed (x_0g_trace.billing.total_cost in 0G wei), never the vault's movement: the router pulls
+ *  working deposits from the Payment Layer vault in 0.5 0G lumps, and a pull moves funds into the router ledger, it does not spend them.
+ *  Funds = vault + the router-ledger deposit, estimated as pulls seen minus charges billed. */
+export function accountSpend(prev: SpendLedger, input: { nowMs: number; vaultWei: bigint; billedWei: bigint }): SpendLedger & { fundsWei: string } {
+  if (input.vaultWei < 0n || input.billedWei < 0n) throw new RangeError("negative vault or billed amount");
+  const day = new Date(input.nowMs).toISOString().slice(0, 10);
+  const spent = (prev.day === day ? BigInt(prev.spentTodayWei) : 0n) + input.billedWei;
+  const pulled = prev.lastVaultWei && BigInt(prev.lastVaultWei) > input.vaultWei ? BigInt(prev.lastVaultWei) - input.vaultWei : 0n;
+  let deposit = BigInt(prev.routerDepositWei) + pulled - input.billedWei;
+  if (deposit < 0n) deposit = 0n;
+  return { day, spentTodayWei: spent.toString(), lastVaultWei: input.vaultWei.toString(), routerDepositWei: deposit.toString(), fundsWei: (input.vaultWei + deposit).toString() };
+}

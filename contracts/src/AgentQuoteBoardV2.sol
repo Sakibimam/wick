@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
@@ -175,10 +176,16 @@ contract AgentQuoteBoardV2 is EIP712 {
         uint64 previous = _lastNonce[maker][epoch];
         if (nonce <= previous) revert NonceNotIncreasing(nonce, previous);
         address agent = _agentOf[maker];
-        if (agent == address(0) || !SignatureChecker.isValidSignatureNow(agent, digest, sig)) {
-            revert InvalidAgentSignature();
-        }
+        if (agent == address(0) || !_validSignature(agent, digest, sig)) revert InvalidAgentSignature();
         _lastNonce[maker][epoch] = nonce;
+    }
+
+    /// @dev ECDSA first, then ERC-1271. An EIP-7702 delegated EOA carries code yet still signs with its key, so a
+    /// code-length switch alone would reject it; a pure contract has no key whose address matches, so ECDSA cannot pass for it.
+    function _validSignature(address agent, bytes32 digest, bytes calldata sig) private view returns (bool) {
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
+        if (err == ECDSA.RecoverError.NoError && recovered == agent) return true;
+        return agent.code.length != 0 && SignatureChecker.isValidERC1271SignatureNow(agent, digest, sig);
     }
 
     function _store(
