@@ -2,8 +2,8 @@ import type { Address, Hex } from "viem";
 import type { CronState, InferenceRecord, PostedQuote } from "../../agent/src/worker-tick";
 import { AGENT, BOARD, EXTRUCTION, FUNDING_EVIDENCE, INFERENCE_EVIDENCE, STRATEGY_HASH } from "../lib/evidence";
 import { USDC, W0G } from "../lib/config";
-import { readAllFills, readChain, readLogIndex, readV1Index, type FillRow, type Kv, type Post } from "./chain";
-import { BOARD_V2, EXTRUCTION_V2, FEE_BPS_V2, MAX_DEVIATION_BPS_V2, ORDER_V2, SEED_0G_WEI, STRATEGY_HASH_V2, V2_TXS } from "./v2";
+import { fillsOfOrders, readAllFills, readChain, readLogIndex, readV1Index, type FillRow, type Kv, type Post } from "./chain";
+import { BOARD_V2, EXTRUCTION_V2, FEE_BPS_V2, liveOrderOf, MAX_DEVIATION_BPS_V2, orderHashesOf, SEED_0G_WEI, V2_TXS, V4_HOOK } from "./v2";
 
 /** Request ids of the two v1 quotes posted by hand before the cron existed, keyed by their post tx (ledger, 2026-11-05). */
 const PRE_CRON_REQUEST_BY_TX: Record<string, string> = {
@@ -73,7 +73,9 @@ export function quotesOf(posted: PostedQuote[], current: { tokenIn: Address; tok
 
 /** The status document the swap and ledger pages render: chain reads first, then the cron's KV record for what only the agent knows. */
 export async function buildStatus(kv: Kv | null) {
-  const [chain, idx, all, cron, v1] = await Promise.all([readChain(), readLogIndex(kv).catch(() => null), readAllFills(kv).catch(() => null), kv ? (kv.get("cron-state", "json") as Promise<CronState | null>) : Promise.resolve(null), readV1Index(kv).catch(() => null)]);
+  const cron = kv ? ((await kv.get("cron-state", "json")) as CronState | null) : null;
+  const live = liveOrderOf(cron), orderHashes = orderHashesOf(live);
+  const [chain, idx, all, v1] = await Promise.all([readChain(live.hash), readLogIndex(kv).catch(() => null), readAllFills(kv).catch(() => null), readV1Index(kv).catch(() => null)]);
   const nowSec = Math.floor(Date.now() / 1000);
   const inferences = [
     ...INFERENCE_EVIDENCE.map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: null, skewBps: null, maxAmountIn: null, ttlSeconds: null, teeVerified: null, provider: null, outcome: "posted" })),
@@ -85,7 +87,10 @@ export async function buildStatus(kv: Kv | null) {
   // A post the agent sent but whose tick never persisted its record has no request id to name: listed by tx, never shown as a quote.
   const recordedTx = new Set(v2Posted.map((p) => lc(p.postedTx)));
   const unrecordedPosts = [...v1All.filter((p) => !p.requestId).map((p) => p.postedTx), ...(idx?.posts ?? []).filter((p) => !recordedTx.has(lc(p.postedTx))).map((p) => p.postedTx)];
-  const fills = all?.fills ?? [];
+  // Only fills on a strategy this maker shipped for Wick: the wallet is shared, and other strategies are not this agent's revenue.
+  const fills = fillsOfOrders(all?.fills ?? [], live);
+  const feesSinceShip = (token: string) => fills.filter((f) => lc(f.orderHash) === lc(live.hash) && lc(f.tokenIn) === lc(token)).reduce((sum, f) => sum + feeOf(f, FEE_BPS_V2), 0n).toString();
+  const harvestRun = cron?.funding?.run?.harvest ? cron.funding.run : null;
   const fee = (token: string) => fills.filter((f) => lc(f.tokenIn) === lc(token)).reduce((sum, f) => sum + feeOf(f, FEE_BPS_V2), 0n).toString();
   const lastPost = [...(cron?.posted ?? [])].reverse().find((p) => (p as PostedQuote & { gasCostWei?: string }).gasCostWei) as (PostedQuote & { gasCostWei?: string }) | undefined;
   const ttl = [...(cron?.inferences ?? [])].reverse().find((r) => r.ttlSeconds)?.ttlSeconds ?? 900;
@@ -115,14 +120,27 @@ export async function buildStatus(kv: Kv | null) {
     distinctTakers: new Set(fills.map((f) => lc(f.taker)).filter((t) => t !== lc(AGENT))).size,
     funding: [
       ...FUNDING_EVIDENCE.map((f) => ({ ...f, source: "operator seed via the agent rail", ...(f.step === "ccip-send-w0g" ? { explorer: `https://ccip.chain.link/tx/${f.txHash}` } : {}) })),
-      ...(cron?.funding?.history ?? []).filter((h) => h.ok).map((h) => ({ step: h.step, txHash: h.txHash, chainId: h.chainId, time: h.time, source: "accrued fees", ...(h.step === "ccip-send" ? { explorer: `https://ccip.chain.link/tx/${h.txHash}` } : {}) })),
+      ...(cron?.funding?.history ?? []).filter((h) => h.ok).map((h) => ({ step: h.step, txHash: h.txHash, chainId: h.chainId, time: h.time, source: h.step.startsWith("harvest-") ? "fee harvest" : "accrued fees", ...(h.step === "ccip-send" ? { explorer: `https://ccip.chain.link/tx/${h.txHash}` } : {}) })),
     ],
     fundingMachine: { run: cron?.funding?.run ?? null, lastDecision: decision, funded },
     inferences,
-    order: ORDER_V2,
+    order: live.order,
+    harvest: {
+      hook: V4_HOOK.address,
+      liveHash: live.hash,
+      orderHashes,
+      shipTx: live.shipTx,
+      shippedAt: live.shippedAt,
+      pastHashes: live.past,
+      amounts: live.amounts,
+      feesSinceShip: { usdc: feesSinceShip(USDC), w0g: feesSinceShip(W0G) },
+      run: harvestRun ? { id: harvestRun.id, step: harvestRun.step, pending: harvestRun.pending, from: harvestRun.harvest!.from, to: harvestRun.harvest!.to, inventory: harvestRun.harvest!.inventory, released: harvestRun.harvest!.released, docked: harvestRun.harvest!.docked, shipped: harvestRun.harvest!.shipped, attempts: harvestRun.harvest!.attempts, txs: harvestRun.harvest!.txs } : null,
+      last: cron?.funding?.lastHarvest ?? null,
+      decision: cron?.funding?.lastHarvestDecision ?? null,
+    },
     fundingThresholdUsdc: decision ? decision.thresholdUsdc.toFixed(6) : null,
     quoteTtlSeconds: ttl,
-    strategy: { hash: STRATEGY_HASH_V2, w0g: claimed.w0g.toString(), usdc: claimed.usdc.toString(), feeBps: FEE_BPS_V2, maxDeviationBps: MAX_DEVIATION_BPS_V2 },
+    strategy: { hash: live.hash, docked: chain.strategy.docked, w0g: claimed.w0g.toString(), usdc: claimed.usdc.toString(), feeBps: FEE_BPS_V2, maxDeviationBps: MAX_DEVIATION_BPS_V2 },
     strategyBacking: {
       w0g: { claimed: claimed.w0g.toString(), held: chain.wallet.w0g.toString(), backed: chain.wallet.w0g >= claimed.w0g },
       usdc: { claimed: claimed.usdc.toString(), held: chain.wallet.usdc.toString(), backed: chain.wallet.usdc >= claimed.usdc },

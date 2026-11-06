@@ -3,10 +3,13 @@ import { BaseError, ContractFunctionRevertedError, getAddress, parseAbi, type Ad
 import { boardV2Abi } from "../../agent/src/poster";
 import { AGENT, AQUA } from "../lib/evidence";
 import { AQUA_ROUTER, USDC, W0G } from "../lib/config";
-import { baseClient, liveOrder, readAllFills, routerQuote, type Kv } from "./chain";
+import { baseClient, fillsOfOrders, readAllFills, routerQuote, type Kv } from "./chain";
+import type { CronState } from "../../agent/src/worker-tick";
+import type { LiveOrder } from "../../agent/src/funding-machine";
 import { buildStatus, runRecord } from "./status";
-import { BOARD_V2, BOARD_V2_DEPLOY_BLOCK, FEE_BPS_V2, STRATEGY_HASH_V2 } from "./v2";
-import { STRATEGY_HASH } from "../lib/evidence";
+import { BOARD_V2, BOARD_V2_DEPLOY_BLOCK, FEE_BPS_V2, liveOrderOf, orderHashesOf, SHIPPED_LIVE_ORDER } from "./v2";
+
+const readLive = async (kv: Kv | null) => liveOrderOf(kv ? ((await kv.get("cron-state", "json")) as CronState | null) : null);
 
 // Read-only public chain data: any origin may read it (the local dev server included).
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -23,10 +26,11 @@ export async function handleApi(req: Request, kv: Kv | null): Promise<Response |
   }
   if (url.pathname === "/api/fills") {
     try {
-      const { fills, cursor } = await readAllFills(kv);
-      const hashes = [STRATEGY_HASH, STRATEGY_HASH_V2].map((h) => h.toLowerCase());
-      const ours = fills.filter((f) => hashes.includes(f.orderHash.toLowerCase())).sort((a, b) => Number(BigInt(b.block) - BigInt(a.block)));
-      return json({ fills: ours, fromBlock: BOARD_V2_DEPLOY_BLOCK.toString(), toBlock: cursor, orderHash: STRATEGY_HASH_V2, orderHashes: hashes });
+      const [{ fills, cursor }, live] = await Promise.all([readAllFills(kv), readLive(kv)]);
+      // Every hash the maker has run, so the history survives each harvest re-ship.
+      const hashes = orderHashesOf(live);
+      const ours = fillsOfOrders(fills, live).sort((a, b) => Number(BigInt(b.block) - BigInt(a.block)));
+      return json({ fills: ours, fromBlock: BOARD_V2_DEPLOY_BLOCK.toString(), toBlock: cursor, orderHash: live.hash, orderHashes: hashes });
     } catch (e) { return json({ error: `log read failed: ${first(e)}` }, 502); }
   }
   const run = url.pathname.match(/^\/api\/run\/([A-Za-z0-9-]{1,80})$/);
@@ -34,7 +38,7 @@ export async function handleApi(req: Request, kv: Kv | null): Promise<Response |
     const rec = await runRecord(kv, run[1]!).catch(() => null);
     return rec ? json(rec) : json({ error: "no inference with that request id" }, 404);
   }
-  if (url.pathname === "/api/quote") return quote(url);
+  if (url.pathname === "/api/quote") return quote(url, await readLive(kv).catch(() => SHIPPED_LIVE_ORDER));
   return json({ error: "not found" }, 404);
 }
 
@@ -48,7 +52,7 @@ export function depthCap(depthOut: bigint, rateE18: bigint, feeBps: number, quot
 
 /** router.quote() for the live strategy, the same view call a taker's swap runs first. An input above the strategy's depth or the
  *  quote's maxAmountIn comes back depth-limited: the largest fillable input, quoted, never a number the swap would revert on. */
-async function quote(url: URL): Promise<Response> {
+async function quote(url: URL, live: LiveOrder): Promise<Response> {
   const raw = url.searchParams.get("amountIn");
   const tokenIn = url.searchParams.get("tokenIn");
   if (!raw || !/^\d{1,40}$/.test(raw) || BigInt(raw) <= 0n || !tokenIn || !/^0x[0-9a-fA-F]{40}$/.test(tokenIn) || ![W0G, USDC].includes(getAddress(tokenIn)))
@@ -58,14 +62,14 @@ async function quote(url: URL): Promise<Response> {
   try {
     const [posted, balances] = await Promise.all([
       client.readContract({ address: BOARD_V2, abi: boardV2Abi, functionName: "getQuote", args: [AGENT, tin, tokenOut] }),
-      client.readContract({ address: AQUA, abi: aquaAbi, functionName: "safeBalances", args: [AGENT, AQUA_ROUTER, STRATEGY_HASH_V2, W0G, USDC] }),
+      client.readContract({ address: AQUA, abi: aquaAbi, functionName: "safeBalances", args: [AGENT, AQUA_ROUTER, live.hash, W0G, USDC] }),
     ]);
     const depthOut = tokenOut === W0G ? balances[0] : balances[1];
     const maxAmountIn = depthCap(depthOut, posted.rateE18, FEE_BPS_V2, posted.maxAmountIn);
     const asked = BigInt(raw);
     const depthLimited = asked > maxAmountIn;
     if (depthLimited && maxAmountIn === 0n) return json({ error: "strategy has no depth in this direction", maxAmountIn: "0", maxAmountOut: "0", depthLimited: true }, 409);
-    const q = await routerQuote(client as never, liveOrder, { tokenIn: tin, tokenOut, amountIn: depthLimited ? maxAmountIn : asked });
+    const q = await routerQuote(client as never, { maker: live.order.maker, traits: BigInt(live.order.traits), data: live.order.data }, { tokenIn: tin, tokenOut, amountIn: depthLimited ? maxAmountIn : asked });
     return json({ amountIn: q.amountIn.toString(), amountOut: q.amountOut.toString(), orderHash: q.orderHash, requestedAmountIn: asked.toString(), maxAmountIn: maxAmountIn.toString(), maxAmountOut: depthOut.toString(), depthLimited });
   } catch (e) {
     const full = e instanceof Error ? e.message : String(e);

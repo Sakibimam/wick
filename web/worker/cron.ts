@@ -4,7 +4,7 @@ import { createPublicClient, fallback, http, parseUnits, type Address } from "vi
 import { base } from "viem/chains";
 import { cronTick, emptyCronState, DEFAULT_FUNDING_ENV, type CronState, type FillLite } from "../../agent/src/worker-tick";
 import { AQUA_ROUTER } from "../lib/config";
-import { BOARD_V2, FEE_BPS_V2, STRATEGY_HASH_V2 } from "./v2";
+import { BOARD_V2, FEE_BPS_V2, SHIPPED_LIVE_ORDER, STRATEGY_HASH_V2, V4_HOOK } from "./v2";
 import type { LogIndex } from "./chain";
 
 type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string): Promise<void> };
@@ -62,6 +62,8 @@ export async function runCron(env: CronEnv): Promise<void> {
       zgApiBase: env.ZG_API_BASE,
       fetchImpl: counted,
       fills,
+      hook: V4_HOOK.address,
+      liveOrder: SHIPPED_LIVE_ORDER,
       x402RevenueUsdc,
       funding: { ...DEFAULT_FUNDING_ENV, feeBps: FEE_BPS_V2, k: Number(env.FUNDING_K || DEFAULT_FUNDING_ENV.k), gasShareBps: Number(env.GAS_SHARE_BPS || DEFAULT_FUNDING_ENV.gasShareBps), gasTopUpBelowWei: BigInt(env.GAS_TOPUP_BELOW_WEI || DEFAULT_FUNDING_ENV.gasTopUpBelowWei), maxSpendWeiPerRun: BigInt(env.FUNDING_MAX_SPEND_WEI || DEFAULT_FUNDING_ENV.maxSpendWeiPerRun) },
       log: (line) => console.log(line),

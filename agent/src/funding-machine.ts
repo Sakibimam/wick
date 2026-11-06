@@ -1,15 +1,29 @@
 // Fee-funded funding leg as a resumable state machine: one chain step per cron tick, state persisted by the caller.
 // Funds come only from accrued fees above the inventory the Aqua strategy commits; seed inventory is never spent.
-import { encodeAbiParameters, encodeFunctionData, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
+import { encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
 import { BASE_CCIP_ROUTER, fundingAbi, SWAP_ROUTER, W0G_ZERO_G, ZERO_G_PAYMENT_LAYER, ZERO_G_SELECTOR } from "./funding.js";
 import { USDC, W0G } from "./price.js";
 
-export type FundingStepId = "approve-usdc-swap" | "swap-usdc-w0g" | "approve-w0g-ccip" | "ccip-send" | "await-arrival" | "withdraw-w0g-0g" | "deposit-payment-layer" | "gas-approve-usdc" | "gas-swap-usdc-eth";
+export type HarvestStepId = "harvest-dock" | "harvest-approve-w0g" | "harvest-approve-usdc" | "harvest-ship" | "harvest-set-order";
+export type FundingStepId = "approve-usdc-swap" | "swap-usdc-w0g" | "approve-w0g-ccip" | "ccip-send" | "await-arrival" | "withdraw-w0g-0g" | "deposit-payment-layer" | "gas-approve-usdc" | "gas-swap-usdc-eth" | HarvestStepId;
 export type FundingDecision = { fire: boolean; kind: "fuel" | "gas" | null; reason: string; k: number; unfundedUsdc: string; unfundedW0g: string; unfundedValueUsdc: number; costUsdc: number; thresholdUsdc: number; ccipFeeWei: string; spendableUsdc: string; spendableW0g: string };
-export type FundingState = { run: null | { id: string; kind: "fuel" | "gas"; startedAt: number; usdcIn: string; w0gFromFees: string; w0gBridge: string; minOut: string; step: FundingStepId; pending: null | { hash: Hex; chainId: 8453 | 16661; step: FundingStepId; sentAt: number }; zeroGW0gBefore?: string }; funded: { usdc: string; w0g: string }; history: { runId: string; step: FundingStepId; txHash: Hex; chainId: number; time: string; ok: boolean }[]; lastDecision: FundingDecision | null };
+/** The SwapVM order as stored and served: traits as a 32-byte hex word. */
+export type OrderJson = { maker: Address; traits: Hex; data: Hex };
+/** The Aqua strategy the maker runs now, and every strategy hash it replaced, so fill history survives a re-ship. */
+export type LiveOrder = { order: OrderJson; hash: Hex; amounts: { w0g: string; usdc: string }; shipTx: Hex | null; shippedAt: string | null; past: Hex[] };
+export type Pair2 = { w0g: string; usdc: string };
+export type HarvestRun = { from: Hex; to: Hex; order: OrderJson; inventory: Pair2; released: Pair2; docked: boolean; shipped: boolean; attempts: number; txs: Partial<Record<HarvestStepId, Hex>> };
+export type HarvestDecision = { fire: boolean; reason: string; fees: Pair2; released: Pair2; inventory: Pair2; commitment: Pair2; valueUsdc: number; costUsdc: number; costWei: string; thresholdUsdc: number };
+export type FundingRun = { id: string; kind: "fuel" | "gas" | "harvest"; startedAt: number; usdcIn: string; w0gFromFees: string; w0gBridge: string; minOut: string; step: FundingStepId; pending: null | { hash: Hex; chainId: 8453 | 16661; step: FundingStepId; sentAt: number }; zeroGW0gBefore?: string; harvest?: HarvestRun };
+export type FundingState = { run: null | FundingRun; funded: { usdc: string; w0g: string }; history: { runId: string; step: FundingStepId; txHash: Hex; chainId: number; time: string; ok: boolean }[]; lastDecision: FundingDecision | null; live?: LiveOrder; lastHarvest?: (HarvestRun & { id: string; completedAt: string }) | null; lastHarvestDecision?: HarvestDecision | null };
 export type FundingInput = { accrued: { usdc: bigint; w0g: bigint }; funded: { usdc: bigint; w0g: bigint }; wallet: { usdc: bigint; w0g: bigint; ethWei: bigint }; strategy: { usdc: bigint; w0g: bigint }; mid: number; ethUsd: number; ccipFeeWei: bigint; baseGasPriceWei: bigint; zeroGGasUsdc: number; k?: number; gasTopUpBelowWei: bigint; gasShareBps: number; maxSpendWeiPerRun: bigint };
 export type FundingIo = { send(tx: { chainId: 8453 | 16661; to: Address; data: Hex; value: bigint }): Promise<Hex>; receipt(chainId: 8453 | 16661, hash: Hex): Promise<"success" | "reverted" | null>; readAllowance(token: Address, spender: Address): Promise<bigint>; readZeroGW0g(): Promise<bigint>; readZeroGNative(): Promise<bigint>; quoteSwapUsdcToW0g(usdcIn: bigint): Promise<bigint>; quoteSwapUsdcToEth(usdcIn: bigint): Promise<bigint> };
-export type FundingCtx = { now: number; decision: Omit<FundingInput, "funded">; io: FundingIo; agent: Address; agentOwner: Address; slippageBps?: number; zeroGGasReserveWei: bigint; arrivalTimeoutMs?: number };
+/** tokensCount per Aqua balance slot: 0 never shipped, 2 live (W0G + USDC), 0xff docked. */
+export type AquaSlot = { w0g: bigint; usdc: bigint; tokensCount: number };
+export type HarvestIo = { aquaSlot(strategyHash: Hex): Promise<AquaSlot>; hookOrderHash(): Promise<Hex> };
+/** commitment is null while the live strategy is docked mid-harvest (Aqua's safeBalances reverts on a docked hash). */
+export type HarvestCtx = { live: LiveOrder; commitment: { w0g: bigint; usdc: bigint } | null; fees: { w0g: bigint; usdc: bigint }; hook: Address; gasFloorWei: bigint; io: HarvestIo };
+export type FundingCtx = { now: number; decision: Omit<FundingInput, "funded">; io: FundingIo; agent: Address; agentOwner: Address; slippageBps?: number; zeroGGasReserveWei: bigint; arrivalTimeoutMs?: number; harvest?: HarvestCtx };
 
 export const WETH_BASE: Address = "0x4200000000000000000000000000000000000006";
 export const ADDRESS_THIS: Address = "0x0000000000000000000000000000000000000002";
@@ -24,6 +38,48 @@ const min = (a: bigint, b: bigint) => (a < b ? a : b);
 const weiUsd = (wei: bigint, ethUsd: number) => Number(wei) / 1e18 * ethUsd;
 
 export function emptyFundingState(): FundingState { return { run: null, funded: { usdc: "0", w0g: "0" }, history: [], lastDecision: null }; }
+
+export const AQUA: Address = "0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a";
+export const AQUA_SWAPVM_ROUTER: Address = "0x111111338c5091E8440b67B168bAe16a668AC0De";
+const orderTuple = "(address maker,uint256 traits,bytes data)";
+export const harvestAbi = parseAbi([
+  "function dock(address app,bytes32 strategyHash,address[] tokens)",
+  "function ship(address app,bytes strategy,address[] tokens,uint256[] amounts) returns (bytes32)",
+  "function rawBalances(address maker,address app,bytes32 strategyHash,address token) view returns (uint248 balance,uint8 tokensCount)",
+  `function setOrder(${orderTuple} order)`,
+  "function orderHash() view returns (bytes32)",
+]);
+/** dock + 2 approves + ship + setOrder measured 241,797 gas on a Base fork (agent/scripts/fork-harvest.ts), with headroom. */
+export const HARVEST_GAS_UNITS = 300_000n;
+const MAX_PRE_DOCK_ATTEMPTS = 3;
+const SALT_OP = "1408";
+/** Aqua's strategy hash: keccak256(abi.encode(order)), the same value AquaSwapVMRouter.hash(order) returns. */
+export const strategyHashOf = (o: OrderJson) => keccak256(encodeAbiParameters(parseAbiParameters(`${orderTuple}`), [{ maker: o.maker, traits: BigInt(o.traits), data: o.data }]));
+/** Aqua strategies are immutable per hash and a docked hash can never ship again, so the re-ship carries a SwapVM salt
+ *  instruction (opcode 0x14, a no-op with an 8-byte argument) ahead of the unchanged program: same extruction, fee and band. */
+export function saltedOrder(o: OrderJson, salt: bigint): OrderJson {
+  const body = o.data.slice(2), program = body.startsWith(SALT_OP) ? body.slice(4 + 16) : body;
+  return { ...o, data: `0x${SALT_OP}${(salt & 0xffff_ffff_ffff_ffffn).toString(16).padStart(16, "0")}${program}` as Hex };
+}
+
+/** HARVEST: swap fees sit inside the strategy's virtual balance, where the funding machine cannot spend them. Docking and
+ *  re-shipping at (commitment - fees) moves exactly the fees to wallet spare. The new inventory never exceeds the wallet and
+ *  never drops below (commitment - fees) unless the wallet itself holds less, so harvest frees fees and never seed. */
+export function decideHarvest(i: { commitment: { w0g: bigint; usdc: bigint }; fees: { w0g: bigint; usdc: bigint }; wallet: { w0g: bigint; usdc: bigint; ethWei: bigint }; mid: number; ethUsd: number; baseGasPriceWei: bigint; k: number; gasFloorWei: bigint; maxSpendWeiPerRun: bigint }, fundingFiresAfter?: (strategy: { w0g: bigint; usdc: bigint }) => boolean): HarvestDecision {
+  if (!(i.k > 0) || !(i.mid > 0) || !(i.ethUsd > 0) || i.baseGasPriceWei < 0n || i.fees.w0g < 0n || i.fees.usdc < 0n) throw new RangeError("invalid harvest input");
+  const released = { w0g: min(i.fees.w0g, i.commitment.w0g), usdc: min(i.fees.usdc, i.commitment.usdc) };
+  const inventory = { w0g: min(i.wallet.w0g, i.commitment.w0g - released.w0g), usdc: min(i.wallet.usdc, i.commitment.usdc - released.usdc) };
+  const costWei = HARVEST_GAS_UNITS * i.baseGasPriceWei, costUsdc = weiUsd(costWei, i.ethUsd), thresholdUsdc = i.k * costUsdc;
+  const valueUsdc = Number(released.usdc) / 1e6 + Number(released.w0g) / 1e18 * i.mid;
+  const s = (p: { w0g: bigint; usdc: bigint }) => ({ w0g: p.w0g.toString(), usdc: p.usdc.toString() });
+  const base = { fees: s(i.fees), released: s(released), inventory: s(inventory), commitment: s(i.commitment), valueUsdc, costUsdc, costWei: costWei.toString(), thresholdUsdc };
+  const reason = released.w0g === 0n && released.usdc === 0n ? "no_fees"
+    : costWei > i.maxSpendWeiPerRun ? "spend_cap"
+    : i.wallet.ethWei - costWei < i.gasFloorWei ? "gas_floor"
+    : valueUsdc >= thresholdUsdc ? "fire"
+    : valueUsdc >= costUsdc && fundingFiresAfter?.(inventory) ? "fire_before_funding" : "below_threshold";
+  return { ...base, fire: reason.startsWith("fire"), reason };
+}
 
 export function decideFunding(i: FundingInput): FundingDecision {
   const k = i.k ?? 3;
@@ -43,7 +99,7 @@ export function decideFunding(i: FundingInput): FundingDecision {
   return { ...base, fire, kind: fire ? "fuel" : null, reason, unfundedValueUsdc, costUsdc, thresholdUsdc };
 }
 
-const NEXT: Record<FundingStepId, FundingStepId | null> = { "approve-usdc-swap": "swap-usdc-w0g", "swap-usdc-w0g": "approve-w0g-ccip", "approve-w0g-ccip": "ccip-send", "ccip-send": "await-arrival", "await-arrival": "withdraw-w0g-0g", "withdraw-w0g-0g": "deposit-payment-layer", "deposit-payment-layer": null, "gas-approve-usdc": "gas-swap-usdc-eth", "gas-swap-usdc-eth": null };
+const NEXT: Record<FundingStepId, FundingStepId | null> = { "approve-usdc-swap": "swap-usdc-w0g", "swap-usdc-w0g": "approve-w0g-ccip", "approve-w0g-ccip": "ccip-send", "ccip-send": "await-arrival", "await-arrival": "withdraw-w0g-0g", "withdraw-w0g-0g": "deposit-payment-layer", "deposit-payment-layer": null, "gas-approve-usdc": "gas-swap-usdc-eth", "gas-swap-usdc-eth": null, "harvest-dock": "harvest-approve-w0g", "harvest-approve-w0g": "harvest-approve-usdc", "harvest-approve-usdc": "harvest-ship", "harvest-ship": "harvest-set-order", "harvest-set-order": null };
 
 export async function fundingTick(prev: FundingState, ctx: FundingCtx): Promise<{ state: FundingState; action: string }> {
   const s: FundingState = structuredClone(prev);
@@ -54,19 +110,37 @@ export async function fundingTick(prev: FundingState, ctx: FundingCtx): Promise<
     const p = run.pending, r = await io.receipt(p.chainId, p.hash);
     if (r === null) {
       if (ctx.now - p.sentAt <= PENDING_TIMEOUT_MS) return { state: s, action: `waiting ${p.step}` };
-      log(p.step, p.hash, p.chainId, false); s.run = null; return { state: s, action: "abandoned" };
+      log(p.step, p.hash, p.chainId, false);
+      if (run.harvest) { run.harvest.txs[p.step as HarvestStepId] ??= p.hash; return harvestRetry(s, ctx, `timeout ${p.step}`); }
+      s.run = null; return { state: s, action: "abandoned" };
     }
     log(p.step, p.hash, p.chainId, r === "success");
-    if (r === "reverted") { s.run = null; return { state: s, action: `reverted ${p.step}` }; }
+    if (r === "reverted") { if (run.harvest) return harvestRetry(s, ctx, `reverted ${p.step}`); s.run = null; return { state: s, action: `reverted ${p.step}` }; }
     run.pending = null;
+    if (run.harvest) { run.harvest.txs[p.step as HarvestStepId] = p.hash; return harvestDone(s, ctx, p.step as HarvestStepId); }
     const next = NEXT[p.step];
     if (next) { run.step = next; return { state: s, action: `done ${p.step}` }; }
     s.funded = { usdc: (BigInt(s.funded.usdc) + BigInt(run.usdcIn)).toString(), w0g: (BigInt(s.funded.w0g) + (run.kind === "fuel" ? BigInt(run.w0gFromFees) : 0n)).toString() };
     s.run = null;
     return { state: s, action: `funded ${run.id}` };
   }
+  if (run?.harvest) return harvestStep(s, ctx);
   if (!run) {
-    const d = decideFunding({ ...ctx.decision, funded: { usdc: BigInt(s.funded.usdc), w0g: BigInt(s.funded.w0g) } });
+    const funded = { usdc: BigInt(s.funded.usdc), w0g: BigInt(s.funded.w0g) };
+    const h = ctx.harvest;
+    // A docked live strategy outside a harvest reads as zero commitment, which would make seed inventory look spare.
+    if (h && !h.commitment) return { state: s, action: "hold strategy_docked" };
+    if (h?.commitment) {
+      const dec = ctx.decision;
+      const hd = decideHarvest({ commitment: h.commitment, fees: h.fees, wallet: dec.wallet, mid: dec.mid, ethUsd: dec.ethUsd, baseGasPriceWei: dec.baseGasPriceWei, k: dec.k ?? 3, gasFloorWei: h.gasFloorWei, maxSpendWeiPerRun: dec.maxSpendWeiPerRun }, (strategy) => decideFunding({ ...dec, strategy, funded }).fire);
+      s.lastHarvestDecision = hd;
+      if (hd.fire) {
+        const order = saltedOrder(h.live.order, BigInt(Math.floor(ctx.now / 1000)));
+        s.run = { id: `harvest-${ctx.now}`, kind: "harvest", startedAt: ctx.now, usdcIn: "0", w0gFromFees: "0", w0gBridge: "0", minOut: "0", step: "harvest-dock", pending: null, harvest: { from: h.live.hash, to: strategyHashOf(order), order, inventory: hd.inventory, released: hd.released, docked: false, shipped: false, attempts: 0, txs: {} } };
+        return harvestStep(s, ctx);
+      }
+    }
+    const d = decideFunding({ ...ctx.decision, funded });
     s.lastDecision = d;
     if (!d.fire) return { state: s, action: `hold ${d.reason}` };
     const usdcIn = d.kind === "gas" ? BigInt(d.spendableUsdc) * BigInt(ctx.decision.gasShareBps) / 10_000n : BigInt(d.spendableUsdc);
@@ -120,5 +194,80 @@ async function step(s: FundingState, ctx: FundingCtx, slip: bigint): Promise<{ s
       const unwrap = encodeFunctionData({ abi: router02Abi, functionName: "unwrapWETH9", args: [minOut, ctx.agent] });
       return send(8453, SWAP_ROUTER, encodeFunctionData({ abi: router02Abi, functionName: "multicall", args: [BigInt(Math.floor(ctx.now / 1000) + 600), [swap, unwrap]] }));
     }
+    default: throw new Error(`step ${run.step} is not a funding step`);
   }
+}
+
+const pair2 = (p: { w0g: bigint; usdc: bigint }): Pair2 => ({ w0g: p.w0g.toString(), usdc: p.usdc.toString() });
+
+/** A harvest step's receipt succeeded: record what it changed and move on. One chain write per tick. */
+function harvestDone(s: FundingState, ctx: FundingCtx, step: HarvestStepId): { state: FundingState; action: string } {
+  const run = s.run!, h = run.harvest!;
+  if (step === "harvest-dock") h.docked = true;
+  if (step === "harvest-ship") {
+    h.shipped = true;
+    const prev = s.live ?? ctx.harvest?.live;
+    s.live = { order: h.order, hash: h.to, amounts: h.inventory, shipTx: h.txs["harvest-ship"] ?? null, shippedAt: new Date(ctx.now).toISOString(), past: [...new Set([...(prev?.past ?? []), h.from])] };
+  }
+  const next = NEXT[step];
+  if (next) { run.step = next; return { state: s, action: `done ${step}` }; }
+  s.lastHarvest = { ...h, id: run.id, completedAt: new Date(ctx.now).toISOString() };
+  s.run = null;
+  return { state: s, action: `harvested ${run.id}` };
+}
+
+/** A harvest never abandons once the strategy is docked: the docked inventory must be re-shipped, so the step is retried
+ *  next tick, where its on-chain post-condition is checked before anything is sent again. */
+async function harvestRetry(s: FundingState, ctx: FundingCtx, why: string): Promise<{ state: FundingState; action: string }> {
+  const run = s.run!, h = run.harvest!;
+  run.pending = null; h.attempts++;
+  if (!h.docked && ctx.harvest && (await ctx.harvest.io.aquaSlot(h.from)).tokensCount === 0xff) return harvestDone(s, ctx, "harvest-dock");
+  if (!h.docked && h.attempts >= MAX_PRE_DOCK_ATTEMPTS) { s.run = null; return { state: s, action: `harvest abandoned ${why}` }; }
+  return { state: s, action: `harvest retry ${why}` };
+}
+
+/** Sends the current harvest step, unless the chain already shows its effect (a lost receipt, a tx mined after a timeout,
+ *  or state saved before the reply), in which case it advances without sending. */
+async function harvestStep(s: FundingState, ctx: FundingCtx): Promise<{ state: FundingState; action: string }> {
+  const run = s.run!, h = run.harvest!, hc = ctx.harvest, io = ctx.io;
+  if (!hc) return { state: s, action: "harvest_offline" };
+  // A send that throws may still have broadcast: keep the run (and its planned inventory) so the next tick checks the chain.
+  const send = async (to: Address, data: Hex) => {
+    let hash: Hex;
+    try { hash = await io.send({ chainId: 8453, to, data, value: 0n }); }
+    catch (e) { h.attempts++; if (!h.docked && h.attempts >= MAX_PRE_DOCK_ATTEMPTS && (await hc.io.aquaSlot(h.from)).tokensCount === 2) s.run = null; return { state: s, action: `harvest send_failed ${run.step}: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]!.slice(0, 160)}` }; }
+    run.pending = { hash, chainId: 8453, step: run.step, sentAt: ctx.now }; return { state: s, action: `sent ${run.step} ${hash}` };
+  };
+  const approve = (token: Address, amount: bigint) => send(token, encodeFunctionData({ abi: fundingAbi.erc20, functionName: "approve", args: [AQUA, amount] }));
+  const skip = (step: HarvestStepId) => { const r = harvestDone(s, ctx, step); return r.action.startsWith("harvested") ? r : null; };
+  for (let i = 0; i < 5 && s.run; i++) {
+    const inv = { w0g: BigInt(h.inventory.w0g), usdc: BigInt(h.inventory.usdc) };
+    switch (run.step) {
+      case "harvest-dock":
+        if ((await hc.io.aquaSlot(h.from)).tokensCount === 0xff) { skip("harvest-dock"); continue; }
+        return send(AQUA, encodeFunctionData({ abi: harvestAbi, functionName: "dock", args: [AQUA_SWAPVM_ROUTER, h.from, [W0G, USDC]] }));
+      case "harvest-approve-w0g":
+        if ((await io.readAllowance(W0G, AQUA)) >= inv.w0g) { skip("harvest-approve-w0g"); continue; }
+        return approve(W0G, inv.w0g);
+      case "harvest-approve-usdc":
+        if ((await io.readAllowance(USDC, AQUA)) >= inv.usdc) { skip("harvest-approve-usdc"); continue; }
+        return approve(USDC, inv.usdc);
+      case "harvest-ship": {
+        if ((await hc.io.aquaSlot(h.to)).tokensCount !== 0) { skip("harvest-ship"); continue; }
+        // The wallet is shared with other work: ship no more than it holds at this tick, never the plan's figure blindly.
+        const w = ctx.decision.wallet, amt = { w0g: min(inv.w0g, w.w0g), usdc: min(inv.usdc, w.usdc) };
+        h.inventory = pair2(amt);
+        const [aw, au] = await Promise.all([io.readAllowance(W0G, AQUA), io.readAllowance(USDC, AQUA)]);
+        if (aw < amt.w0g || au < amt.usdc) return { state: s, action: "allowance_not_visible" };
+        const strategy = encodeAbiParameters(parseAbiParameters(orderTuple), [{ maker: h.order.maker, traits: BigInt(h.order.traits), data: h.order.data }]);
+        return send(AQUA, encodeFunctionData({ abi: harvestAbi, functionName: "ship", args: [AQUA_SWAPVM_ROUTER, strategy, [W0G, USDC], [amt.w0g, amt.usdc]] }));
+      }
+      case "harvest-set-order": {
+        if ((await hc.io.hookOrderHash()).toLowerCase() === h.to.toLowerCase()) { const r = skip("harvest-set-order"); if (r) return r; continue; }
+        return send(hc.hook, encodeFunctionData({ abi: harvestAbi, functionName: "setOrder", args: [{ maker: h.order.maker, traits: BigInt(h.order.traits), data: h.order.data }] }));
+      }
+      default: throw new Error(`step ${run.step} is not a harvest step`);
+    }
+  }
+  return { state: s, action: s.run ? `harvest at ${run.step}` : `harvested ${run.id}` };
 }

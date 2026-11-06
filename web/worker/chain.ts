@@ -1,11 +1,13 @@
 import { createPublicClient, fallback, http, parseAbi, parseAbiItem, type Address, type Hex } from "viem";
 import { readTwapMarket } from "../../agent/src/price";
-import { quote as routerQuote, type ShippedOrder } from "../../agent/src/taker";
+import { quote as routerQuote } from "../../agent/src/taker";
 import { boardV2Abi } from "../../agent/src/poster";
+import { harvestAbi } from "../../agent/src/funding-machine";
 import { ETH_USDC_POOL, ethUsdFromSqrt } from "../../agent/src/worker-tick";
 import { AGENT, AQUA, BOARD_DEPLOY_BLOCK, PAYMENT_LAYER } from "../lib/evidence";
 import { AQUA_ROUTER, USDC, W0G } from "../lib/config";
-import { BOARD_V2, BOARD_V2_DEPLOY_BLOCK, liveOrderV2, STRATEGY_HASH_V2 } from "./v2";
+import { BOARD_V2, BOARD_V2_DEPLOY_BLOCK, orderHashesOf, STRATEGY_HASH_V2 } from "./v2";
+import type { LiveOrder } from "../../agent/src/funding-machine";
 
 export const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 export const BASE_LOGS_RPC = process.env.BASE_LOGS_RPC_URL || "https://base-rpc.publicnode.com";
@@ -18,7 +20,6 @@ export const baseClient = () => createPublicClient({ transport: fallback([http(B
 export const logsClient = () => createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 0, timeout: 6_000 }) });
 export const zeroGClient = () => createPublicClient({ transport: http(ZG_RPC, { retryCount: 2 }) });
 
-export const liveOrder: ShippedOrder = liveOrderV2;
 export { routerQuote };
 
 const abi = parseAbi([
@@ -90,7 +91,7 @@ export async function readAllFills(kv: Kv | null): Promise<{ fills: FillRow[]; c
 }
 
 /** Live reads the status page needs, each from its system of record, with the block it was read at. */
-export async function readChain() {
+export async function readChain(strategyHash: Hex = STRATEGY_HASH_V2) {
   const baseC = baseClient();
   const zg = zeroGClient();
   const [market, current, epoch, strategy, walletW0g, walletUsdc, ethPool, vaultWei, gasWei, baseBlock, zeroGBlock] = await Promise.all([
@@ -98,7 +99,8 @@ export async function readChain() {
     readTwapMarket(baseC as never),
     Promise.all([[USDC, W0G], [W0G, USDC]].map(([a, b]) => baseC.readContract({ address: BOARD_V2, abi: boardV2Abi, functionName: "getQuote", args: [AGENT, a as Address, b as Address] }).then((q) => ({ ...q, tokenIn: a as Address, tokenOut: b as Address })))),
     baseC.readContract({ address: BOARD_V2, abi: boardV2Abi, functionName: "epochOf", args: [AGENT] }),
-    baseC.readContract({ address: AQUA, abi, functionName: "safeBalances", args: [AGENT, AQUA_ROUTER, STRATEGY_HASH_V2, W0G, USDC] }),
+    // rawBalances: a strategy docked mid-harvest reads as zero depth instead of failing the whole status read.
+    Promise.all([W0G, USDC].map((t) => baseC.readContract({ address: AQUA, abi: harvestAbi, functionName: "rawBalances", args: [AGENT, AQUA_ROUTER, strategyHash, t] }))),
     baseC.readContract({ address: W0G, abi, functionName: "balanceOf", args: [AGENT] }),
     baseC.readContract({ address: USDC, abi, functionName: "balanceOf", args: [AGENT] }),
     baseC.readContract({ address: ETH_USDC_POOL, abi, functionName: "slot0" }),
@@ -107,5 +109,11 @@ export async function readChain() {
     baseC.getBlockNumber(),
     zg.getBlockNumber(),
   ]);
-  return { mid: market.twapMid, spotMid: market.spotMid, gapBps: market.gapBps, epoch, current: current.filter((q) => q.expiry > 0n), strategy: { w0g: strategy[0], usdc: strategy[1] }, wallet: { w0g: walletW0g, usdc: walletUsdc }, ethUsd: ethUsdFromSqrt(ethPool[0]), vaultWei, gasWei, baseBlock, zeroGBlock };
+  return { mid: market.twapMid, spotMid: market.spotMid, gapBps: market.gapBps, epoch, current: current.filter((q) => q.expiry > 0n), strategy: { w0g: strategy[0]![1] === 2 ? strategy[0]![0] : 0n, usdc: strategy[1]![1] === 2 ? strategy[1]![0] : 0n, docked: strategy[0]![1] === 0xff }, wallet: { w0g: walletW0g, usdc: walletUsdc }, ethUsd: ethUsdFromSqrt(ethPool[0]), vaultWei, gasWei, baseBlock, zeroGBlock };
+}
+
+/** The maker's fills on any strategy Wick has run (v1, each re-shipped predecessor, the live one); the shared wallet's other strategies are dropped. */
+export function fillsOfOrders(fills: FillRow[], live: LiveOrder): FillRow[] {
+  const hashes = new Set(orderHashesOf(live));
+  return fills.filter((f) => hashes.has(f.orderHash.toLowerCase() as Hex));
 }
