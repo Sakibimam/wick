@@ -10,6 +10,8 @@ import { localSigner, signQuote, type Quote, unlockedSigner } from "./signer.js"
 import { boardAbi, post } from "./poster.js";
 import { AQUA_ROUTER, type ShippedOrder } from "./taker.js";
 import { createStatusServer, type RuntimeState } from "./status.js";
+import { directionalRates, shouldRunInference, thresholdTriggered } from "./policy.js";
+export { directionalRates, shouldRunInference, thresholdTriggered, tickPolicy } from "./policy.js";
 
 const ZG = defineChain({ id: 16661, name: "0G Mainnet", nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 }, rpcUrls: { default: { http: [process.env.ZG_RPC_URL || "https://evmrpc.0g.ai"] } } });
 const board = process.env.BOARD_ADDRESS as Address;
@@ -105,11 +107,6 @@ async function fundPaymentLayer(s: Persisted, mid: number) {
   await writeStep(bridgePlan.steps[4]!, zeroClient, zeroWallet); await writeStep(bridgePlan.steps[5]!, zeroClient, zeroWallet);
   s.fees.accruedUsdc = "0"; s.fees.accruedW0g = "0"; delete s.pendingFunding; await save(s);
 }
-export function directionalRates(price: bigint, spread: number) {
-  const w0gToUsdc = price * 1_000_000n / 10n ** 18n * BigInt(10000 - spread) / 10000n;
-  const usdcToW0g = 10n ** 48n * BigInt(10000 - spread) / (price * BigInt(10000));
-  return { w0gToUsdc, usdcToW0g };
-}
 async function signerFor(zeroG = false) {
   const chain: Chain = zeroG ? ZG : base;
   if (process.env.AGENT_PK) {
@@ -157,9 +154,6 @@ export async function runTick(s: Persisted, now = Date.now()) {
   await fundPaymentLayer(s, market.mid);
   await save(s); return { s, decision };
 }
-export async function thresholdTriggered(accrued: bigint, threshold: bigint) { if (accrued < 0n || threshold <= 0n) throw new RangeError("invalid funding threshold"); return accrued >= threshold; }
-export function shouldRunInference(tier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED", requote: boolean) { return (tier === "NORMAL" || tier === "LOW") && requote; }
-export function tickPolicy(input: BudgetInput) { const decision = decideBudget(input); return { ...decision, shouldInfer: shouldRunInference(decision.tier, decision.requote) }; }
 async function main() {
   requiredAddress(board, "BOARD_ADDRESS"); requiredAddress(maker, "MAKER_ADDRESS"); requiredAddress(runtimeAddress, "AGENT_ADDRESS");
   const s = await loadState();

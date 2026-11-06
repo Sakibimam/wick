@@ -152,3 +152,29 @@ describe("brain against real router response shapes", () => {
   });
   test("prose without an object is rejected", async () => { await brainFail("invalid_json", "I think the price is about two dollars."); });
 });
+
+import { cronPolicy, EXPIRY_REQUOTE_WINDOW_SECONDS, GAS_FLOOR_WEI } from "../src/policy.js";
+describe("worker cron policy", () => {
+  const steady = { computeBalanceWei: 2n * 10n ** 18n, spendCapPerDayWei: 10n ** 18n, spentTodayWei: 0n, priceDeviationBps: 3, lastQuoteAgeMs: 60_000, gasWei: 300_000_000_000_000n, secondsToExpiry: 3000 };
+  test("steady price with a long-lived quote holds", () => { expect(cronPolicy(steady).shouldInfer).toBe(false); });
+  test("price move requotes", () => { expect(cronPolicy({ ...steady, priceDeviationBps: 25 }).shouldInfer).toBe(true); });
+  test("quote inside the expiry window requotes, one second outside holds", () => {
+    expect(cronPolicy({ ...steady, secondsToExpiry: EXPIRY_REQUOTE_WINDOW_SECONDS }).shouldInfer).toBe(true);
+    expect(cronPolicy({ ...steady, secondsToExpiry: EXPIRY_REQUOTE_WINDOW_SECONDS + 1 }).shouldInfer).toBe(false);
+    expect(cronPolicy({ ...steady, secondsToExpiry: -50 }).shouldInfer).toBe(true);
+    expect(cronPolicy({ ...steady, secondsToExpiry: null }).shouldInfer).toBe(true);
+  });
+  test("expiry window never overrides CRITICAL or PAUSED", () => { expect(cronPolicy({ ...steady, computeBalanceWei: c.pauseBalanceWei - 1n, secondsToExpiry: 0 }).shouldInfer).toBe(false); expect(cronPolicy({ ...steady, computeBalanceWei: c.criticalBalanceWei - 1n, secondsToExpiry: 0 }).shouldInfer).toBe(false); });
+  test("gas below the floor pauses with gas_low, at the floor proceeds", () => {
+    const low = cronPolicy({ ...steady, gasWei: GAS_FLOOR_WEI - 1n, priceDeviationBps: 500 });
+    expect(low).toMatchObject({ tier: "PAUSED", reason: "gas_low", shouldInfer: false, postQuotes: false });
+    expect(cronPolicy({ ...steady, gasWei: GAS_FLOOR_WEI, priceDeviationBps: 500 }).shouldInfer).toBe(true);
+  });
+});
+describe("brain billing", () => {
+  test("0G-settled trace yields wei cost and currency", async () => {
+    const f = (async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(answer()) } }], x_0g_trace: { request_id: "r1", billing: { currency: "0g", total_cost: "41660000000000", total_cost_usd_micro: "9" } } }))) as unknown as typeof fetch;
+    expect((await askBrain(state, { apiKey: "x", fetchImpl: f })).billing).toEqual({ currency: "0g", totalCost: "41660000000000" });
+  });
+  test("missing billing block yields nulls", async () => { expect((await askBrain(state, { apiKey: "x", fetchImpl: fetcher(answer()) })).billing).toEqual({ currency: null, totalCost: null }); });
+});

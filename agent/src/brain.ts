@@ -44,6 +44,10 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
     if (diff * 10_000n > midE18 * 300n) throw new BrainError("rate_out_of_range");
     const tokens = Number.isSafeInteger(body?.usage?.total_tokens) && body.usage.total_tokens >= 0 ? body.usage.total_tokens as number : null;
     const costMicroUsd = /^\d+$/.test(String(body?.x_0g_trace?.billing?.total_cost_usd_micro ?? "")) ? Number(body.x_0g_trace.billing.total_cost_usd_micro) : null;
-    return { rateE18, spreadBps: value.spreadBps, reason: value.reason, requestId, model, tokens, costMicroUsd };
+    // currency "0g" means total_cost is wei charged from the Payment Layer vault; "usd" means micro-USD.
+    const billing = body?.x_0g_trace?.billing;
+    const currency = typeof billing?.currency === "string" ? billing.currency : null;
+    const totalCost = /^\d+$/.test(String(billing?.total_cost ?? "")) ? String(billing.total_cost) : null;
+    return { rateE18, spreadBps: value.spreadBps, reason: value.reason, requestId, model, tokens, costMicroUsd, billing: { currency, totalCost } };
   } finally { clearTimeout(timeout); }
 }
