@@ -102,6 +102,13 @@ export function decideFunding(i: FundingInput): FundingDecision {
 
 const NEXT: Record<FundingStepId, FundingStepId | null> = { "approve-usdc-swap": "swap-usdc-w0g", "swap-usdc-w0g": "approve-w0g-ccip", "approve-w0g-ccip": "ccip-send", "ccip-send": "await-arrival", "await-arrival": "withdraw-w0g-0g", "withdraw-w0g-0g": "deposit-payment-layer", "deposit-payment-layer": null, "gas-approve-usdc": "gas-swap-usdc-eth", "gas-swap-usdc-eth": null, "harvest-dock": "harvest-approve-w0g", "harvest-approve-w0g": "harvest-approve-usdc", "harvest-approve-usdc": "harvest-ship", "harvest-ship": "harvest-set-order", "harvest-set-order": null };
 
+/** Fees are credited as funded at the step that spends them (the USDC swap, the W0G bridge send), not at run end, so a run
+ *  abandoned after either step has already counted what it spent. */
+function credit(s: FundingState, run: FundingRun, step: FundingStepId) {
+  const usdc = step === "swap-usdc-w0g" || step === "gas-swap-usdc-eth" ? BigInt(run.usdcIn) : 0n, w0g = step === "ccip-send" && run.kind === "fuel" ? BigInt(run.w0gFromFees) : 0n;
+  if (usdc || w0g) s.funded = { usdc: (BigInt(s.funded.usdc) + usdc).toString(), w0g: (BigInt(s.funded.w0g) + w0g).toString() };
+}
+
 export async function fundingTick(prev: FundingState, ctx: FundingCtx): Promise<{ state: FundingState; action: string }> {
   const s: FundingState = structuredClone(prev);
   const slip = BigInt(ctx.slippageBps ?? 100), io = ctx.io;
@@ -113,15 +120,17 @@ export async function fundingTick(prev: FundingState, ctx: FundingCtx): Promise<
       if (ctx.now - p.sentAt <= PENDING_TIMEOUT_MS) return { state: s, action: `waiting ${p.step}` };
       log(p.step, p.hash, p.chainId, false);
       if (run.harvest) { run.harvest.txs[p.step as HarvestStepId] ??= p.hash; return harvestRetry(s, ctx, `timeout ${p.step}`); }
+      // A spend step that timed out may still have mined: credit it, so the same fees are never spent twice.
+      credit(s, run, p.step);
       s.run = null; return { state: s, action: "abandoned" };
     }
     log(p.step, p.hash, p.chainId, r === "success");
     if (r === "reverted") { if (run.harvest) return harvestRetry(s, ctx, `reverted ${p.step}`); s.run = null; return { state: s, action: `reverted ${p.step}` }; }
     run.pending = null;
+    if (!run.harvest) credit(s, run, p.step);
     if (run.harvest) { run.harvest.txs[p.step as HarvestStepId] = p.hash; return harvestDone(s, ctx, p.step as HarvestStepId); }
     const next = NEXT[p.step];
     if (next) { run.step = next; return { state: s, action: `done ${p.step}` }; }
-    s.funded = { usdc: (BigInt(s.funded.usdc) + BigInt(run.usdcIn)).toString(), w0g: (BigInt(s.funded.w0g) + (run.kind === "fuel" ? BigInt(run.w0gFromFees) : 0n)).toString() };
     s.run = null;
     return { state: s, action: `funded ${run.id}` };
   }

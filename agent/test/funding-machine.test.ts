@@ -197,3 +197,34 @@ describe("ccip-send fee guard", () => {
     expect([ok.action.startsWith("sent ccip-send"), m.sent[0]!.value]).toEqual([true, 110_000_000_000_000n]);
   });
 });
+
+describe("committed steps are credited", () => {
+  test("a run abandoned at arrival after ccip-send succeeded has credited its fees, and the next decision does not fire on them", async () => {
+    const m = mockIo();
+    let r = { state: emptyFundingState(), action: "" }, t = 0;
+    while (r.state.run?.step !== "await-arrival") r = await fundingTick(r.state, ctxOf(m.io, t++));
+    const usdcIn = r.state.run!.usdcIn;
+    const late = await fundingTick(r.state, ctxOf(m.io, 3 * 3_600_000 + 10));
+    expect([late.action, late.state.run]).toEqual(["abandoned arrival", null]);
+    expect(late.state.funded.usdc).toBe(usdcIn);
+    const { funded: _f, ...decision } = input();
+    expect(decideFunding({ ...decision, funded: { usdc: BigInt(late.state.funded.usdc), w0g: BigInt(late.state.funded.w0g) } }).fire).toBe(false);
+    const again = await fundingTick(late.state, ctxOf(m.io, 4 * 3_600_000));
+    expect(again.action).toBe("hold no_fees");
+  });
+  test("W0G fees are credited when the bridge send succeeds; a reverted swap credits nothing", async () => {
+    const m = mockIo();
+    const over = { accrued: { usdc: 0n, w0g: 10n * E18 }, wallet: { usdc: 600_000n, w0g: 12n * E18, ethWei: 2n * 10n ** 14n } };
+    const { funded: _f, ...decision } = input(over);
+    let r = { state: emptyFundingState(), action: "" }, t = 0;
+    while (r.state.run?.step !== "await-arrival") r = await fundingTick(r.state, { ...ctxOf(m.io, t++), decision });
+    expect(r.state.funded).toEqual({ usdc: "0", w0g: (10n * E18).toString() });
+    const m2 = mockIo();
+    let q = await fundingTick(emptyFundingState(), ctxOf(m2.io, 0));
+    q = await fundingTick(q.state, ctxOf(m2.io, 1));
+    q = await fundingTick(q.state, ctxOf(m2.io, 2));
+    m2.st.receipt = "reverted";
+    q = await fundingTick(q.state, ctxOf(m2.io, 3));
+    expect([q.action, q.state.funded.usdc]).toEqual(["reverted swap-usdc-w0g", "0"]);
+  });
+});
