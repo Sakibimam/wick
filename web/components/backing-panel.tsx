@@ -59,6 +59,7 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
         )}
       </section>
 
+      {status.strategy ? (
       <section aria-label="Strategy inventory on Aqua">
         <p className="label">What the pool can pay out</p>
         <dl className="mt-3 space-y-2 text-[14px]">
@@ -66,8 +67,9 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
           <Line k="USDC in the strategy"><span className="num text-ink">{formatAmount(BigInt(status.strategy.usdc), 6, 6)} USDC</span></Line>
           <Line k="Maker fee"><span className="num text-ink">{(status.strategy.feeBps / 100).toFixed(2)}% of what you pay</span></Line>
         </dl>
-        <p className="num mt-2 text-[12px] text-muted">Aqua safeBalances for strategy {truncateHex(status.strategy.hash, 6, 4)}, Base block {status.readAt.baseBlock}.</p>
+        <p className="num mt-2 text-[12px] text-muted">Aqua safeBalances for strategy {truncateHex(status.strategy.hash, 6, 4)}, Base block {status.readAt?.baseBlock ?? "latest"}.</p>
       </section>
+      ) : null}
 
       <section aria-label="Budget tier">
         <p className="label mb-3">Budget tier</p>
@@ -75,9 +77,9 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
         <dl className="mt-4 space-y-2 text-[14px]">
           <Line k="AI account balance"><span className="num text-ink">{formatAmount(BigInt(status.budget.computeBalanceWei), 18, 4)} 0G</span></Line>
           <Line k="Spent today"><span className="num text-ink">{formatAmount(spent, 18, 4)} of {cap === 0n ? "no cap set" : `${formatAmount(cap, 18, 4)} 0G`}{cap > 0n ? ` (${pct.toFixed(0)}%)` : ""}</span></Line>
-          <Line k="Gas for posting prices"><span className="num text-ink">{formatAmount(BigInt(status.gasWei), 18, 6)} ETH</span></Line>
+          {status.gasWei ? <Line k="Gas for posting prices"><span className="num text-ink">{formatAmount(BigInt(status.gasWei), 18, 6)} ETH</span></Line> : null}
         </dl>
-        <p className="num mt-2 text-[12px] text-muted">Payment Layer balanceOf on 0G block {status.readAt.zeroGBlock}.</p>
+        {status.readAt ? <p className="num mt-2 text-[12px] text-muted">Payment Layer balanceOf on 0G block {status.readAt.zeroGBlock}.</p> : null}
       </section>
 
       <section aria-label="Latest funding step" className="border-t border-rule pt-4">

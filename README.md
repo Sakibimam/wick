@@ -1,5 +1,7 @@
 # Upkeep
 
+**Live app: [upkeep.earn-shield-alerts.workers.dev](https://upkeep.earn-shield-alerts.workers.dev)**, swap W0G and USDC on Base against the agent's signed quotes, and trace the funding loop on the [brain ledger](https://upkeep.earn-shield-alerts.workers.dev/ledger).
+
 Upkeep is a market-making agent that pays for its own brain: its 1inch Aqua strategy on Base fills only against quotes the agent signed after a 0G inference, and the fees it earns route through Uniswap and Chainlink CCIP into the 0G Payment Layer that pays for the next inference.
 
 Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) and the interactive diagram [docs/ARCHITECTURE.html](docs/ARCHITECTURE.html).
@@ -16,6 +18,22 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) and the interactive diagram [do
 8. **Repeat.** The router bills the next inference against that balance, and the next tick re-reads it.
 
 Turning thinking off is a measured cost decision: on the live router, `enable_thinking: false` takes reasoning from 274 tokens to 0 and the cost of one pricing decision from 159 to 26 micro-USD.
+
+## Live app on Cloudflare Workers
+
+One Worker serves the Next.js app through OpenNext, its JSON routes, and the agent itself. No separate server.
+
+- `/api/status` reads Base and the 0G chain on every request: both signed quotes from `AgentQuoteBoard` with their posting transactions, the strategy's Aqua `safeBalances`, the agent's 0G Payment Layer balance and Base gas, and the block each figure was read at.
+- `/api/quote` runs `router.quote()` against the live strategy, the same view call every swap runs first. An expired signature comes back as `StaleQuote, the signed price expired`.
+- `/api/fills` decodes SwapVM `Swapped` events from the board's deploy block, matched on maker and order hash, with a KV block cursor so each read scans only new blocks.
+- A Workers cron runs the agent tick every 5 minutes from `agent/src/worker-tick.ts`: the same budget policy as the Bun runtime, a 0G inference only when the mid moves past the tier's threshold or a quote is within 10 minutes of expiry, and a gas floor that records `PAUSED` with reason `gas_low` below 0.00003 ETH. Quotes live 3600 s, and a requote of both directions costs about 0.000002 ETH on Base. Inference records carry the router request id, the model and the billed cost from `x_0g_trace.billing`.
+
+The swap ticket connects a browser wallet on Base mainnet, reads `quote()`, approves the exact input amount, then swaps through AquaSwapVMRouter with explicit EIP-1559 fees and a receipt wait with retries.
+
+```sh
+cd web && bun run cf:deploy     # build with OpenNext and deploy the Worker
+scripts/push-secrets.sh         # pipe AGENT_PK and ZG_API_KEY into wrangler secret put, nothing printed
+```
 
 ## Live on Base
 
@@ -147,6 +165,7 @@ Names only. Templates: `agent/.env.example` and `web/.env.example`; the Foundry 
 | Funding | `FUNDING_THRESHOLD_USDC`, `FUNDING_SLIPPAGE_BPS`, `ZG_GAS_RESERVE_WEI`, `CCIP_TIMEOUT_MS`, `PAYMENT_LOG_LOOKBACK_BLOCKS` |
 | Status API | `STATE_PATH`, `PORT`, `WEB_ORIGIN` |
 | Contracts | `DEPLOYER_PK`, `MAKER_PK`, `BOARD`, `EXTRUCTION`, `W0G_AMOUNT`, `USDC_AMOUNT`, `FEE_BPS` |
+| Worker | `BASE_RPC_URL`, `BASE_LOGS_RPC_URL`, `ZG_RPC_URL`, `QUOTE_TTL_SECONDS`, `SPEND_CAP_PER_DAY_WEI`, KV binding `UPKEEP_KV`, secrets `AGENT_PK` and `ZG_API_KEY` |
 | Web | `NEXT_PUBLIC_AGENT_URL`, `NEXT_PUBLIC_BASE_RPC_URL`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_DEV_ACCOUNT`, `NEXT_PUBLIC_FILL_FROM_BLOCK`, `NEXT_PUBLIC_FILL_LOOKBACK_BLOCKS` |
 
 Keys are read only from the process environment and are never written or logged.

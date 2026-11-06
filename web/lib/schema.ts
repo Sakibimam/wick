@@ -32,8 +32,8 @@ export const inferenceSchema = z.object({
   requestId: z.string().min(1),
   model: z.string().min(1).nullable(),
   // x_0g_trace.billing.total_cost: wei when currency is "0g", micro-USD when "usd".
-  currency: z.string().nullable(),
-  totalCost: digits.nullable(),
+  currency: z.string().nullable().optional(),
+  totalCost: digits.nullable().optional(),
   time: timeLike,
 });
 export type Inference = z.infer<typeof inferenceSchema>;
@@ -58,10 +58,11 @@ export const statusSchema = z.object({
   inferences: z.array(inferenceSchema),
   order: z.object({ maker: address, traits: hex, data: hex }),
   fundingThresholdUsdc: z.string().regex(/^\d+(\.\d+)?$/, "decimal").nullable().optional(),
-  strategy: z.object({ hash: hex, w0g: digits, usdc: digits, feeBps: z.number().int().nonnegative() }),
-  gasWei: digits,
-  readAt: z.object({ baseBlock: digits, zeroGBlock: digits, logsThroughBlock: digits.nullable() }),
-  lastTick: z.object({ at: z.string(), outcome: z.string() }).nullable(),
+  // Served by the Worker status route; the fork-dev status server omits them.
+  strategy: z.object({ hash: hex, w0g: digits, usdc: digits, feeBps: z.number().int().nonnegative() }).optional(),
+  gasWei: digits.optional(),
+  readAt: z.object({ baseBlock: digits, zeroGBlock: digits, logsThroughBlock: digits.nullable() }).optional(),
+  lastTick: z.object({ at: z.string(), outcome: z.string() }).nullable().optional(),
 });
 export type AgentStatus = z.infer<typeof statusSchema>;
 

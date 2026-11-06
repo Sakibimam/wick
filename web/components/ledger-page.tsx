@@ -47,13 +47,13 @@ export function LedgerPage() {
       <div className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 md:py-12">
         {status.isPending ? <RailSkeleton /> : loop && status.data ? (
           <ol className="relative space-y-10 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-rule-2" aria-label="The money loop in order">
-            <Stage n={1} title="The agent shipped its order and signed prices" caption={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt.baseBlock}. Order hash read from the router.`}>
+            <Stage n={1} title="The agent shipped its order and signed prices" caption={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt?.baseBlock ?? "latest"}. Order hash read from the router.`}>
               <PriceRows status={status.data} orderHash={fills.data?.orderHash ?? null} nowMs={nowMs} />
             </Stage>
             <Stage n={2} title="Swaps filled against the strategy" caption={fills.data ? `Swapped events of the router from Base block ${fills.data.fromBlock} to ${fills.data.toBlock}, decoded and matched on maker and order hash.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
               <FillsRows loop={loop} query={fills} nowMs={nowMs} />
             </Stage>
-            <Stage n={3} title="Fees collected from those fills" caption={`Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input, computed from the amounts in its Swapped event.`}>
+            <Stage n={3} title="Fees collected from those fills" caption={status.data.strategy ? `Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input, computed from the amounts in its Swapped event.` : undefined}>
               <FeesRow loop={loop} />
             </Stage>
             <Stage n={4} title="Money moved into the AI account" caption="Mainnet transactions on Base and the 0G chain: a LI.FI gas leg, the CCIP bridge, the unwrap, depositFor, and the router drawing on the vault.">
@@ -105,7 +105,7 @@ function GaugeLive({ status }: { status: AgentStatus }) {
         <p className="label">AI account balance</p>
         <p className="mt-2 flex items-baseline gap-3"><span className="readout text-[40px] leading-none md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="num text-[16px] text-on-graphite-muted md:text-[20px]">0G</span></p>
         <p className="mt-2 text-[13px] text-on-graphite-muted">Held in the 0G Payment Layer. The router bills the agent's AI runs from this number.</p>
-        <p className="num mt-1 text-[12px] text-on-graphite-muted">balanceOf(agent) on 0G block {status.readAt.zeroGBlock}</p>
+        {status.readAt ? <p className="num mt-1 text-[12px] text-on-graphite-muted">balanceOf(agent) on 0G block {status.readAt.zeroGBlock}</p> : null}
       </div>
       <div>
         <p className="label">Spent today against the daily cap</p>
@@ -293,7 +293,7 @@ function RunRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
   return (
     <Rows>
       {loop.inferences.map((r) => {
-        const cost = r.totalCost === null ? null : BigInt(r.totalCost);
+        const cost = r.totalCost == null ? null : BigInt(r.totalCost);
         const billed = cost === null ? "No billing block in the router trace" : r.currency === "0g" ? `Billed ${formatAmount(cost, 18, 8)} 0G from the Payment Layer balance` : r.currency === "usd" ? `Billed $${formatAmount(cost, 6, 6)} on the router's USD ledger` : `Billed ${cost.toString()} (${r.currency ?? "unit not reported"})`;
         return (
           <EvidenceRow
