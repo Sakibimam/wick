@@ -1,7 +1,7 @@
 import { parseUnits } from "viem";
 
 export type BrainState = { mid: number; recentMids: number[]; inventory: { w0g: number; usdc: number }; budgetTier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED" };
-export type BrainErrorCode = "budget_critical" | "budget_paused" | "missing_api_key" | "request_failed" | "http_error" | "invalid_json" | "invalid_shape" | "spread_out_of_range" | "rate_out_of_range" | "request_id_missing" | "skew_out_of_range" | "ttl_out_of_range" | "max_amount_out_of_range" | "reason_invalid" | "tee_unverified" | "skew_against_inventory";
+export type BrainErrorCode = "budget_critical" | "budget_paused" | "missing_api_key" | "request_failed" | "http_error" | "invalid_json" | "invalid_shape" | "spread_out_of_range" | "rate_out_of_range" | "request_id_missing" | "ttl_out_of_range" | "max_amount_out_of_range" | "reason_invalid" | "tee_unverified" | "skew_against_inventory";
 export type BilledRun = { requestId: string; model: string; billing: { currency: string | null; totalCost: string | null }; teeVerified: boolean | null; provider: string | null };
 export class BrainError extends Error { run?: BilledRun; constructor(public readonly code: BrainErrorCode, message: string = code) { super(message); this.name = "BrainError"; } }
 export const PRIMARY_MODEL = "0gm-1.0-35b-a3b";
@@ -10,7 +10,11 @@ export const MODEL_BY_TIER = { NORMAL: PRIMARY_MODEL, LOW: CHEAP_MODEL } as cons
 // Models pad answers with whitespace or wrap them in ```json fences; take the outermost object, then validate strictly.
 export function extractJsonObject(content: string): string { const t = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""); const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a < 0 || b <= a) throw new Error("no object"); return t.slice(a, b + 1); }
 export type RouterResult = { value: any; requestId: string; model: string; tokens: number | null; costMicroUsd: number | null; billing: { currency: string | null; totalCost: string | null }; teeVerified: boolean | null; provider: string | null; attempts: number };
-type RouterOptions = { fetchImpl?: typeof fetch; apiKey?: string; baseUrl?: string; timeoutMs?: number; verifyTee?: boolean; retries?: number };
+type RouterOptions = { fetchImpl?: typeof fetch; apiKey?: string; baseUrl?: string; timeoutMs?: number; verifyTee?: boolean; retries?: number; backoffMs?: readonly number[]; sleep?: (ms: number) => Promise<void> };
+/** Waits before each retry of a 5xx or dropped call: an upstream blip on the TeeML provider usually clears within seconds. */
+export const ROUTER_BACKOFF_MS = [1_500, 4_000] as const;
+/** Retries for the TeeML model before the standard-mode fallback: three attempts in all, so a verified answer survives two blips. */
+export const TEE_RETRIES = 2;
 /** One chat call to the 0G router: strict JSON out, the router request id required, billing and the TEE verdict read from x_0g_trace.
  *  A network failure or 5xx is retried once (no charge is taken for either); a 4xx or a malformed answer is not. */
 export async function routerJson(model: string, system: string, user: unknown, options: RouterOptions = {}): Promise<RouterResult> {
@@ -20,7 +24,9 @@ export async function routerJson(model: string, system: string, user: unknown, o
   const url = `${(options.baseUrl ?? (process.env.ZG_API_BASE || "https://router-api.0g.ai/v1")).replace(/\/$/, "")}/chat/completions`;
   const body = JSON.stringify({ model, temperature: 0, max_tokens: 256, chat_template_kwargs: { enable_thinking: false }, stream: false, ...(options.verifyTee ? { verify_tee: true } : {}), messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(user) }] });
   let response: Response | undefined, attempts = 0;
+  const backoff = options.backoffMs ?? ROUTER_BACKOFF_MS, sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   for (const maxAttempts = 1 + (options.retries ?? 1); attempts < maxAttempts;) {
+    if (attempts > 0) await sleep(backoff[Math.min(attempts - 1, backoff.length - 1)] ?? 0);
     attempts++;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -70,8 +76,8 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
   return { rateE18, spreadBps: value.spreadBps, reason: value.reason, requestId: r.requestId, model, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing };
 }
 
-/** Bounds the decision must land inside; the extruction's on-chain band (800 bps) sits outside spread + |skew|. */
-export const DECISION_BOUNDS = { spreadBps: [5, 500], skewBps: [-200, 200], ttlSeconds: [700, 900] } as const;
+/** Bounds the decision must land inside; the extruction's on-chain band (800 bps) sits outside the widest half-spread. */
+export const DECISION_BOUNDS = { halfSpreadBps: [5, 500], ttlSeconds: [700, 900] } as const;
 /** Models served from a TeeML provider; their answers are signed only when the router verified the provider's TEE signature. */
 export const TEE_MODELS = new Set<string>([PRIMARY_MODEL]);
 export type DecisionState = {
@@ -82,28 +88,37 @@ export type DecisionState = {
   runway: { vault0g: number; runsLeft: number | null; days: number | null };
   budgetTier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED"; tierSpreadBps: number;
   maxAmountInUsdcCap: number;
+  /** Which side to tighten, in words: the model is never asked to apply a sign convention. */
+  inventoryGoal: string;
 };
-export type Decision = { spreadBps: number; skewBps: number; maxAmountInUsdc: number; ttlSeconds: number; reason: string };
-const DECISION_PROMPT = `You run the quotes of a W0G/USDC market maker. Decide this round from the state JSON.
-- spreadBps: integer ${DECISION_BOUNDS.spreadBps[0]}..${DECISION_BOUNDS.spreadBps[1]}. Widen with realizedVolBps and thin inventory; tierSpreadBps is a floor that is applied anyway.
-- skewBps: integer ${DECISION_BOUNDS.skewBps[0]}..${DECISION_BOUNDS.skewBps[1]}. Sign rule: w0gValueShare above 0.5 means too much W0G, so skewBps must be POSITIVE (lowers both prices, sheds W0G); below 0.5 it must be NEGATIVE (raises them, buys W0G back); near 0.5 keep it near 0.
+export type Decision = { bidHalfSpreadBps: number; askHalfSpreadBps: number; maxAmountInUsdc: number; ttlSeconds: number; reason: string };
+const DECISION_PROMPT = `You run the quotes of a W0G/USDC market maker. Decide this round from the state JSON. Both prices sit around twapMid (USDC per W0G).
+- bidHalfSpreadBps: integer ${DECISION_BOUNDS.halfSpreadBps[0]}..${DECISION_BOUNDS.halfSpreadBps[1]}. How far below twapMid you pay when a taker sells you W0G.
+- askHalfSpreadBps: integer ${DECISION_BOUNDS.halfSpreadBps[0]}..${DECISION_BOUNDS.halfSpreadBps[1]}. How far above twapMid you charge when a taker buys W0G from you.
+  Widen both with realizedVolBps and thin inventory. tierSpreadBps is a floor applied to each side anyway. inventoryGoal says which side to make tighter.
 - maxAmountInUsdc: number in (0, maxAmountInUsdcCap]. Shrink it when runway.days or runway.runsLeft is short or recent fills are one-sided.
 - ttlSeconds: integer ${DECISION_BOUNDS.ttlSeconds[0]}..${DECISION_BOUNDS.ttlSeconds[1]}. Shorter when volatile, longer when calm (each requote costs gas.gasPerRequoteUsd).
 - reason: one sentence naming the inputs that drove the choice.
-Return only {"spreadBps":<int>,"skewBps":<int>,"maxAmountInUsdc":<number>,"ttlSeconds":<int>,"reason":"<string>"}, no markdown.`;
-/** Inventory share past which the skew's sign is fixed: leaning the wrong way would add to the side the maker already holds too much of. */
+Return only {"bidHalfSpreadBps":<int>,"askHalfSpreadBps":<int>,"maxAmountInUsdc":<number>,"ttlSeconds":<int>,"reason":"<string>"}, no markdown.`;
+/** Inventory share past which the lean is fixed: leaning the wrong way would add to the side the maker already holds too much of. */
 export const SKEW_SIGN_SHARE = { above: 0.6, below: 0.4 } as const;
+/** The inventory direction as an instruction, so the model compares two numbers instead of choosing a sign. */
+export function inventoryGoal(w0gValueShare: number): string {
+  const pct = `${(w0gValueShare * 100).toFixed(1)}% W0G by value`;
+  if (w0gValueShare > SKEW_SIGN_SHARE.above) return `you hold ${pct}: make W0G cheaper to buy from you, so set askHalfSpreadBps below bidHalfSpreadBps`;
+  if (w0gValueShare < SKEW_SIGN_SHARE.below) return `you hold ${pct}: make W0G dearer to buy from you and pay up to buy it back, so set bidHalfSpreadBps below askHalfSpreadBps`;
+  return `inventory is balanced at ${pct}: keep the two half-spreads about equal`;
+}
 export function validateDecision(v: any, cap: number, w0gValueShare?: number): Decision {
-  for (const k of ["spreadBps", "skewBps", "maxAmountInUsdc", "ttlSeconds", "reason"]) if (!Object.hasOwn(v, k)) throw new BrainError("invalid_shape", `invalid_shape: missing ${k}`);
-  for (const k of ["spreadBps", "skewBps", "maxAmountInUsdc", "ttlSeconds"]) if (typeof v[k] !== "number" || !Number.isFinite(v[k])) throw new BrainError("invalid_shape", `invalid_shape: ${k} is not a number`);
+  for (const k of ["bidHalfSpreadBps", "askHalfSpreadBps", "maxAmountInUsdc", "ttlSeconds", "reason"]) if (!Object.hasOwn(v, k)) throw new BrainError("invalid_shape", `invalid_shape: missing ${k}`);
+  for (const k of ["bidHalfSpreadBps", "askHalfSpreadBps", "maxAmountInUsdc", "ttlSeconds"]) if (typeof v[k] !== "number" || !Number.isFinite(v[k])) throw new BrainError("invalid_shape", `invalid_shape: ${k} is not a number`);
   const inRange = (x: number, [a, b]: readonly [number, number]) => Number.isInteger(x) && x >= a && x <= b;
-  if (!inRange(v.spreadBps, DECISION_BOUNDS.spreadBps)) throw new BrainError("spread_out_of_range");
-  if (!inRange(v.skewBps, DECISION_BOUNDS.skewBps)) throw new BrainError("skew_out_of_range");
+  if (!inRange(v.bidHalfSpreadBps, DECISION_BOUNDS.halfSpreadBps) || !inRange(v.askHalfSpreadBps, DECISION_BOUNDS.halfSpreadBps)) throw new BrainError("spread_out_of_range");
   if (!inRange(v.ttlSeconds, DECISION_BOUNDS.ttlSeconds)) throw new BrainError("ttl_out_of_range");
   if (!(cap > 0) || !(v.maxAmountInUsdc > 0) || v.maxAmountInUsdc > cap) throw new BrainError("max_amount_out_of_range");
   if (typeof v.reason !== "string" || !v.reason.trim() || v.reason.length > 280) throw new BrainError("reason_invalid");
-  if (w0gValueShare !== undefined && ((w0gValueShare > SKEW_SIGN_SHARE.above && v.skewBps < 0) || (w0gValueShare < SKEW_SIGN_SHARE.below && v.skewBps > 0))) throw new BrainError("skew_against_inventory", `skew_against_inventory: skewBps ${v.skewBps} with W0G share ${w0gValueShare}`);
-  return { spreadBps: v.spreadBps, skewBps: v.skewBps, maxAmountInUsdc: v.maxAmountInUsdc, ttlSeconds: v.ttlSeconds, reason: v.reason.trim() };
+  if (w0gValueShare !== undefined && ((w0gValueShare > SKEW_SIGN_SHARE.above && v.askHalfSpreadBps > v.bidHalfSpreadBps) || (w0gValueShare < SKEW_SIGN_SHARE.below && v.bidHalfSpreadBps > v.askHalfSpreadBps))) throw new BrainError("skew_against_inventory", `skew_against_inventory: bid ${v.bidHalfSpreadBps} ask ${v.askHalfSpreadBps} bps with W0G share ${w0gValueShare}`);
+  return { bidHalfSpreadBps: v.bidHalfSpreadBps, askHalfSpreadBps: v.askHalfSpreadBps, maxAmountInUsdc: v.maxAmountInUsdc, ttlSeconds: v.ttlSeconds, reason: v.reason.trim() };
 }
 /** A TeeML model's answer is signable only with the router's verified TEE verdict; standard-mode models carry none. */
 export function teeGate(model: string, teeVerified: boolean | null): boolean { return !TEE_MODELS.has(model) || teeVerified === true; }
@@ -112,7 +127,7 @@ export async function askDecision(state: DecisionState, options: RouterOptions =
   if (state.budgetTier === "CRITICAL") throw new BrainError("budget_critical");
   if (state.budgetTier === "PAUSED") throw new BrainError("budget_paused");
   let model: string = MODEL_BY_TIER[state.budgetTier], fallbackFrom: string | null = null, r: RouterResult;
-  try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true }); }
+  try { r = await routerJson(model, DECISION_PROMPT, state, { retries: TEE_MODELS.has(model) ? TEE_RETRIES : 1, ...options, verifyTee: true }); }
   catch (e) {
     // The TeeML model's only provider can be down (router 502 upstream_error, no charge). Fall back once to the cheap
     // standard-mode model: its answer carries no TEE verdict, recorded as null, never as verified.

@@ -2,16 +2,16 @@
 // State lives in whatever store the caller passes back in; every chain read goes through fetch-based viem clients.
 import { createWalletClient, defineChain, encodeAbiParameters, formatUnits, http, keccak256, parseAbi, parseAbiParameters, type Address, type Chain, type Hex, type PublicClient, type Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { askDecision, BrainError, type BilledRun } from "./brain.js";
+import { askDecision, BrainError, inventoryGoal, type BilledRun } from "./brain.js";
 import { accountSpend, deviationBps, emptySpendLedger, type SpendLedger } from "./budget.js";
 import { MAX_SPOT_TWAP_GAP_BPS, quoterAbi, QUOTER_V2, readTwapMarket, USDC, W0G } from "./price.js";
 import { fundingAbi, quoteCcipFee, W0G_ZERO_G, ZERO_G_PAYMENT_LAYER } from "./funding.js";
 import { decideFunding, emptyFundingState, fundingTick, harvestAbi, AQUA_SWAPVM_ROUTER, WETH_BASE, type FundingState, type HarvestCtx, type LiveOrder } from "./funding-machine.js";
 import { signPair, type Pair } from "./signer.js";
 import { boardV2Abi, eip1559Fees, postPair } from "./poster.js";
-import { composePair, cronPolicy, GAS_FLOOR_WEI, postedSpreadBps, realizedVolBps, tierSpreadBps } from "./policy.js";
+import { composeQuotes, cronPolicy, GAS_FLOOR_WEI, postedHalfSpreads, realizedVolBps, tierSpreadBps } from "./policy.js";
 
-export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number; fallbackFrom?: string | null };
+export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; bidHalfSpreadBps?: number | null; askHalfSpreadBps?: number | null; postedBidHalfSpreadBps?: number | null; postedAskHalfSpreadBps?: number | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number; fallbackFrom?: string | null };
 export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address; gasCostWei?: string };
 export type TickRecord = { at: string; outcome: string; error?: string; subrequests?: number; rpcFailures?: Record<string, number> };
 export type CronState = {
@@ -159,11 +159,13 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const runCost = lastRunCost(s.inferences);
   const runsLeft = runCost ? Number(BigInt(ledger0.fundsWei) / runCost) : null;
   const requotesPerDay = 86_400 / 300;
+  const share = w0gDepthUsdc + usdcDepth > 0 ? Number((w0gDepthUsdc / (w0gDepthUsdc + usdcDepth)).toFixed(4)) : 0.5;
   let result: Awaited<ReturnType<typeof askDecision>>;
   try {
     result = await askDecision({
       twapMid: market.twapMid, spotMid: market.spotMid, recentMids: s.recentMids, realizedVolBps: Number(realizedVolBps(s.recentMids).toFixed(2)),
-      inventory: { w0g: Number(formatUnits(strategy[0], 18)), usdc: usdcDepth, w0gValueShare: w0gDepthUsdc + usdcDepth > 0 ? Number((w0gDepthUsdc / (w0gDepthUsdc + usdcDepth)).toFixed(4)) : 0.5 },
+      inventory: { w0g: Number(formatUnits(strategy[0], 18)), usdc: usdcDepth, w0gValueShare: share },
+      inventoryGoal: inventoryGoal(share),
       recentFills: fills.map(f => ({ side: f.tokenIn.toLowerCase() === USDC.toLowerCase() ? "taker_bought_w0g" as const : "taker_sold_w0g" as const, amountUsdc: f.tokenIn.toLowerCase() === USDC.toLowerCase() ? Number(formatUnits(BigInt(f.amountIn), 6)) : Number(formatUnits(BigInt(f.amountOut), 6)), minutesAgo: Math.round((now - f.timeMs!) / 60_000) })),
       gas: { baseEth: Number(formatUnits(gasWei, 18)), gasPerRequoteUsd: Number((Number(gasPrice * 120_000n) / 1e18 * ethUsd).toFixed(6)) },
       runway: { vault0g: Number(formatUnits(BigInt(ledger0.fundsWei), 18)), runsLeft, days: runsLeft === null ? null : Number((runsLeft / requotesPerDay).toFixed(2)) },
@@ -176,13 +178,14 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     return hold(`refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e));
   }
   setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) }));
-  const spread = postedSpreadBps(result.spreadBps, decision.tier, result.skewBps);
+  const sides = postedHalfSpreads(result.bidHalfSpreadBps, result.askHalfSpreadBps, decision.tier);
   const ttl = result.ttlSeconds;
   const inferenceId = inferenceIdOf(result);
-  const composed = composePair({ twapMid: market.twapMid, spreadBps: spread, skewBps: result.skewBps, maxAmountInUsdc: result.maxAmountInUsdc });
+  const composed = composeQuotes({ twapMid: market.twapMid, bidHalfSpreadBps: sides.bid, askHalfSpreadBps: sides.ask, maxAmountInUsdc: result.maxAmountInUsdc });
   const nonce = (await env.base.readContract({ address: env.board, abi: boardV2Abi, functionName: "lastNonce", args: [env.maker, epoch] })) + 1n;
   const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0: composed.maxIn0, maxIn1: composed.maxIn1, expiry: BigInt(nowSec + ttl), epoch, nonce, inferenceId };
-  const detail = { reason: result.reason, spreadBps: result.spreadBps, postedSpreadBps: spread, skewBps: result.skewBps, maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: result.maxAmountInUsdc, ttlSeconds: ttl, inferenceId, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
+  // spreadBps / postedSpreadBps / skewBps are the half-spreads restated as width and lean for readers of the older record shape.
+  const detail = { reason: result.reason, bidHalfSpreadBps: result.bidHalfSpreadBps, askHalfSpreadBps: result.askHalfSpreadBps, postedBidHalfSpreadBps: sides.bid, postedAskHalfSpreadBps: sides.ask, spreadBps: Math.round((result.bidHalfSpreadBps + result.askHalfSpreadBps) / 2), postedSpreadBps: Math.round((sides.bid + sides.ask) / 2), skewBps: Math.round((sides.bid - sides.ask) / 2), maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: result.maxAmountInUsdc, ttlSeconds: ttl, inferenceId, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
   try {
     const sig = await signPair(wallet, env.chain.id, env.board, pair);
     const sent = await postPair(env.base, wallet, env.board, pair, sig);

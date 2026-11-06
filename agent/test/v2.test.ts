@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { askDecision, BrainError, teeGate, validateDecision, type DecisionState } from "../src/brain.js";
+import { askDecision, BrainError, inventoryGoal, teeGate, validateDecision, type DecisionState } from "../src/brain.js";
 import { accountSpend, decideBudget, DEFAULT_BUDGET_CONFIG, emptySpendLedger } from "../src/budget.js";
-import { BAND_SAFE_BPS, composePair, postedSpreadBps, QUOTE_TTL_BAND, realizedVolBps, tierSpreadBps, EXPIRY_REQUOTE_WINDOW_SECONDS, MAX_TTL_SECONDS } from "../src/policy.js";
+import { BAND_SAFE_BPS, composeQuotes, postedHalfSpreads, QUOTE_TTL_BAND, realizedVolBps, tierSpreadBps, EXPIRY_REQUOTE_WINDOW_SECONDS, MAX_TTL_SECONDS } from "../src/policy.js";
 import { meanTick, midFromTick, spotTwapGapBps, MAX_SPOT_TWAP_GAP_BPS } from "../src/price.js";
 import { accruedFees, earnedUsdcAndW0g, inferenceIdOf } from "../src/worker-tick.js";
 import { decideFunding } from "../src/funding-machine.js";
 
-const state: DecisionState = { twapMid: 0.1464, spotMid: 0.1464, recentMids: [0.146, 0.1464], realizedVolBps: 12, inventory: { w0g: 1.357, usdc: 0.0068, w0gValueShare: 0.97 }, recentFills: [], gas: { baseEth: 0.0002, gasPerRequoteUsd: 0.0009 }, runway: { vault0g: 2.34, runsLeft: 8600, days: 29.9 }, budgetTier: "NORMAL", tierSpreadBps: 30, maxAmountInUsdcCap: 0.2 };
-const good = { spreadBps: 40, skewBps: 60, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "inventory 97% W0G: lean down 60 bps" };
+const state: DecisionState = { twapMid: 0.1464, spotMid: 0.1464, recentMids: [0.146, 0.1464], realizedVolBps: 12, inventory: { w0g: 1.357, usdc: 0.0068, w0gValueShare: 0.97 }, recentFills: [], gas: { baseEth: 0.0002, gasPerRequoteUsd: 0.0009 }, runway: { vault0g: 2.34, runsLeft: 8600, days: 29.9 }, budgetTier: "NORMAL", tierSpreadBps: 30, maxAmountInUsdcCap: 0.2, inventoryGoal: inventoryGoal(0.97) };
+const good = { bidHalfSpreadBps: 90, askHalfSpreadBps: 30, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "inventory 97% W0G: ask tight, bid wide" };
 function router(content: unknown, trace: Record<string, unknown> = { request_id: "rid-1", tee_verified: true, provider: "0xf4FB", billing: { currency: "0g", total_cost: "272018666666666" } }, statuses: number[] = []) {
   const seen: any[] = [];
   const f = (async (_u: RequestInfo | URL, init?: RequestInit) => {
@@ -19,6 +19,7 @@ function router(content: unknown, trace: Record<string, unknown> = { request_id:
   }) as unknown as typeof fetch;
   return { f, seen };
 }
+const noSleep = async () => {};
 const fail = async (code: string, p: Promise<unknown>) => { try { await p; throw new Error("unexpected success"); } catch (e) { expect(e).toBeInstanceOf(BrainError); expect((e as BrainError).code).toBe(code as never); return e as BrainError; } };
 
 describe("v2 decision", () => {
@@ -30,11 +31,13 @@ describe("v2 decision", () => {
     expect(seen[0].model).toBe("0gm-1.0-35b-a3b");
   });
   test("every field is range-checked on both sides", () => {
-    const bad: [string, Partial<typeof good>][] = [["spread_out_of_range", { spreadBps: 4 }], ["spread_out_of_range", { spreadBps: 501 }], ["spread_out_of_range", { spreadBps: 40.5 }], ["skew_out_of_range", { skewBps: -201 }], ["skew_out_of_range", { skewBps: 201 }], ["ttl_out_of_range", { ttlSeconds: 699 }], ["ttl_out_of_range", { ttlSeconds: 901 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0.2001 }], ["reason_invalid", { reason: " " }], ["reason_invalid", { reason: "x".repeat(281) }]];
+    const bad: [string, Partial<typeof good>][] = [["spread_out_of_range", { bidHalfSpreadBps: 4 }], ["spread_out_of_range", { bidHalfSpreadBps: 501 }], ["spread_out_of_range", { askHalfSpreadBps: 40.5 }], ["spread_out_of_range", { askHalfSpreadBps: 4 }], ["spread_out_of_range", { askHalfSpreadBps: 501 }], ["ttl_out_of_range", { ttlSeconds: 699 }], ["ttl_out_of_range", { ttlSeconds: 901 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0.2001 }], ["reason_invalid", { reason: " " }], ["reason_invalid", { reason: "x".repeat(281) }]];
     for (const [code, patch] of bad) { try { validateDecision({ ...good, ...patch }, 0.2); throw new Error(`accepted ${JSON.stringify(patch)}`); } catch (e) { expect((e as BrainError).code).toBe(code as never); } }
-    for (const edge of [{ spreadBps: 5 }, { spreadBps: 500 }, { skewBps: -200 }, { skewBps: 200 }, { ttlSeconds: 700 }, { ttlSeconds: 900 }, { maxAmountInUsdc: 0.2 }]) expect(() => validateDecision({ ...good, ...edge }, 0.2)).not.toThrow();
-    expect(() => validateDecision({ ...good, skewBps: "60" }, 0.2)).toThrow();
-    const { skewBps: _, ...missing } = good; expect(() => validateDecision(missing, 0.2)).toThrow(/missing skewBps/);
+    for (const edge of [{ bidHalfSpreadBps: 5, askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500 }, { askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500, askHalfSpreadBps: 500 }, { ttlSeconds: 700 }, { ttlSeconds: 900 }, { maxAmountInUsdc: 0.2 }]) expect(() => validateDecision({ ...good, ...edge }, 0.2)).not.toThrow();
+    expect(() => validateDecision({ ...good, askHalfSpreadBps: "30" }, 0.2)).toThrow();
+    const { askHalfSpreadBps: _, ...missing } = good; expect(() => validateDecision(missing, 0.2)).toThrow(/missing askHalfSpreadBps/);
+    // The old signed-skew answer is not a decision any more.
+    expect(() => validateDecision({ spreadBps: 40, skewBps: 60, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "old" }, 0.2)).toThrow(/missing bidHalfSpreadBps/);
   });
   test("a TeeML answer without tee_verified true is refused, and the refusal still carries the billed run", async () => {
     for (const verdict of [false, undefined]) {
@@ -48,13 +51,13 @@ describe("v2 decision", () => {
     expect(teeGate("qwen3.7-flash", null)).toBe(true);
   });
   test("an invalid answer after billing keeps its run for spend accounting", async () => {
-    const e = await fail("skew_out_of_range", askDecision(state, { apiKey: "x", fetchImpl: router({ ...good, skewBps: 900 }).f }));
+    const e = await fail("spread_out_of_range", askDecision(state, { apiKey: "x", fetchImpl: router({ ...good, bidHalfSpreadBps: 900 }).f }));
     expect(e.run?.requestId).toBe("rid-1");
   });
   test("one retry on a 502 or a dropped connection, none on a 4xx", async () => {
-    const a = router(good, undefined, [502]); expect((await askDecision(state, { apiKey: "x", fetchImpl: a.f })).attempts).toBe(2); expect(a.seen.length).toBe(2);
-    const b = router(good, undefined, [-1]); expect((await askDecision(state, { apiKey: "x", fetchImpl: b.f })).attempts).toBe(2);
-    const c = router(good, undefined, [502, 502]); await fail("http_error", askDecision({ ...state, budgetTier: "LOW" }, { apiKey: "x", fetchImpl: c.f })); expect(c.seen.length).toBe(2);
+    const a = router(good, undefined, [502]); expect((await askDecision(state, { apiKey: "x", fetchImpl: a.f, sleep: noSleep })).attempts).toBe(2); expect(a.seen.length).toBe(2);
+    const b = router(good, undefined, [-1]); expect((await askDecision(state, { apiKey: "x", fetchImpl: b.f, sleep: noSleep })).attempts).toBe(2);
+    const c = router(good, undefined, [502, 502]); await fail("http_error", askDecision({ ...state, budgetTier: "LOW" }, { apiKey: "x", fetchImpl: c.f, sleep: noSleep })); expect(c.seen.length).toBe(2);
     const d = router(good, undefined, [400]); await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: d.f })); expect(d.seen.length).toBe(1);
   });
   test("a down TeeML provider falls back once to the standard model with tee_verified null, never faked", async () => {
@@ -64,11 +67,11 @@ describe("v2 decision", () => {
       if (req.model === "0gm-1.0-35b-a3b") return new Response('{"error":{"type":"upstream_error"}}', { status: 502 });
       return Response.json({ choices: [{ message: { content: JSON.stringify(good) } }], x_0g_trace: { request_id: "rid-q", billing: { currency: "0g", total_cost: "9" } } });
     }) as unknown as typeof fetch;
-    const r = await askDecision(state, { apiKey: "x", fetchImpl: f });
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: f, sleep: noSleep });
     expect(r.model).toBe("qwen3.7-flash");
     expect(r.teeVerified).toBeNull();
     expect(r.fallbackFrom).toMatch(/0gm-1.0-35b-a3b: router returned HTTP 502/);
-    expect(calls).toBe(3);
+    expect(calls).toBe(4);
     // A 4xx is the request's fault, not the provider's: no fallback.
     const g = (async () => new Response("bad", { status: 400 })) as unknown as typeof fetch;
     await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: g }));
@@ -82,42 +85,50 @@ describe("v2 decision", () => {
 });
 
 describe("spread, skew and band", () => {
-  test("property: the posted spread never decreases as the tier degrades", () => {
+  test("property: each posted side never drops below the tier floor and never decreases as the tier degrades", () => {
     const order = ["NORMAL", "LOW", "CRITICAL"] as const;
-    for (let model = 5; model <= 500; model++) {
-      const s = order.map((t) => postedSpreadBps(model, t));
-      expect(s[0]! <= s[1]! && s[1]! <= s[2]!).toBe(true);
-      expect(s[0]!).toBeGreaterThanOrEqual(model);
+    for (let bid = 5; bid <= 500; bid += 5) for (const ask of [5, 30, 77, 500]) {
+      const s = order.map((t) => postedHalfSpreads(bid, ask, t));
+      for (let i = 0; i < 3; i++) { expect(s[i]!.bid).toBeGreaterThanOrEqual(Math.max(bid, tierSpreadBps(order[i]!))); expect(s[i]!.ask).toBeGreaterThanOrEqual(Math.max(ask, tierSpreadBps(order[i]!))); }
+      expect(s[0]!.bid <= s[1]!.bid && s[1]!.bid <= s[2]!.bid && s[0]!.ask <= s[1]!.ask && s[1]!.ask <= s[2]!.ask).toBe(true);
     }
-    expect(postedSpreadBps(10, "LOW")).toBe(tierSpreadBps("LOW"));
-    expect(postedSpreadBps(10, "CRITICAL")).toBe(120);
+    // the floor applies per side: a tight ask is lifted to the floor while a wide bid is kept as the model chose it
+    expect(postedHalfSpreads(90, 10, "NORMAL")).toEqual({ bid: 90, ask: 30 });
+    expect(postedHalfSpreads(10, 90, "LOW")).toEqual({ bid: 60, ask: 90 });
   });
-  test("composed rates: skew lowers both prices, spread widens both, every allowed decision stays inside the on-chain band", () => {
+  test("composed rates: bid below and ask above the TWAP by exactly each half-spread, inside the on-chain band", () => {
     const mid = 0.1464;
-    const flat = composePair({ twapMid: mid, spreadBps: 30, skewBps: 0, maxAmountInUsdc: 0.05 });
-    const leaned = composePair({ twapMid: mid, spreadBps: 30, skewBps: 100, maxAmountInUsdc: 0.05 });
-    expect(leaned.rate01E18 < flat.rate01E18).toBe(true);
-    expect(leaned.rate10E18 > flat.rate10E18).toBe(true);
-    expect(flat.rate01E18).toBe(BigInt(Math.round(mid * 0.997 * 1e6)));
-    expect(flat.maxIn1).toBe(50_000n);
-    for (const spreadBps of [5, 120, 500]) for (const skewBps of [-200, 0, 200]) { const c = composePair({ twapMid: mid, spreadBps, skewBps, maxAmountInUsdc: 0.1 }); expect(Math.max(c.deviation01Bps, c.deviation10Bps)).toBeLessThanOrEqual(BAND_SAFE_BPS); }
-    expect(() => composePair({ twapMid: mid, spreadBps: 800, skewBps: 0, maxAmountInUsdc: 0.1 })).toThrow(/band/);
+    const c = composeQuotes({ twapMid: mid, bidHalfSpreadBps: 90, askHalfSpreadBps: 30, maxAmountInUsdc: 0.05 });
+    expect(c.rate01E18).toBe(BigInt(Math.round(mid * (1 - 0.009) * 1e6)));
+    expect(c.rate10E18).toBe(BigInt(Math.round(1e30 / (mid * 1.003))));
+    expect(c.maxIn1).toBe(50_000n);
+    expect(c.deviation01Bps).toBeCloseTo(90, 6);
+    // a W0G-heavy decision: ask tighter than bid lowers both prices against a symmetric quote
+    const sym = composeQuotes({ twapMid: mid, bidHalfSpreadBps: 60, askHalfSpreadBps: 60, maxAmountInUsdc: 0.05 });
+    expect(c.rate01E18 < sym.rate01E18 && c.rate10E18 > sym.rate10E18).toBe(true);
+    for (const b of [5, 120, 500]) for (const a of [5, 120, 500]) { const q = composeQuotes({ twapMid: mid, bidHalfSpreadBps: b, askHalfSpreadBps: a, maxAmountInUsdc: 0.1 }); expect(Math.max(q.deviation01Bps, q.deviation10Bps)).toBeLessThanOrEqual(BAND_SAFE_BPS); }
+    expect(() => composeQuotes({ twapMid: mid, bidHalfSpreadBps: 800, askHalfSpreadBps: 5, maxAmountInUsdc: 0.1 })).toThrow(/band/);
   });
-  test("property: with the skew floor, no allowed decision quotes the maker across the TWAP", () => {
+  test("property: no allowed decision quotes the maker across the TWAP on either side", () => {
     const mid = 0.1464;
-    for (const tier of ["NORMAL", "LOW", "CRITICAL"] as const) for (let skewBps = -200; skewBps <= 200; skewBps += 5) for (const model of [5, 30, 65, 200, 500]) {
-      const c = composePair({ twapMid: mid, spreadBps: postedSpreadBps(model, tier, skewBps), skewBps, maxAmountInUsdc: 0.05 });
+    for (const tier of ["NORMAL", "LOW", "CRITICAL"] as const) for (let b = 5; b <= 500; b += 15) for (const a of [5, 30, 65, 200, 500]) {
+      const p = postedHalfSpreads(b, a, tier), c = composeQuotes({ twapMid: mid, bidHalfSpreadBps: p.bid, askHalfSpreadBps: p.ask, maxAmountInUsdc: 0.05 });
       expect(Number(c.rate01E18) < mid * 1e6).toBe(true);
       expect(Number(c.rate10E18) < 1e30 / mid).toBe(true);
     }
-    // The live 08:30 decision (skew -150, spread 65) bought W0G 0.96% above the TWAP before this floor.
-    expect(postedSpreadBps(65, "NORMAL", -150)).toBe(155);
   });
-  test("a skew leaning toward the side the maker already holds too much of is rejected", () => {
-    expect(() => validateDecision({ ...good, skewBps: -150 }, 0.2, 0.967)).toThrow(/skew_against_inventory/);
-    expect(() => validateDecision({ ...good, skewBps: 80 }, 0.2, 0.2)).toThrow(/skew_against_inventory/);
-    expect(() => validateDecision({ ...good, skewBps: 60 }, 0.2, 0.967)).not.toThrow();
-    expect(() => validateDecision({ ...good, skewBps: -20 }, 0.2, 0.5)).not.toThrow();
+  test("inventory goal is plain words naming which side to tighten, never a sign", () => {
+    expect(inventoryGoal(0.967)).toBe("you hold 96.7% W0G by value: make W0G cheaper to buy from you, so set askHalfSpreadBps below bidHalfSpreadBps");
+    expect(inventoryGoal(0.2)).toBe("you hold 20.0% W0G by value: make W0G dearer to buy from you and pay up to buy it back, so set bidHalfSpreadBps below askHalfSpreadBps");
+    expect(inventoryGoal(0.5)).toBe("inventory is balanced at 50.0% W0G by value: keep the two half-spreads about equal");
+    for (const g of [0.967, 0.2, 0.5].map(inventoryGoal)) expect(/skew|positive|negative|[+-]\d/.test(g)).toBe(false);
+  });
+  test("a lean toward the side the maker already holds too much of is rejected", () => {
+    expect(() => validateDecision({ ...good, bidHalfSpreadBps: 30, askHalfSpreadBps: 90 }, 0.2, 0.967)).toThrow(/skew_against_inventory/);
+    expect(() => validateDecision({ ...good, bidHalfSpreadBps: 90, askHalfSpreadBps: 30 }, 0.2, 0.2)).toThrow(/skew_against_inventory/);
+    expect(() => validateDecision({ ...good, bidHalfSpreadBps: 90, askHalfSpreadBps: 30 }, 0.2, 0.967)).not.toThrow();
+    expect(() => validateDecision({ ...good, bidHalfSpreadBps: 40, askHalfSpreadBps: 40 }, 0.2, 0.967)).not.toThrow();
+    expect(() => validateDecision({ ...good, bidHalfSpreadBps: 30, askHalfSpreadBps: 50 }, 0.2, 0.5)).not.toThrow();
   });
   test("TTL band sits wholly above the requote window and at or below the board's MAX_TTL", () => {
     expect(QUOTE_TTL_BAND[0]).toBeGreaterThan(EXPIRY_REQUOTE_WINDOW_SECONDS);
@@ -205,4 +216,23 @@ test("the gas floor keeps at least two postPair transactions of Base ETH in rese
   // one v2 postPair measured at 82,443 gas; at a 0.15 gwei worst case that is ~12,400 gwei, so 30,000 gwei covers two
   expect(GAS_FLOOR_WEI >= 2n * 82_443n * 150_000_000n).toBe(true);
   expect(DEFAULT_FUNDING_ENV.gasTopUpBelowWei > GAS_FLOOR_WEI).toBe(true);
+});
+
+describe("TeeML retry with backoff", () => {
+  test("502 then 200 with tee_verified true: the TeeML model answers on the second try, after a backoff, verified", async () => {
+    const waits: number[] = [];
+    const a = router(good, undefined, [502]);
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: a.f, sleep: async (ms) => void waits.push(ms) });
+    expect([r.model, r.teeVerified, r.attempts, r.fallbackFrom]).toEqual(["0gm-1.0-35b-a3b", true, 2, null]);
+    expect(waits.length).toBe(1);
+    expect(waits[0]!).toBeGreaterThanOrEqual(1_000);
+  });
+  test("two 502s then 200: still the TeeML model on the third attempt, with growing backoff, before any fallback", async () => {
+    const waits: number[] = [];
+    const a = router(good, undefined, [502, 502]);
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: a.f, sleep: async (ms) => void waits.push(ms) });
+    expect([r.model, r.teeVerified, r.attempts]).toEqual(["0gm-1.0-35b-a3b", true, 3]);
+    expect(a.seen.every((b) => b.model === "0gm-1.0-35b-a3b")).toBe(true);
+    expect(waits[1]! > waits[0]!).toBe(true);
+  });
 });

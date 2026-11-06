@@ -32,20 +32,16 @@ export const QUOTE_TTL_BAND = [700, 900] as const;
 export const MAX_TTL_SECONDS = 900;
 export const BAND_SAFE_BPS = 790;
 export function tierSpreadBps(tier: BudgetTier, base = DEFAULT_BUDGET_CONFIG.baseSpreadBps): number { return base * ({ NORMAL: 1, LOW: 2, CRITICAL: 4, PAUSED: 4 } as const)[tier]; }
-/** Edge each side keeps over the TWAP after the skew moves the centre. */
-export const MIN_EDGE_BPS = 5;
-/** The model proposes a spread; the budget tier sets a floor, and the skew sets another: spread >= |skew| + MIN_EDGE_BPS keeps both
- *  sides on the maker's side of the TWAP, so a lean never turns into buying above or selling below the mid. */
-export function postedSpreadBps(modelSpreadBps: number, tier: BudgetTier, skewBps = 0): number { return Math.max(modelSpreadBps, tierSpreadBps(tier), Math.abs(skewBps) + MIN_EDGE_BPS); }
+/** The model picks each side's distance from the TWAP; the budget tier sets a floor applied to each side on its own. */
+export function postedHalfSpreads(bidHalfSpreadBps: number, askHalfSpreadBps: number, tier: BudgetTier): { bid: number; ask: number } { const floor = tierSpreadBps(tier); return { bid: Math.max(bidHalfSpreadBps, floor), ask: Math.max(askHalfSpreadBps, floor) }; }
 export type ComposedPair = { rate01E18: bigint; rate10E18: bigint; maxIn0: bigint; maxIn1: bigint; deviation01Bps: number; deviation10Bps: number };
-/** Both directions around the TWAP mid (USDC per W0G): skew moves the centre, spread widens each side. Raw-unit rates for the v2 board. */
-export function composePair(p: { twapMid: number; spreadBps: number; skewBps: number; maxAmountInUsdc: number }): ComposedPair {
-  if (!(p.twapMid > 0) || !Number.isFinite(p.twapMid) || !Number.isInteger(p.spreadBps) || p.spreadBps < 0 || !Number.isInteger(p.skewBps) || !(p.maxAmountInUsdc > 0)) throw new RangeError("invalid pair inputs");
-  const centre = p.twapMid * (1 - p.skewBps / 10_000), s = p.spreadBps / 10_000;
-  const sell = centre * (1 - s), buyBack = (1 - s) / centre;
-  const deviation01Bps = Math.abs(sell / p.twapMid - 1) * 10_000, deviation10Bps = Math.abs(buyBack * p.twapMid - 1) * 10_000;
+/** Both directions around the TWAP mid (USDC per W0G): the maker pays mid x (1 - bid) for W0G and sells it at mid x (1 + ask). Raw-unit rates for the v2 board. */
+export function composeQuotes(p: { twapMid: number; bidHalfSpreadBps: number; askHalfSpreadBps: number; maxAmountInUsdc: number }): ComposedPair {
+  if (!(p.twapMid > 0) || !Number.isFinite(p.twapMid) || ![p.bidHalfSpreadBps, p.askHalfSpreadBps].every((x) => Number.isInteger(x) && x >= 0) || !(p.maxAmountInUsdc > 0)) throw new RangeError("invalid pair inputs");
+  const bid = p.twapMid * (1 - p.bidHalfSpreadBps / 10_000), ask = p.twapMid * (1 + p.askHalfSpreadBps / 10_000);
+  const deviation01Bps = Math.abs(bid / p.twapMid - 1) * 10_000, deviation10Bps = Math.abs(p.twapMid / ask - 1) * 10_000;
   if (Math.max(deviation01Bps, deviation10Bps) > BAND_SAFE_BPS) throw new RangeError(`pair leaves the on-chain band: ${Math.max(deviation01Bps, deviation10Bps).toFixed(1)} bps`);
-  return { rate01E18: BigInt(Math.round(sell * 1e6)), rate10E18: BigInt(Math.round(buyBack * 1e30)), maxIn0: BigInt(Math.floor(p.maxAmountInUsdc / p.twapMid * 1e18)), maxIn1: BigInt(Math.floor(p.maxAmountInUsdc * 1e6)), deviation01Bps, deviation10Bps };
+  return { rate01E18: BigInt(Math.round(bid * 1e6)), rate10E18: BigInt(Math.round(1e30 / ask)), maxIn0: BigInt(Math.floor(p.maxAmountInUsdc / p.twapMid * 1e18)), maxIn1: BigInt(Math.floor(p.maxAmountInUsdc * 1e6)), deviation01Bps, deviation10Bps };
 }
 /** Annualisation-free realized volatility: standard deviation of log returns between consecutive mids, in bps. */
 export function realizedVolBps(mids: number[]): number {

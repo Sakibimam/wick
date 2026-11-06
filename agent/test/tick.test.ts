@@ -59,3 +59,17 @@ describe("requote cadence", () => {
     expect(Number(q.expiry)).toBeGreaterThan((t0 + 900_000) / 1000);
   });
 });
+
+import { router } from "./fake-chain.js";
+describe("half-spread decision on chain", () => {
+  test("each side is posted at max(model, tier floor) around the TWAP, and both half-spreads and the reason are persisted", async () => {
+    const c = fakeChain();
+    const r = await cronTick(emptyCronState(), c.env({ now: NOW, fetchImpl: router(() => ({ bidHalfSpreadBps: 90, askHalfSpreadBps: 10, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "calm, balanced" })) }));
+    expect(r.outcome).toStartWith("posted");
+    const p = c.st.sent.find((t) => t.fn === "postPair")!.args[0] as { rate01E18: bigint; rate10E18: bigint };
+    const mid = 1.0001 ** c.st.twapTick * 1e12;
+    expect(Number(p.rate01E18) / 1e6 / mid).toBeCloseTo(1 - 0.009, 5);
+    expect(1e30 / Number(p.rate10E18) / mid).toBeCloseTo(1 + 0.003, 5);
+    expect(r.state.inferences.at(-1)).toMatchObject({ bidHalfSpreadBps: 90, askHalfSpreadBps: 10, postedBidHalfSpreadBps: 90, postedAskHalfSpreadBps: 30, reason: "calm, balanced", outcome: "posted" });
+  });
+});
