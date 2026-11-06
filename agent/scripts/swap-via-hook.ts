@@ -152,7 +152,7 @@ async function main() {
   const before = await read();
   let hash: Hex;
   try {
-    hash = await wallet.writeContract({ ...exec, chain: base } as never);
+    hash = await wallet.writeContract({ ...exec, account: local ?? taker, chain: base } as never);
   } catch (e) {
     console.log(`SWAP REVERTED at gas estimation, nothing sent: ${revertReason(e)}`);
     process.exitCode = 1;
