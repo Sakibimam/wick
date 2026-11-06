@@ -28,6 +28,7 @@ export type FundingCtx = { now: number; decision: Omit<FundingInput, "funded">; 
 export const WETH_BASE: Address = "0x4200000000000000000000000000000000000006";
 export const ADDRESS_THIS: Address = "0x0000000000000000000000000000000000000002";
 export const FUEL_GAS_UNITS = 46_000n + 130_000n + 46_000n + 260_000n;
+export const CCIP_SEND_GAS_UNITS = 260_000n;
 export const GAS_LEG_UNITS = 46_000n + 160_000n;
 export const PENDING_TIMEOUT_MS = 20 * 60_000;
 const KEEP = 50;
@@ -169,6 +170,10 @@ async function step(s: FundingState, ctx: FundingCtx, slip: bigint): Promise<{ s
     case "ccip-send": {
       const amount = BigInt(run.w0gBridge);
       if (!(await visible(W0G, BASE_CCIP_ROUTER, amount))) return { state: s, action: "allowance_not_visible" };
+      // CCIP keeps all of msg.value: send only a read fee inside the per-run cap that leaves the gas top-up line intact.
+      const fee = ctx.decision.ccipFeeWei, gas = CCIP_SEND_GAS_UNITS * ctx.decision.baseGasPriceWei;
+      if (fee <= 0n || fee > ctx.decision.maxSpendWeiPerRun) return { state: s, action: "hold ccip_fee_cap" };
+      if (ctx.decision.wallet.ethWei - fee - gas < ctx.decision.gasTopUpBelowWei) return { state: s, action: "hold ccip_fee_gas_reserve" };
       run.zeroGW0gBefore = (await io.readZeroGW0g()).toString();
       const message = { receiver: encodeAbiParameters(parseAbiParameters("address"), [ctx.agent]), data: "0x" as Hex, tokenAmounts: [{ token: W0G, amount }], feeToken: "0x0000000000000000000000000000000000000000" as Address, extraArgs };
       return send(8453, BASE_CCIP_ROUTER, encodeFunctionData({ abi: fundingAbi.router, functionName: "ccipSend", args: [ZERO_G_SELECTOR, message] }), ctx.decision.ccipFeeWei);

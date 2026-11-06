@@ -115,7 +115,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     const ctx = {
       harvest,
       now, agent: env.agent, agentOwner: env.agent, zeroGGasReserveWei: fenv.zeroGGasReserveWei,
-      decision: { accrued, wallet: { usdc: wUsdc, w0g: wW0g, ethWei: gasWei }, strategy: { w0g: strategy[0], usdc: strategy[1] }, mid: market.twapMid, ethUsd, ccipFeeWei: ccipFeeWei ?? 10n ** 18n, baseGasPriceWei: gasPrice, zeroGGasUsdc: 0.002, k: fenv.k, gasTopUpBelowWei: fenv.gasTopUpBelowWei, gasShareBps: fenv.gasShareBps, maxSpendWeiPerRun: fenv.maxSpendWeiPerRun },
+      decision: { accrued, wallet: { usdc: wUsdc, w0g: wW0g, ethWei: gasWei }, strategy: { w0g: strategy[0], usdc: strategy[1] }, mid: market.twapMid, ethUsd, ccipFeeWei: ccipFeeWei ?? 0n, baseGasPriceWei: gasPrice, zeroGGasUsdc: 0.002, k: fenv.k, gasTopUpBelowWei: fenv.gasTopUpBelowWei, gasShareBps: fenv.gasShareBps, maxSpendWeiPerRun: fenv.maxSpendWeiPerRun },
       io: {
         send: (tx: { chainId: 8453 | 16661; to: Address; data: Hex; value: bigint }) => sendWithNonceRetry(tx.chainId === 8453 ? env.base : env.zeroG, env.agent, (nonce) => tx.chainId === 8453
           ? (async () => wallet.sendTransaction({ account: wallet.account!, chain: env.chain, to: tx.to, data: tx.data, value: tx.value, nonce, ...(await eip1559Fees(env.base)) }))()
@@ -128,7 +128,8 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
         quoteSwapUsdcToEth: async (usdcIn: bigint) => (await env.base.simulateContract({ address: QUOTER_V2, abi: quoterAbi, functionName: "quoteExactInputSingle", args: [{ tokenIn: USDC, tokenOut: WETH_BASE, amountIn: usdcIn, fee: 500, sqrtPriceLimitX96: 0n }] })).result[0],
       },
     };
-    if (ccipFeeWei === null && !s.funding!.run) { s.funding = { ...s.funding!, lastDecision: { ...decideFunding({ ...ctx.decision, funded: { usdc: BigInt(s.funding!.funded.usdc), w0g: BigInt(s.funding!.funded.w0g) } }), fire: false, reason: "ccip_fee_unavailable" } }; return "funding hold ccip_fee_unavailable"; }
+    // No default fee, ever: CCIP keeps the whole msg.value, so an unread fee holds every run at whatever step it is.
+    if (ccipFeeWei === null) { if (!s.funding!.run) s.funding = { ...s.funding!, lastDecision: { ...decideFunding({ ...ctx.decision, funded: { usdc: BigInt(s.funding!.funded.usdc), w0g: BigInt(s.funding!.funded.w0g) } }), fire: false, reason: "ccip_fee_unavailable" } }; return "funding hold ccip_fee_unavailable"; }
     const r = await fundingTick(s.funding!, ctx);
     s.funding = r.state;
     return `funding ${r.action}`;

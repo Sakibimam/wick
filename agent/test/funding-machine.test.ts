@@ -184,3 +184,16 @@ describe("fundingTick gas run", () => {
     expect([r.action.startsWith("funded gas-"), r.state.funded]).toEqual([true, { usdc: "2500000", w0g: "0" }]);
   });
 });
+
+describe("ccip-send fee guard", () => {
+  const atCcip = (): FundingState => ({ ...emptyFundingState(), run: { id: "fuel-1", kind: "fuel", startedAt: 0, usdcIn: "5000000", w0gFromFees: "0", w0gBridge: (5n * E18).toString(), minOut: "0", step: "ccip-send", pending: null } });
+  test("a fee above the per-run cap, or one that eats the gas top-up line, holds without sending", async () => {
+    const m = mockIo();
+    expect((await fundingTick(atCcip(), ctxOf(m.io, 0, { ccipFeeWei: 200_000_000_000_001n }))).action).toBe("hold ccip_fee_cap");
+    expect((await fundingTick(atCcip(), ctxOf(m.io, 0, { ccipFeeWei: 0n }))).action).toBe("hold ccip_fee_cap");
+    expect((await fundingTick(atCcip(), ctxOf(m.io, 0, { ccipFeeWei: 150_000_000_000_000n, wallet: { usdc: 5_600_000n, w0g: 2n * E18, ethWei: 200_000_000_000_000n } }))).action).toBe("hold ccip_fee_gas_reserve");
+    expect(m.sent.length).toBe(0);
+    const ok = await fundingTick(atCcip(), ctxOf(m.io, 0));
+    expect([ok.action.startsWith("sent ccip-send"), m.sent[0]!.value]).toEqual([true, 110_000_000_000_000n]);
+  });
+});
