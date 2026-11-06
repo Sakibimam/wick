@@ -257,7 +257,8 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     }, { apiKey: env.zgApiKey, baseUrl: env.zgApiBase, fetchImpl: env.fetchImpl ?? fetch });
   } catch (e) {
     const run = e instanceof BrainError ? e.run : undefined;
-    setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(run) }));
+    const extraRuns = e instanceof BrainError ? e.extraRuns : [];
+    setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(run) + extraRuns.reduce((sum, r) => sum + billedWei(r), 0n) }));
     const why = `refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, msg = e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e);
     // A guard refused a billed answer: keep the book quoted with the last decision that passed every guard, re-checked
     // against this tick's inventory and depth cap and composed around this tick's TWAP, rather than letting it lapse.
@@ -267,16 +268,19 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     if (run && last && again) {
       const r = await postDecision(again, last.inferenceId, last.requestId);
       const outcome = r.error ? `refused model answer, repost failed` : REPOSTED;
+      for (const extra of extraRuns) record(s, extra, now, { outcome: `refused ${(e as BrainError).code}`, reason: msg });
       record(s, run, now, { ...r.detail, reason: msg, outcome });
       return done(`${why}; ${outcome}`, r.error ?? msg);
     }
+    for (const extra of extraRuns) record(s, extra, now, { outcome: `refused ${(e as BrainError).code}`, reason: msg });
     if (run) record(s, run, now, { outcome: `refused ${(e as BrainError).code}`, reason: msg });
     return hold(why, msg);
   }
-  setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) }));
+  setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) + result.extraRuns.reduce((sum, run) => sum + billedWei(run), 0n) }));
   const inferenceId = inferenceIdOf(result);
   const r = await postDecision(result, inferenceId, result.requestId);
   const runDetail = { ...r.detail, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
+  for (const extra of result.extraRuns) record(s, extra, now, { outcome: "fallback", reason: result.fallbackFrom });
   if (r.error) { record(s, result, now, { ...runDetail, outcome: "post_failed" }); return done(`post_failed ${result.requestId}`, r.error); }
   record(s, result, now, { ...runDetail, outcome: "posted" });
   return done(`posted ${result.requestId}`);

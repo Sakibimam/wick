@@ -28,7 +28,7 @@ describe("v2 decision", () => {
     const r = await askDecision(state, { apiKey: "x", fetchImpl: f });
     expect(r).toMatchObject({ ...good, requestId: "rid-1", teeVerified: true, provider: "0xf4FB", billing: { currency: "0g", totalCost: "272018666666666" } });
     expect(seen[0].verify_tee).toBe(true);
-    expect(seen[0].model).toBe("0gm-1.0-35b-a3b");
+    expect(seen[0].model).toBe("0gm-1.0-35b-a3b-sia");
   });
   test("every field is range-checked on both sides", () => {
     const bad: [string, Partial<typeof good>][] = [["spread_out_of_range", { bidHalfSpreadBps: 4 }], ["spread_out_of_range", { bidHalfSpreadBps: 501 }], ["spread_out_of_range", { askHalfSpreadBps: 40.5 }], ["spread_out_of_range", { askHalfSpreadBps: 4 }], ["spread_out_of_range", { askHalfSpreadBps: 501 }], ["ttl_out_of_range", { ttlSeconds: 839 }], ["ttl_out_of_range", { ttlSeconds: 901 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0.2001 }], ["reason_invalid", { reason: " " }], ["reason_invalid", { reason: "x".repeat(281) }]];
@@ -46,8 +46,8 @@ describe("v2 decision", () => {
       const e = await fail("tee_unverified", askDecision(state, { apiKey: "x", fetchImpl: router(good, trace).f }));
       expect(e.run).toMatchObject({ requestId: "rid-2", billing: { totalCost: "5" } });
     }
-    expect(teeGate("0gm-1.0-35b-a3b", true)).toBe(true);
-    expect(teeGate("0gm-1.0-35b-a3b", null)).toBe(false);
+    expect(teeGate("0gm-1.0-35b-a3b-sia", true)).toBe(true);
+    expect(teeGate("0gm-1.0-35b-a3b-sia", null)).toBe(false);
     expect(teeGate("qwen3.7-flash", null)).toBe(true);
   });
   test("an invalid answer after billing keeps its run for spend accounting", async () => {
@@ -64,14 +64,14 @@ describe("v2 decision", () => {
     let calls = 0;
     const f = (async (_u: RequestInfo | URL, init?: RequestInit) => {
       const req = JSON.parse(String(init?.body)); calls++;
-      if (req.model === "0gm-1.0-35b-a3b") return new Response('{"error":{"type":"upstream_error"}}', { status: 502 });
+      if (req.model === "0gm-1.0-35b-a3b-sia" || req.model === "0gm-1.0-35b-a3b") return new Response('{"error":{"type":"upstream_error"}}', { status: 502 });
       return Response.json({ choices: [{ message: { content: JSON.stringify(good) } }], x_0g_trace: { request_id: "rid-q", billing: { currency: "0g", total_cost: "9" } } });
     }) as unknown as typeof fetch;
     const r = await askDecision(state, { apiKey: "x", fetchImpl: f, sleep: noSleep });
     expect(r.model).toBe("qwen3.7-flash");
     expect(r.teeVerified).toBeNull();
     expect(r.fallbackFrom).toMatch(/0gm-1.0-35b-a3b: router returned HTTP 502/);
-    expect(calls).toBe(4);
+    expect(calls).toBe(5);
     // A 4xx is the request's fault, not the provider's: no fallback.
     const g = (async () => new Response("bad", { status: 400 })) as unknown as typeof fetch;
     await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: g }));
@@ -223,7 +223,7 @@ describe("TeeML retry with backoff", () => {
     const waits: number[] = [];
     const a = router(good, undefined, [502]);
     const r = await askDecision(state, { apiKey: "x", fetchImpl: a.f, sleep: async (ms) => void waits.push(ms) });
-    expect([r.model, r.teeVerified, r.attempts, r.fallbackFrom]).toEqual(["0gm-1.0-35b-a3b", true, 2, null]);
+    expect([r.model, r.teeVerified, r.attempts, r.fallbackFrom]).toEqual(["0gm-1.0-35b-a3b-sia", true, 2, null]);
     expect(waits.length).toBe(1);
     expect(waits[0]!).toBeGreaterThanOrEqual(1_000);
   });
@@ -231,8 +231,8 @@ describe("TeeML retry with backoff", () => {
     const waits: number[] = [];
     const a = router(good, undefined, [502, 502]);
     const r = await askDecision(state, { apiKey: "x", fetchImpl: a.f, sleep: async (ms) => void waits.push(ms) });
-    expect([r.model, r.teeVerified, r.attempts]).toEqual(["0gm-1.0-35b-a3b", true, 3]);
-    expect(a.seen.every((b) => b.model === "0gm-1.0-35b-a3b")).toBe(true);
+    expect([r.model, r.teeVerified, r.attempts]).toEqual(["0gm-1.0-35b-a3b-sia", true, 3]);
+    expect(a.seen.every((b) => b.model === "0gm-1.0-35b-a3b-sia")).toBe(true);
     expect(waits[1]! > waits[0]!).toBe(true);
   });
 });
@@ -249,7 +249,7 @@ describe("router trace is persisted per request", () => {
   test("a provider failure's own x_0g_trace names the provider in the fallback record", async () => {
     const f = (async (_u: RequestInfo | URL, init?: RequestInit) => {
       const req = JSON.parse(String(init?.body));
-      if (req.model === "0gm-1.0-35b-a3b") return Response.json({ error: { type: "upstream_error" }, x_0g_trace: { request_id: "rid-bad", provider: "0xdead00000000000000000000000000000000beef" } }, { status: 502 });
+      if (req.model === "0gm-1.0-35b-a3b-sia" || req.model === "0gm-1.0-35b-a3b") return Response.json({ error: { type: "upstream_error" }, x_0g_trace: { request_id: "rid-bad", provider: "0xdead00000000000000000000000000000000beef" } }, { status: 502 });
       return Response.json({ choices: [{ message: { content: JSON.stringify(good) } }], x_0g_trace: { request_id: "rid-q", provider: "0xc0ffee0000000000000000000000000000000000", billing: { currency: "0g", total_cost: "9" } } });
     }) as unknown as typeof fetch;
     const r = await askDecision(state, { apiKey: "x", fetchImpl: f, sleep: noSleep });

@@ -90,7 +90,7 @@ const TIER_WORD: Record<Tier, string> = { NORMAL: "Running", LOW: "Running lean"
 export const tierWord = (t: Tier) => TIER_WORD[t];
 
 /** Models by tier, the same names as MODEL_BY_TIER in agent/src/brain.ts (a test pins them). */
-export const MODELS: Record<Tier, string | null> = { NORMAL: "0gm-1.0-35b-a3b", LOW: "qwen3.7-flash", CRITICAL: null, PAUSED: null };
+export const MODELS: Record<Tier, string | null> = { NORMAL: "0gm-1.0-35b-a3b-sia", LOW: "qwen3.7-flash", CRITICAL: null, PAUSED: null };
 
 /** The tier a balance alone puts the agent in, by the agent's balance lines. Spend against the daily cap can lower it further. */
 export function tierForBalance(wei: bigint): Tier {

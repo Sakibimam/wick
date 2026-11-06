@@ -3,8 +3,9 @@ import { parseUnits } from "viem";
 export type BrainState = { mid: number; recentMids: number[]; inventory: { w0g: number; usdc: number }; budgetTier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED" };
 export type BrainErrorCode = "budget_critical" | "budget_paused" | "missing_api_key" | "request_failed" | "http_error" | "invalid_json" | "invalid_shape" | "spread_out_of_range" | "rate_out_of_range" | "request_id_missing" | "ttl_out_of_range" | "max_amount_out_of_range" | "reason_invalid" | "tee_unverified" | "skew_against_inventory";
 export type BilledRun = { requestId: string; model: string; billing: { currency: string | null; totalCost: string | null }; teeVerified: boolean | null; provider: string | null; providerIdentity?: string | null };
-export class BrainError extends Error { run?: BilledRun; constructor(public readonly code: BrainErrorCode, message: string = code) { super(message); this.name = "BrainError"; } }
-export const PRIMARY_MODEL = "0gm-1.0-35b-a3b";
+export class BrainError extends Error { run?: BilledRun; extraRuns: BilledRun[] = []; constructor(public readonly code: BrainErrorCode, message: string = code) { super(message); this.name = "BrainError"; } }
+export const PRIMARY_MODEL = "0gm-1.0-35b-a3b-sia";
+export const TEE_BACKUP_MODEL = "0gm-1.0-35b-a3b";
 export const CHEAP_MODEL = "qwen3.7-flash";
 export const MODEL_BY_TIER = { NORMAL: PRIMARY_MODEL, LOW: CHEAP_MODEL } as const;
 // Models pad answers with whitespace or wrap them in ```json fences; take the outermost object, then validate strictly.
@@ -84,7 +85,7 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
 /** Bounds the decision must land inside; the extruction's on-chain band (800 bps) sits outside the widest half-spread. */
 export const DECISION_BOUNDS = { halfSpreadBps: [5, 500], ttlSeconds: [840, 900] } as const;
 /** Models served from a TeeML provider; their answers are signed only when the router verified the provider's TEE signature. */
-export const TEE_MODELS = new Set<string>([PRIMARY_MODEL]);
+export const TEE_MODELS = new Set<string>([PRIMARY_MODEL, TEE_BACKUP_MODEL]);
 export type DecisionState = {
   twapMid: number; spotMid: number; recentMids: number[]; realizedVolBps: number;
   inventory: { w0g: number; usdc: number; w0gValueShare: number };
@@ -131,21 +132,40 @@ export function teeGate(model: string, teeVerified: boolean | null): boolean { r
 export async function askDecision(state: DecisionState, options: RouterOptions = {}) {
   if (state.budgetTier === "CRITICAL") throw new BrainError("budget_critical");
   if (state.budgetTier === "PAUSED") throw new BrainError("budget_paused");
-  let model: string = MODEL_BY_TIER[state.budgetTier], fallbackFrom: string | null = null, r: RouterResult;
+  let model: string = MODEL_BY_TIER[state.budgetTier], fallbackFrom: string | null = null, r: RouterResult, extraRuns: BilledRun[] = [];
+  const providerDown = (e: unknown) => e instanceof BrainError && (e.code === "request_failed" || (e.code === "http_error" && /HTTP 5\d\d/.test(e.message)));
+  const asRun = (x: RouterResult): BilledRun => ({ requestId: x.requestId, model: x.model, billing: x.billing, teeVerified: x.teeVerified, provider: x.provider, providerIdentity: x.providerIdentity });
+  const chainError = (e: unknown): never => { if (e instanceof BrainError) e.extraRuns = extraRuns; throw e; };
   try { r = await routerJson(model, DECISION_PROMPT, state, { retries: TEE_MODELS.has(model) ? TEE_RETRIES : 1, ...options, verifyTee: true }); }
   catch (e) {
-    // The TeeML model's only provider can be down (router 502 upstream_error, no charge). Fall back once to the cheap
-    // standard-mode model: its answer carries no TEE verdict, recorded as null, never as verified.
-    const providerDown = e instanceof BrainError && (e.code === "request_failed" || (e.code === "http_error" && /HTTP 5\d\d/.test(e.message)));
-    if (!providerDown || model === CHEAP_MODEL) throw e;
-    fallbackFrom = `${model}: ${e.message}`; model = CHEAP_MODEL;
-    r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 });
+    if (!providerDown(e) || model !== PRIMARY_MODEL) throw e;
+    fallbackFrom = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+    model = TEE_BACKUP_MODEL;
+    try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 }); }
+    catch (backupError) {
+      if (!providerDown(backupError)) chainError(backupError);
+      fallbackFrom += `; ${model}: ${backupError instanceof Error ? backupError.message : String(backupError)}`;
+      model = CHEAP_MODEL;
+      try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 }); } catch (cheapError) { chainError(cheapError); }
+    }
   }
-  const run: BilledRun = { requestId: r.requestId, model, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, providerIdentity: r.providerIdentity };
+  if (model === PRIMARY_MODEL && r.teeVerified !== true) {
+    extraRuns.push(asRun(r));
+    fallbackFrom = `${model}: tee_verified ${r.teeVerified}`;
+    model = TEE_BACKUP_MODEL;
+    try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 }); }
+    catch (e) {
+      if (!providerDown(e)) chainError(e);
+      fallbackFrom += `; ${model}: ${e instanceof Error ? e.message : String(e)}`;
+      model = CHEAP_MODEL;
+      try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 }); } catch (cheapError) { chainError(cheapError); }
+    }
+  }
+  const run = asRun(r);
   // The router has billed this answer: any refusal below carries the run so the caller still records its cost.
-  const refuse = (e: BrainError) => { e.run = run; return e; };
+  const refuse = (e: BrainError) => { e.run = run; e.extraRuns = extraRuns; return e; };
   let decision: Decision;
   try { decision = validateDecision(r.value, state.maxAmountInUsdcCap, state.inventory.w0gValueShare); } catch (e) { throw e instanceof BrainError ? refuse(e) : e; }
   if (!teeGate(model, r.teeVerified)) throw refuse(new BrainError("tee_unverified", `tee_unverified: ${model} answered with tee_verified=${r.teeVerified} from ${r.provider ?? "unknown provider"} (request ${r.requestId})`));
-  return { ...decision, requestId: r.requestId, model, fallbackFrom, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, providerIdentity: r.providerIdentity, attempts: r.attempts };
+  return { ...decision, requestId: r.requestId, model, fallbackFrom, extraRuns, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, providerIdentity: r.providerIdentity, attempts: r.attempts };
 }

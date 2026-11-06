@@ -66,7 +66,7 @@ function fetcher(content: unknown, requestId = "rid", bodyId?: string): typeof f
 const answer = (rateE18 = 2e18, spreadBps = 30) => ({ rateE18, spreadBps, reason: "balanced" });
 async function brainFail(code: BrainErrorCode, content: unknown) { try { await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(content) }); throw new Error("unexpected success"); } catch (e) { expect(e).toBeInstanceOf(BrainError); expect((e as BrainError).code).toBe(code); } }
 describe("brain protocol", () => {
-  test("valid strict JSON, token usage, and header request id", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer()) })).toMatchObject({ rateE18: 2_000_000_000_000_000_000n, requestId: "rid", model: "0gm-1.0-35b-a3b", tokens: 19 }); });
+  test("valid strict JSON, token usage, and header request id", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer()) })).toMatchObject({ rateE18: 2_000_000_000_000_000_000n, requestId: "rid", model: "0gm-1.0-35b-a3b-sia", tokens: 19 }); });
   test("required fields allow benign extra JSON keys", async () => { expect(await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher({ ...answer(), explanationCode: "balanced-inventory" }) })).toMatchObject({ spreadBps: 30, reason: "balanced" }); });
   test("spread bounds reject both sides", async () => { await brainFail("spread_out_of_range", answer(2e18, 4)); await brainFail("spread_out_of_range", answer(2e18, 501)); });
   test("rate beyond 3 percent rejects and boundary passes", async () => { await brainFail("rate_out_of_range", answer(2.061e18)); expect((await askBrain(state, { apiKey: "sk-test", fetchImpl: fetcher(answer(2.06e18)) })).rateE18).toBe(2_060_000_000_000_000_000n); });
