@@ -15,7 +15,7 @@ export const ZG_RPC = process.env.ZG_RPC_URL || "https://evmrpc.0g.ai";
 
 // Clients are built per request: a module-level viem client shares cached promises (getBlockNumber) across
 // concurrent Worker requests, and a request awaiting another request's promise hangs until Cloudflare cancels it.
-export const baseClient = () => createPublicClient({ transport: fallback([http(BASE_LOGS_RPC, { retryCount: 1, batch: true }), http(BASE_RPC, { retryCount: 1, batch: true })]), batch: { multicall: true } });
+export const baseClient = () => createPublicClient({ transport: fallback([BASE_LOGS_RPC, "https://1rpc.io/base", "https://base-mainnet.public.blastapi.io", BASE_RPC].map((u) => http(u, { retryCount: 1, batch: true }))), batch: { multicall: true } });
 // One short attempt: a throttled log scan must fall back to the saved index, not hold the status route open.
 export const logsClient = () => createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 0, timeout: 6_000 }) });
 export const zeroGClient = () => createPublicClient({ transport: http(ZG_RPC, { retryCount: 2 }) });

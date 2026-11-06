@@ -31,7 +31,8 @@ export async function runCron(env: CronEnv): Promise<void> {
   const baseRpcUrl = env.BASE_RPC_URL || "https://mainnet.base.org";
   const { fetch: counted, counter } = countingFetch();
   // mainnet.base.org answers Cloudflare egress with 429 and drpc's free tier 429s too, so reads and sends use publicnode first.
-  const baseUrls = [...new Set(["https://base-rpc.publicnode.com", baseRpcUrl])];
+  // Keyless endpoints that answered eth_call on 2026-11-06; each only costs a subrequest when the one before it fails.
+  const baseUrls = [...new Set(["https://base-rpc.publicnode.com", "https://1rpc.io/base", "https://base-mainnet.public.blastapi.io", "https://base.gateway.tenderly.co", baseRpcUrl])];
   // Batched JSON-RPC, one attempt per endpoint, one fallback pass: a tick's reads land in a couple of HTTP requests.
   const baseTransport = fallback(baseUrls.map((u) => http(u, { retryCount: 0, batch: true, fetchFn: counted })), { retryCount: 1 });
   const zeroGTransport = http(env.ZG_RPC_URL || "https://evmrpc.0g.ai", { retryCount: 1, batch: true, fetchFn: counted });
