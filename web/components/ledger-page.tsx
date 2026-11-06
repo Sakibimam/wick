@@ -313,7 +313,19 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
   return (
     <div className="overflow-hidden rounded-card bg-panel">
       <CostSpark runs={runs} nowMs={nowMs} />
-      <div className="overflow-x-auto">
+      <ul className="divide-y divide-rule border-t border-rule md:hidden">
+        {runs.map((r) => (
+          <li key={r.requestId} className="space-y-1 px-4 py-3 text-[14px]">
+            <p className="flex items-baseline justify-between gap-3">
+              <span className="text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</span>
+              <span className="num text-ink-2">{r.costUsd !== null ? fmtUsd(r.costUsd) : "n/a"}{r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</span>
+            </p>
+            <p className="num text-[13px] text-muted">{r.atMs ? relativeTime(r.atMs, nowMs) : "time n/a"}{r.model ? `, ${r.model}` : ""}{r.raw.reason ? `, ${r.raw.reason}` : ""}</p>
+            <CopyLink value={r.requestId} label="AI request id" />
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[640px] border-collapse text-[14px]">
           <thead>
             <tr className="border-y border-rule text-left text-[13px] text-muted">

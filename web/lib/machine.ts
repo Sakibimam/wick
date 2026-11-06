@@ -119,6 +119,12 @@ export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">)
   let failStreak = 0;
   for (const t of ticks) { if (!failed(t)) break; failStreak++; }
   const o = last.outcome;
-  const words = o === "hold" ? "held its price" : o.startsWith("posted") ? "signed a new price" : o.startsWith("error: ") ? `failed, ${o.slice(7)}` : o.startsWith("partial") ? "posted one side only" : o === "secrets_not_set" ? "is missing its keys" : o;
+  const words = o === "hold" ? "held its price" : o.startsWith("posted") ? "signed a new price" : o.startsWith("error: ") ? `failed, ${shortCause(o.slice(7))}` : o.startsWith("partial") ? "posted one side only" : o === "secrets_not_set" ? "is missing its keys" : o;
   return { at: Date.parse(last.at), words, failed: failed(last), failStreak };
+}
+
+/** First clause of an error, without URLs, short enough for one status line. */
+function shortCause(msg: string): string {
+  const first = msg.replace(/https?:\/\/\S+/g, "").split(/[.\n]/)[0]!.replace(/\s+/g, " ").trim();
+  return first.length > 48 ? `${first.slice(0, 47)}…` : first;
 }
