@@ -72,7 +72,7 @@ At the measured 29 requotes a day the vault covers about 297 days of decisions a
 ## Revenue lines
 
 1. **Swap fees.** 30 bps of every fill through the Aqua strategy, from three taker doors: the Wick swap page, the Uniswap v4 Aqua aggregator hook, and direct `AquaSwapVMRouter.swap` calls.
-2. **x402 paid quotes.** Another agent calls `GET /v1/quote?tokenIn=USDC&amountIn=...`, receives HTTP 402 with the payment requirements, signs a USDC `transferWithAuthorization` for 0.01 USDC, and gets back the live signed quote, the 0G request behind it, and the router's `amountOut` capped at strategy depth. Payment settles to the maker wallet before the quote is returned, and only when a live signed quote exists. That USDC joins the fee pool the funding run sweeps to 0G. One paid quote equals the fee on $3.33 of swap volume, covers 5.3 requotes all-in, or 250 decisions.
+2. **x402 paid quotes.** Another agent calls `GET /v1/quote?tokenIn=USDC&amountIn=...`, receives HTTP 402 with the payment requirements, signs a USDC `transferWithAuthorization` for 0.01 USDC, and gets back the live signed quote, the 0G request behind it, and the router's `amountOut` capped at strategy depth. Payment settles to the maker wallet on Base, the wallet the swap fees accrue to, and only when a live signed quote exists; the quote is read before any money moves. One paid quote equals the fee on $3.33 of swap volume, covers 5.3 requotes all-in, or 250 decisions.
 
 ## Worked examples
 

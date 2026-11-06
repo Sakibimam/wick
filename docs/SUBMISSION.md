@@ -66,10 +66,10 @@ Wick earns the two ways the prize text invites: "Other ways of earning count too
 
 | Leg | Code | Evidence |
 | --- | --- | --- |
-| Money in, swap fees | fee charged inside the extruction at `contracts/src/AgentQuoteExtructionV2.sol:65-73`; accrued per fill by `accruedFees` in `agent/src/worker-tick.ts` | fill [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1), 300 atomic USDC fee |
+| Money in, swap fees | fee charged inside the extruction at `contracts/src/AgentQuoteExtructionV2.sol:65-73`; accrued per fill by `accruedFees`, `agent/src/worker-tick.ts:53` | fill [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1), 300 atomic USDC fee |
 | Money in, paid by other agents | `quotes/src/index.ts:55` (402), `:65` (nonce check), `:73` (quote read before settlement), `:82` (settle) | live 402 at `https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote`; paid count at `/v1/stats` |
-| Credit landing | `decideFunding` and the step machine in `agent/src/funding-machine.ts`: swap, `ccipSend`, await arrival, `W0G.withdraw`, `depositFor`, one step per tick, persisted in KV | [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d), [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68); `Deposited.user` is the agent; vault 0 to 2.844 0G |
-| Inference paid from that balance | `askDecision` in `agent/src/brain.ts` records `x_0g_trace.billing` per run | requests `798fb102…`, `286d605d…`, `1002ff0b…`, `65073141…` all billed `"currency":"0g"`; `balanceOf(agent)` on the Payment Layer 2.844 to 2.344 0G |
+| Credit landing | `decideFunding` (`agent/src/funding-machine.ts:28`) and its step machine: swap, `ccipSend`, await arrival, `W0G.withdraw`, `depositFor`, one step per tick, persisted in KV | [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d), [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68); `Deposited.user` is the agent; vault 0 to 2.844 0G |
+| Inference paid from that balance | `askDecision` (`agent/src/brain.ts:108`) records `x_0g_trace.billing` per run | requests `798fb102…`, `286d605d…`, `1002ff0b…`, `65073141…` all billed `"currency":"0g"`; `balanceOf(agent)` on the Payment Layer 2.844 to 2.344 0G |
 
 ```sh
 cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256)" \
@@ -84,7 +84,7 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 
 > A spend cap, and what the agent does when funds run low (it should degrade gracefully, not crash)
 
-- Spend cap: `SPEND_CAP_PER_DAY_WEI`, 1 0G per UTC day. Spend is the sum of the router's per-request bills (`accountSpend` in `agent/src/budget.ts`); the router's 0.5 0G working-deposit pulls move funds into its ledger and never count as spend.
+- Spend cap: `SPEND_CAP_PER_DAY_WEI`, 1 0G per UTC day. Spend is the sum of the router's per-request bills (`accountSpend`, `agent/src/budget.ts:27`); the router's 0.5 0G working-deposit pulls move funds into its ledger and never count as spend.
 - Degradation, a pure policy in `agent/src/budget.ts` and `agent/src/policy.ts`:
 
 | Tier | Trigger | Behaviour |
@@ -100,7 +100,7 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 
 > Inference on 0G Private Computer in your main user flow, with request IDs
 
-- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts`) with `verify_tee: true`. A `0gm-1.0-35b-a3b` answer is signed only when the router reports `tee_verified: true` (`teeGate`). The request id is required, and `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` is stored on the board with the pair.
+- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts:108`) with `verify_tee: true`. A `0gm-1.0-35b-a3b` answer is signed only when the router reports `tee_verified: true` (`teeGate`, `:106`). The request id is required, and `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` is stored on the board with the pair.
 - The swap page shows the 0G request behind the price the taker is about to fill. Live: request `5319a0b6-562e-4bbe-a141-dfb94fc20aaa`, onchain `inferenceId 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7` in quote tx [`0x7b2433ba…daec`](https://basescan.org/tx/0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec).
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
@@ -125,8 +125,8 @@ The position is a two-sided W0G/USDC strategy priced by an AI agent, where SwapV
 | signed rate within `maxDeviationBps` of the 600 s TWAP, else `PriceOutOfBand` | `:80-90`, TWAP from `observe()` in `contracts/src/TwapPrice.sol:25-28` |
 | `amountIn <= maxAmountIn`, else `AmountInTooLarge` | `:74` |
 | `amountOut <=` strategy balance, else `InsufficientDepth` | `:75` |
-| post: expiry at most 900 s out, epoch current, nonce rising within the epoch, signer is the registered agent (EOA or ERC-1271) | `contracts/src/AgentQuoteBoardV2.sol:12`, `:169-180` |
-| both directions in one signature | `postPair`, `contracts/src/AgentQuoteBoardV2.sol:104` |
+| post: expiry at most 900 s out, epoch current, nonce rising within the epoch, signer is the registered agent (EOA or ERC-1271) | `contracts/src/AgentQuoteBoardV2.sol:13`, `:169-180` |
+| both directions in one signature | `postPair`, `contracts/src/AgentQuoteBoardV2.sol:105` |
 
 Positions are demonstrated by tests and live:
 
@@ -162,18 +162,18 @@ Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibima
 | Uniswap piece | Role in Wick | Code |
 | --- | --- | --- |
 | v4 aggregator hook on `BaseAggregatorHook` (`Uniswap/v4-hooks-public`) | turns the Aqua strategy into a v4 pool: the hook is the SwapVM taker, fills from Aqua, settles to the PoolManager; exposes `quote` and `pseudoTotalValueLocked` for routing | `hook/src/AquaAggregatorHook.sol:106` (`_rawQuote`), `:125-145` (`_conductSwap`, `router.swap`), `:77` (`pseudoTotalValueLocked`); fork tests through the deployed Universal Router 2.1.2 in `hook/test/AquaAggregatorHook.fork.t.sol` |
-| v3 W0G/USDC 0.3% pool `0xe03cCe44…0c4e`, `observe()` | onchain TWAP band on every fill, and the mid every signed pair is centred on | `contracts/src/TwapPrice.sol:25-28`, `contracts/src/AgentQuoteExtructionV2.sol:88`; offchain `readTwapMarket` in `agent/src/price.ts` |
+| v3 W0G/USDC 0.3% pool `0xe03cCe44…0c4e`, `observe()` | onchain TWAP band on every fill, and the mid every signed pair is centred on | `contracts/src/TwapPrice.sol:25-28`, `contracts/src/AgentQuoteExtructionV2.sol:88`; offchain `readTwapMarket`, `agent/src/price.ts:55` |
 | SwapRouter02 `0x2626664c…e481` | converts fee USDC to W0G before CCIP, and fee USDC to ETH for gas | `swap-usdc-w0g` and `gas-swap-usdc-eth` steps in `agent/src/funding-machine.ts`; live swap [`0x3aea85c4…1e52`](https://basescan.org/tx/0x3aea85c4ccc887384a64ad74db859029507c214a6a0d1d2fe3e1bb86ea8f1e52) |
 | QuoterV2 `0x3d4e44Eb…B76a` | sizes every funding swap and its slippage floor | `agent/src/price.ts`, `agent/src/worker-tick.ts` |
-| v3 USDC/WETH 0.05% pool `0xd0b53D92…F224` | ETH price for gas and bridge cost in the funding threshold | `ethUsdFromSqrt` in `agent/src/worker-tick.ts` |
+| v3 USDC/WETH 0.05% pool `0xd0b53D92…F224` | ETH price for gas and bridge cost in the funding threshold | `ethUsdFromSqrt`, `agent/src/worker-tick.ts:51` |
 
 ## Guards in front of the signer
 
 A market maker that signs a bad price loses money to the first arbitrageur, so every guard sits before the signer and every miss means no quote:
 
-- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 300 to 900 s (`validateDecision`, `agent/src/brain.ts`); `composePair` (`agent/src/policy.ts`) builds both rates from the TWAP and refuses anything past 790 bps.
+- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 300 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:94`); `composePair` (`agent/src/policy.ts:36`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
 - A TeeML answer without `tee_verified: true` raises `tee_unverified`, and a router reply without a request id raises `request_id_missing`.
-- The tick holds when spot and TWAP differ by more than 150 bps (`MAX_SPOT_TWAP_GAP_BPS`, `agent/src/price.ts`).
+- The tick holds when spot and TWAP differ by more than 150 bps (`MAX_SPOT_TWAP_GAP_BPS`, `agent/src/price.ts:43`).
 - At fill time the extruction re-checks epoch, expiry, band, size and depth, so the chain itself turns away an outdated or outsized price.
 
 Full threat model and parameter table: [ARCHITECTURE.md](../ARCHITECTURE.md#threat-model).
