@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Repository | https://github.com/Sakibimam/upkeep (MIT) |
-| Live demo | `<LIVE_URL>` |
+| Live demo | `https://upkeep.earn-shield-alerts.workers.dev` |
 | Demo video script | [docs/DEMO-SCRIPT.md](DEMO-SCRIPT.md) |
 | Architecture | [ARCHITECTURE.md](../ARCHITECTURE.md), interactive [docs/ARCHITECTURE.html](ARCHITECTURE.html) |
 | Uniswap feedback | [FEEDBACK.md](../FEEDBACK.md), form link `https://github.com/Sakibimam/upkeep/blob/main/FEEDBACK.md` |
@@ -98,7 +98,7 @@ Measured unit economics: `enable_thinking: false` takes one pricing decision fro
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
 
-- `<LIVE_URL>`: the swap page fills W0G/USDC through AquaSwapVMRouter from the judge's own wallet at the agent's signed price, with a countdown to the quote's expiry. The ledger page shows whether the agent is still paying its own way: vault balance, spend against the cap, budget tier, fees accrued and the latest funding step.
+- `https://upkeep.earn-shield-alerts.workers.dev`: the swap page fills W0G/USDC through AquaSwapVMRouter from the judge's own wallet at the agent's signed price, with a countdown to the quote's expiry. The ledger page shows whether the agent is still paying its own way: vault balance, spend against the cap, budget tier, fees accrued and the latest funding step.
 - The reason to return: the price moves, the agent re-prices on 0G, and the ledger shows its compute account rising with fills and falling with inference.
 
 > One sentence on what breaks if 0G is removed
