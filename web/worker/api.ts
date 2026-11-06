@@ -16,13 +16,48 @@ const readLive = async (kv: Kv | null) => liveOrderOf(kv ? ((await kv.get("cron-
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
 const first = (e: unknown) => (e instanceof BaseError ? e.shortMessage : e instanceof Error ? e.message.split("\n")[0]! : String(e));
 const aquaAbi = parseAbi(["function safeBalances(address maker,address app,bytes32 strategyHash,address token0,address token1) view returns (uint256,uint256)"]);
+let statusMemo: { at: number; body: unknown } | null = null;
+let statusKvWrittenAt = 0;
+
+export function __resetStatusCache() {
+  statusMemo = null;
+  statusKvWrittenAt = 0;
+}
+
+export async function cachedStatus(kv: Kv | null, build: () => Promise<unknown>, now: () => number = Date.now): Promise<{ body: unknown; status: number }> {
+  const current = now();
+  if (statusMemo && current - statusMemo.at < 15_000) return { body: statusMemo.body, status: 200 };
+  try {
+    const body = await build();
+    const at = now();
+    statusMemo = { at, body };
+    if (kv && (!statusKvWrittenAt || at - statusKvWrittenAt >= 600_000)) {
+      try {
+        await kv.put("status-snapshot", JSON.stringify({ at, body }));
+        statusKvWrittenAt = at;
+      } catch { /* Snapshot persistence is best effort. */ }
+    }
+    return { body, status: 200 };
+  } catch (e) {
+    let snapshot: { at: number; body: unknown } | null = statusMemo;
+    if (kv) {
+      try {
+        const stored = await kv.get("status-snapshot", "json") as { at: number; body: unknown } | null;
+        if (stored && (!snapshot || stored.at > snapshot.at)) snapshot = stored;
+      } catch { /* A failed snapshot read does not hide a memoized status. */ }
+    }
+    if (snapshot) return { body: { ...(snapshot.body as object), stale: { since: new Date(snapshot.at).toISOString(), error: first(e) } }, status: 200 };
+    return { body: { error: `chain read failed: ${first(e)}` }, status: 502 };
+  }
+}
 
 export async function handleApi(req: Request, kv: Kv | null): Promise<Response | null> {
   const url = new URL(req.url);
   if (!url.pathname.startsWith("/api/")) return null;
   if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
   if (url.pathname === "/api/status") {
-    try { return json(await buildStatus(kv)); } catch (e) { return json({ error: `chain read failed: ${first(e)}` }, 502); }
+    const { body, status } = await cachedStatus(kv, () => buildStatus(kv));
+    return json(body, status);
   }
   if (url.pathname === "/api/fills") {
     try {
