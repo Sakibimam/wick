@@ -13,7 +13,7 @@ export function SiteFooter() {
   return (
     <footer className="bg-lane">
       <div className="mx-auto max-w-[1312px] px-4 pb-10 pt-16 sm:px-6 lg:px-12">
-        <p className="max-w-[22ch] font-display text-[40px] font-semibold uppercase leading-[0.95] tracking-[0.02em] text-ink lg:text-[56px]">Every number here is read from Base and the 0G chain</p>
+        <p className="max-w-[32ch] font-display text-[40px] font-semibold uppercase leading-[0.95] tracking-[0.02em] text-ink lg:text-[56px]">Every number here is read from Base and the 0G chain</p>
         <div className="mt-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <p className="max-w-[40ch] text-[16px] text-ink-2">Upkeep is a market maker that pays for its own AI from the fees it earns. These are the contracts it runs on.</p>
           <ul className="grid grid-cols-2 gap-x-8 gap-y-3 text-[13px] sm:grid-cols-4">
