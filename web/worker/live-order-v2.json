@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "strategyHash": "0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc035",
+  "board": "0x0d87944FFFf253dBbbD07750AceE7898333218A5",
+  "extruction": "0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4",
+  "order": {
+    "maker": "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953",
+    "traits": "0x4000000000000000000000000000000000000000000000000000000000000000",
+    "data": "0x202cee1374852327da76fd04ca5f681c875e3e8e9cf4001ee03cce449932219fc0ca28f3a4f784ce55de0c4e0320"
+  },
+  "pair": {
+    "w0g": "0x23cd099eB438CcA50349EE2BC809196b1ae00861",
+    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "feeBps": 30,
+    "maxDeviationBps": 800,
+    "pool": "0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e"
+  },
+  "amounts": {
+    "w0g": "1357492788767429240",
+    "usdc": "6836"
+  },
+  "dockedV1": "0xf2513850c1981305143c9655af1305ff35ed5ef52f0bd5d8588f3a8f02ac7f5e",
+  "deployBlock": 53810154,
+  "chainId": 8453,
+  "txs": {
+    "deployBoard": "0xdb55269525f0d82931677f9d5af46d088ccb9eea90d51947125792029092d7a9",
+    "deployExtruction": "0x85466a399625dd1cf0597ad88de6729934e3e45734497a80606b026782425212",
+    "dockV1": "0x5585112eb78a2af2c8e89785c4709c63a83ca2b82638258b636f5a93f2f3e593",
+    "approveW0g": "0xf77b4dcc78edfc857ff31657a2e5bcd9e10628b136e95c64dff156fb8a673a2c",
+    "approveUsdc": "0x74f4ae9728905c8a2b01a89f35ffdb751a5409de6644951348ca35bd8471ff43",
+    "shipV2": "0x20822085a78bc7c75e3123d2c95776d00b96632b625850452cd4de4be51f0ba7",
+    "setAgent": "0xbcf1a5a6c66c865a74fbacd00ca83367af31921919d9bf40e5bc113b2267d75e",
+    "oracleCardinality": "0x60dd01887cb1c402ebb265d0f3c87b07eee8abf3b00677af19924e289c0d3729"
+  }
+}

@@ -12,7 +12,7 @@ import { boardV2Abi, eip1559Fees, postPair } from "./poster.js";
 import { composePair, cronPolicy, postedSpreadBps, realizedVolBps, tierSpreadBps } from "./policy.js";
 
 export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number };
-export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address };
+export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address; gasCostWei?: string };
 export type TickRecord = { at: string; outcome: string; error?: string; subrequests?: number };
 export type CronState = {
   version?: 2;
@@ -158,8 +158,10 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   try {
     const sig = await signPair(wallet, env.chain.id, env.board, pair);
     const sent = await postPair(env.base, wallet, env.board, pair, sig);
+    // Base receipts carry the L1 data fee next to L2 gas; together they are what one requote cost.
+    const gasCostWei = (BigInt(sent.receipt.gasUsed) * BigInt(sent.receipt.effectiveGasPrice) + BigInt((sent.receipt as { l1Fee?: bigint | null }).l1Fee ?? 0n)).toString();
     for (const [tokenIn, tokenOut, rate, maxIn] of [[W0G, USDC, pair.rate01E18, pair.maxIn0], [USDC, W0G, pair.rate10E18, pair.maxIn1]] as const)
-      s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), maxAmountIn: maxIn.toString(), expiry: pair.expiry.toString(), epoch: epoch.toString(), nonce: nonce.toString(), inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString(), board: env.board }].slice(-KEEP);
+      s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), maxAmountIn: maxIn.toString(), expiry: pair.expiry.toString(), epoch: epoch.toString(), nonce: nonce.toString(), inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString(), board: env.board, gasCostWei }].slice(-KEEP);
     record(s, result, now, { ...detail, outcome: "posted" });
   } catch (e) {
     record(s, result, now, { ...detail, outcome: "post_failed" });

@@ -36,8 +36,9 @@
     "BASE_RPC_URL": "https://mainnet.base.org",
     "BASE_LOGS_RPC_URL": "https://base-rpc.publicnode.com",
     "ZG_RPC_URL": "https://evmrpc.0g.ai",
-    "QUOTE_TTL_SECONDS": "3600",
     "SPEND_CAP_PER_DAY_WEI": "1000000000000000000",
-    "FUNDING_THRESHOLD_USDC": "10"
+    // Funding fires only when spendable fees >= FUNDING_K x (live CCIP fee + gas); the threshold is computed per tick.
+    "FUNDING_K": "3",
+    "GAS_SHARE_BPS": "5000"
   }
 }
