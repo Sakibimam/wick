@@ -10,6 +10,10 @@
       "id": "b5ea27a6f504456c93398c0c57eca944"
     }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "CLAIMS", "class_name": "PaymentClaims" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PaymentClaims"] }],
   // No cron: the account is at its cron cap, and this Worker only answers requests.
   "observability": {
     "enabled": true

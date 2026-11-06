@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
+    "test:workerd": "bash test/claims-probe/run.sh",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "pay": "bun run client/pay-and-quote.ts",

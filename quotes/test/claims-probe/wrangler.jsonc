@@ -1,0 +1,3 @@
+// Local-only probe: binds wick-quotes' PaymentClaims through the dev registry and claims one key 5 times concurrently.
+{ "name": "claims-probe", "main": "index.js", "compatibility_date": "2026-10-01",
+  "durable_objects": { "bindings": [{ "name": "CLAIMS", "class_name": "PaymentClaims", "script_name": "wick-quotes" }] } }

@@ -4,11 +4,13 @@ import { authorizationUsed, confirm, readHealth, readQuote, settle, W0G, type Ch
 import { decodePayment, encodeHeader, requirements, USDC, verifyPayment, type Authorization, type PaymentPayload, type PaymentRequirements } from "./x402";
 
 export type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string): Promise<void> };
-export type Env = ChainEnv & { QUOTES_KV: Kv; PRICE_ATOMIC?: string };
+export type ClaimsNamespace = { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string): Promise<Response> } };
+export type Env = ChainEnv & { QUOTES_KV: Kv; CLAIMS?: ClaimsNamespace; PRICE_ATOMIC?: string };
 
 export type Deps = {
   now(): number;
   authorizationUsed(a: Authorization): Promise<boolean>;
+  claim(key: string): Promise<boolean>;
   readQuote(tokenIn: Address, amountIn: bigint): Promise<LiveQuote | null>;
   settle(p: PaymentPayload, req: PaymentRequirements): Promise<Hex>;
   confirm(tx: Hex, a: Authorization): Promise<{ block: bigint }>;
@@ -17,6 +19,21 @@ export type Deps = {
 
 export type Stats = { paidQuotes: number; revenueAtomic: string; payers: Address[]; lastSettlementTx: Hex | null };
 export type PaidRecord = { payer: Address; amount: string; settlementTx: Hex; block: string; time: string; tokenIn: Address; amountIn: string; inferenceId: Hex };
+
+export class PaymentClaims {
+  private readonly ctx: { storage: { sql: { exec(query: string, ...bindings: string[]): { toArray(): unknown[] } } } };
+
+  constructor(state: { storage: { sql: { exec(query: string, ...bindings: string[]): { toArray(): unknown[] } } } }, _env: Env) {
+    this.ctx = state;
+    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY)");
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    const key = decodeURIComponent(new URL(req.url).pathname.slice(1));
+    const inserted = this.ctx.storage.sql.exec("INSERT OR IGNORE INTO claims (key) VALUES (?) RETURNING key", key).toArray().length === 1;
+    return new Response(null, { status: inserted ? 200 : 409 });
+  }
+}
 
 const TOKENS: Record<string, Address> = { USDC, W0G };
 /** tokenIn as the symbol or the token's address, either case. */
@@ -28,6 +45,14 @@ const msg = (e: unknown) => (e instanceof Error ? e.message.split("\n")[0]! : St
 export const liveDeps = (env: Env): Deps => ({
   now: () => Math.floor(Date.now() / 1000),
   authorizationUsed: (a) => authorizationUsed(env, a),
+  claim: async (key) => {
+    if (!env.CLAIMS) throw new Error("CLAIMS Durable Object binding missing");
+    const stub = env.CLAIMS.get(env.CLAIMS.idFromName("claims"));
+    const res = await stub.fetch(`https://claims/${encodeURIComponent(key)}`);
+    if (res.status === 200) return true;
+    if (res.status === 409) return false;
+    throw new Error(`CLAIMS Durable Object returned ${res.status}`);
+  },
   readQuote: (t, amt) => readQuote(env, t, amt, Math.floor(Date.now() / 1000)),
   settle: (p, r) => settle(env, p, r),
   confirm: (tx, a) => confirm(env, tx, a),
@@ -77,6 +102,11 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   } catch (e) {
     return json({ error: `nonce read failed: ${msg(e)}` }, 502);
   }
+  try {
+    if (!(await deps.claim(`${verdict.payer.toLowerCase()}:${auth.nonce.toLowerCase()}`))) return paymentRequired("authorization_already_claimed");
+  } catch (e) {
+    return json({ error: `claim failed, payment not settled: ${msg(e)}` }, 502);
+  }
 
   // Read the price before taking money: no live quote means nothing is sold and nothing is settled.
   let quote: LiveQuote | null;
@@ -94,8 +124,6 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   } catch (e) {
     return paymentRequired(`settlement_failed: ${msg(e)}`);
   }
-  // One settlement tx pays for one quote: a hash already recorded is not a new payment, whatever the facilitator says.
-  if (await env.QUOTES_KV.get(`paid:${tx}`, "json")) return paymentRequired("settlement_tx_already_recorded");
   try {
     ({ block } = await deps.confirm(tx, auth));
   } catch (e) {
@@ -107,7 +135,7 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   // ponytail: read-modify-write on one KV key; concurrent payers can undercount stats (never the chain). A Durable Object fixes it if volume grows.
   const s = await readStats(env.QUOTES_KV);
   const payers = s.payers.includes(verdict.payer) ? s.payers : [...s.payers, verdict.payer];
-  await env.QUOTES_KV.put(`paid:${tx}`, JSON.stringify(record));
+  await env.QUOTES_KV.put(`paid:${verdict.payer.toLowerCase()}:${auth.nonce.toLowerCase()}`, JSON.stringify(record));
   await env.QUOTES_KV.put("stats", JSON.stringify({ paidQuotes: s.paidQuotes + 1, revenueAtomic: (BigInt(s.revenueAtomic) + BigInt(auth.value)).toString(), payers, lastSettlementTx: tx } satisfies Stats));
 
   const settlement = { success: true, transaction: tx, network: reqs.network, payer: verdict.payer };

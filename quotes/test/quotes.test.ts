@@ -29,9 +29,11 @@ const fakeHealth = { board: fakeQuote.board, orderHash: fakeQuote.orderHash, quo
 let used: Set<string>;
 let settles: number;
 let confirmFails: boolean;
+let claims: Set<string>;
 const deps: Deps = {
   now: () => NOW,
   authorizationUsed: async (a) => used.has(`${getAddress(a.from)}:${a.nonce}`),
+  claim: async (key) => { if (claims.has(key)) return false; claims.add(key); return true; },
   readQuote: async () => fakeQuote,
   settle: async (p) => { settles++; return toHex(settles, { size: 32 }); },
   confirm: async (_tx, a) => { if (confirmFails) throw new Error("settlement_reverted"); used.add(`${getAddress(a.from)}:${a.nonce}`); return { block: 42n }; },
@@ -41,7 +43,7 @@ const deps: Deps = {
 let env: Env;
 let store: Map<string, string>;
 beforeEach(() => {
-  used = new Set(); settles = 0; confirmFails = false;
+  used = new Set(); claims = new Set(); settles = 0; confirmFails = false;
   const k = memKv(); store = k.m;
   env = { QUOTES_KV: k.kv, MAKER, BOARD_ADDRESS: fakeQuote.board, PRICE_ATOMIC: "10000" };
 });
@@ -128,6 +130,14 @@ describe("paid request", () => {
     expect(res.status).toBe(503);
     expect(settles).toBe(0);
   });
+
+  test("a claim error returns 502 before settlement", async () => {
+    const { header } = await sign();
+    const res = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": header } }), env, { ...deps, claim: async () => { throw new Error("claims unavailable"); } });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toContain("payment not settled");
+    expect(settles).toBe(0);
+  });
 });
 
 describe("health", () => {
@@ -156,9 +166,10 @@ describe("stats", () => {
     const ok = (await (await call((await sign()).header)).json()) as any;
     const ok2 = (await (await call((await sign()).header)).json()) as any;
     expect(await stats()).toEqual({ paidQuotes: 2, revenueUsdc: "0.02", distinctPayers: 1, lastSettlementTx: ok2.payment.transaction });
-    const rec = JSON.parse(store.get(`paid:${ok.payment.transaction}`)!);
-    expect(rec).toMatchObject({ payer: payer.address, amount: "10000", settlementTx: ok.payment.transaction, block: "42" });
-    expect(typeof rec.time).toBe("string");
+    const recorded = [...store.entries()].find(([key]) => key.startsWith(`paid:${payer.address.toLowerCase()}:`))![1];
+    const saved = JSON.parse(recorded);
+    expect(saved).toMatchObject({ payer: payer.address, amount: "10000", block: "42" });
+    expect(typeof saved.time).toBe("string");
   });
 });
 
@@ -186,15 +197,15 @@ describe("settlement proof", () => {
   });
 });
 
-describe("settlement tx replay", () => {
-  test("a settle that returns a tx hash already recorded is refused: two handle() calls with the same tx give paidQuotes 1", async () => {
+describe("same settlement transaction", () => {
+  test("different payers in one facilitator batch both receive their quotes", async () => {
     const same = { ...deps, settle: async () => { settles++; return toHex(7, { size: 32 }); } };
     const r1 = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": (await sign()).header } }), env, same);
-    const r2 = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": (await sign()).header } }), env, same);
+    const other = privateKeyToAccount(generatePrivateKey());
+    const r2 = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": (await sign({ from: other.address }, other)).header } }), env, same);
     expect(r1.status).toBe(200);
-    expect(r2.status).toBe(402);
-    expect(((await r2.json()) as any).error).toBe("settlement_tx_already_recorded");
-    expect((await stats()).paidQuotes).toBe(1);
+    expect(r2.status).toBe(200);
+    expect((await stats()).paidQuotes).toBe(2);
   });
 });
 
