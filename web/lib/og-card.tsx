@@ -1,8 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { economicsOf } from "./economics";
-import { fmt0g, fmtPct, fmtPrice, significant, toNumber } from "./format";
-import { latestByDirection } from "./quotes";
+import { fmt0g, fmtPct, toNumber } from "./format";
 import { statusSchema, type AgentStatus } from "./schema";
 
 export const OG_SIZE = { width: 1200, height: 630 };
@@ -76,10 +75,7 @@ function Stat({ label, value, unit, color }: { label: string; value: string; uni
 export async function renderCard(): Promise<ImageResponse> {
   const [status, display] = await Promise.all([readStatus(), font()]);
   const econ = status ? economicsOf(status) : null;
-  const p = status ? latestByDirection(status.quotes) : null;
   const fuel = status ? fmt0g(toNumber(status.budget.computeBalanceWei, "0G")) : null;
-  const nowS = Date.now() / 1000;
-  const fresh = p?.["buy-w0g"] && p["sell-w0g"] && p["buy-w0g"].expiry > nowS && p["sell-w0g"].expiry > nowS ? { ask: p["buy-w0g"], bid: p["sell-w0g"] } : null;
   const perSwap = econ?.lastRun?.costUsd && status?.strategy ? (0.1 * status.strategy.feeBps) / 10_000 / econ.lastRun.costUsd : null;
   return new ImageResponse(
     (
@@ -99,7 +95,7 @@ export async function renderCard(): Promise<ImageResponse> {
         </div>
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />
-          {fresh ? <Stat label="Signed price, ask / bid" value={`${fmtPrice(fresh.ask.priceUsdcPerW0g)} / ${fmtPrice(fresh.bid.priceUsdcPerW0g)}`} unit="USDC" /> : <Stat label="Billed AI runs" value={status ? String(status.inferences.length) : "live"} />}
+          <Stat label="Billed AI runs" value={status ? String(status.inferences.length) : "live"} />
           <Stat label="Fees against AI spent" value={econ?.coverage != null ? fmtPct(econ.coverage * 100) : "live"} color={C.ok} />
         </div>
       </div>
