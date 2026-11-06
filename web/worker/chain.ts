@@ -10,7 +10,8 @@ export const BASE_LOGS_RPC = process.env.BASE_LOGS_RPC_URL || "https://base-rpc.
 export const ZG_RPC = process.env.ZG_RPC_URL || "https://evmrpc.0g.ai";
 
 export const baseClient = createPublicClient({ transport: fallback([http(BASE_RPC, { retryCount: 1 }), http(BASE_LOGS_RPC, { retryCount: 1 })]) });
-export const logsClient = createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 2 }) });
+// One short attempt: a throttled log scan must fall back to the saved index, not hold the status route open.
+export const logsClient = createPublicClient({ transport: http(BASE_LOGS_RPC, { retryCount: 0, timeout: 6_000 }) });
 export const zeroGClient = createPublicClient({ transport: http(ZG_RPC, { retryCount: 2 }) });
 
 export const liveOrder: ShippedOrder = { maker: order.order.maker as Address, traits: BigInt(order.order.traits), data: order.order.data as Hex };
@@ -39,19 +40,19 @@ let memo: { at: number; idx: LogIndex } | null = null;
 export async function readLogIndex(kv: Kv | null): Promise<LogIndex> {
   if (memo && Date.now() - memo.at < 10_000) return memo.idx;
   const saved = (memo?.idx ?? (kv ? ((await kv.get("log-index", "json")) as LogIndex | null) : null)) ?? { cursor: (BOARD_DEPLOY_BLOCK - 1n).toString(), posts: [], fills: [] };
-  const latest = await logsClient.getBlockNumber();
   const ranges: Array<[bigint, bigint]> = [];
-  for (let from = BigInt(saved.cursor) + 1n; from <= latest && ranges.length < MAX_CHUNKS; from += CHUNK) ranges.push([from, from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n]);
-  if (ranges.length === 0) return saved;
   let pages;
   try {
+    const latest = await logsClient.getBlockNumber();
+    for (let from = BigInt(saved.cursor) + 1n; from <= latest && ranges.length < MAX_CHUNKS; from += CHUNK) ranges.push([from, from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n]);
+    if (ranges.length === 0) return saved;
     pages = await Promise.all(ranges.map(([fromBlock, toBlock]) => Promise.all([
       logsClient.getLogs({ address: BOARD, event: postedEvent, args: { maker: AGENT }, fromBlock, toBlock }),
       logsClient.getLogs({ address: AQUA_ROUTER, event: swappedEvent, fromBlock, toBlock }),
     ])));
   } catch (e) {
     // publicnode throttles bursts of range scans; the saved index is exact up to its cursor, which the route reports as toBlock.
-    if (BigInt(saved.cursor) >= BOARD_DEPLOY_BLOCK) return saved;
+    if (BigInt(saved.cursor) >= BOARD_DEPLOY_BLOCK) { memo = { at: Date.now(), idx: saved }; return saved; }
     throw e;
   }
   const posts: Post[] = pages.flatMap(([p]) => p.map((l) => ({ tokenIn: l.args.tokenIn!, tokenOut: l.args.tokenOut!, rateE18: l.args.rateE18!.toString(), expiry: l.args.expiry!.toString(), inferenceId: l.args.inferenceId!, postedTx: l.transactionHash, block: l.blockNumber.toString() })));
