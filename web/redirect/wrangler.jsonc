@@ -2,6 +2,7 @@
   // Redirect-only worker on the old name: no KV, no cron, no secrets.
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "upkeep",
+  "account_id": "eb7aa405b82d991809150f56a31d7f35",
   "main": "worker.ts",
   "compatibility_date": "2026-10-01",
   "triggers": { "crons": [] }
