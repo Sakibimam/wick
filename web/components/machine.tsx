@@ -13,7 +13,7 @@ import { BASE_CHAIN_ID } from "@/lib/config";
 import { formatPrice, relativeTime, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
-import { durationLabel, FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, HOPS, machineSentence, priceLeg, TIER_TONE, tierWord, type HopKey, type Tone } from "@/lib/machine";
+import { durationLabel, FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, HOPS, machineSentence, MODELS, priceLeg, swapPerRun, TIER_TONE, tierForBalance, tierWord, type HopKey, type Tone } from "@/lib/machine";
 import { clock, CLOSING_SECONDS, URGENT_SECONDS, type Priced } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ export function Machine(props: MachineProps) {
       <div className="mx-auto max-w-[1312px] px-4 sm:px-6 lg:px-12">
         <div
           ref={rootRef}
-          className="relative flex flex-col gap-9 pb-12 pt-8 lg:grid lg:min-h-[calc(100dvh-64px)] lg:grid-cols-4 lg:grid-rows-[auto_minmax(280px,1fr)_auto] lg:gap-x-8 lg:gap-y-0 lg:pb-10 lg:pt-8 lg:[grid-template-areas:'pool_fees_swap_bridge'_'price_infield_infield_withdraw'_'brain_vault_vault_deposit']"
+          className="relative flex flex-col gap-9 pb-12 pt-8 lg:grid lg:min-h-[calc(100dvh-64px)] lg:grid-cols-4 lg:grid-rows-[auto_minmax(260px,1fr)_auto] lg:gap-x-8 lg:gap-y-0 lg:pb-10 lg:pt-8 lg:[grid-template-areas:'pool_fees_swap_bridge'_'price_infield_infield_withdraw'_'brain_vault_vault_deposit']"
         >
           {segs.length > 0 ? <Circuit segs={segs} reduce={reduce} view={view!} now={now} ttl={status?.quoteTtlSeconds ?? 3600} /> : null}
           {split !== null && status?.readAt && pts?.pool ? <LaneLabels baseBlock={status.readAt.baseBlock} zeroGBlock={status.readAt.zeroGBlock} split={split} left={pts.pool.x} /> : null}
@@ -266,11 +266,12 @@ function Infield({ status, loading, error, onRetry, view, now, nowReady }: { sta
   const tone = status ? TIER_TONE[status.budget.tier] : "quiet";
   return (
     <div className="relative z-10 flex flex-col justify-center lg:px-10 lg:py-10 lg:[grid-area:infield]">
-      <h1 id="machine-title" className="max-w-[15ch] text-[44px] sm:text-[60px] lg:text-[68px]">Upkeep pays for its own brain</h1>
-      <p className="mt-4 max-w-[46ch] text-[18px] leading-[1.5] text-ink-2">
+      <h1 id="machine-title" className="max-w-[15ch] text-[44px] sm:text-[60px] lg:text-[60px]">Upkeep pays for its own brain</h1>
+      <p className="mt-3 max-w-[48ch] text-[17px] leading-[1.5] text-ink-2">
         A market maker on Base. Every swap pays a fee, the fee crosses to the 0G chain, and it buys the AI run that signs the next price. No fresh price, no fill.
       </p>
-      <div className="mt-5 min-h-[48px]" aria-live="polite">
+      {status ? <BreakEven status={status} /> : null}
+      <div className="mt-4 min-h-[48px]" aria-live="polite">
         {error && !status ? (
           <div role="alert" className="flex flex-wrap items-center gap-3">
             <p className="text-[16px] text-danger-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent's status route is not answering, so the machine cannot be read right now." : `The status could not be read: ${error.message}`}</p>
@@ -285,7 +286,7 @@ function Infield({ status, loading, error, onRetry, view, now, nowReady }: { sta
           <div className="skeleton h-5 w-80 max-w-full" aria-label="Reading the agent" />
         ) : null}
       </div>
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-4 flex flex-wrap gap-3">
         <Button asChild className="w-full sm:w-auto"><a href="#swap">Swap the signed price <ArrowDown className="size-4" aria-hidden /></a></Button>
         <Button asChild variant="secondary" className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
       </div>
@@ -337,6 +338,18 @@ function CompactLoop({ status, view, now, nowReady }: { status: AgentStatus | un
   );
 }
 
+/** The loop's unit economics in one line: how much trading pays for the run that signs the next price. */
+function BreakEven({ status }: { status: AgentStatus }) {
+  const r = swapPerRun(status);
+  if (!r) return null;
+  return (
+    <p className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="num font-display text-[36px] font-semibold leading-none text-ink">{r.usdc < 1 ? r.usdc.toFixed(3) : r.usdc.toFixed(2)} USDC</span>
+      <span className="text-[16px] text-ink-2">of swaps pays for one AI run, at the last run&apos;s cost of {r.cost0g.toFixed(7)} 0G.</span>
+    </p>
+  );
+}
+
 type NodeSpot = "top-l" | "top-r" | "side-l" | "side-r" | "bot-l" | "bot-r";
 const SPOT: Record<NodeSpot, { wrap: string; node: string }> = {
   "top-l": { wrap: "lg:pl-0 lg:pb-8 lg:pr-2", node: "lg:left-[-7px] lg:top-auto lg:bottom-[-7px]" },
@@ -381,7 +394,7 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
       {status.strategy ? (
         <Value>{formatAmount(BigInt(status.strategy.w0g), 18, 4)} <span className="text-[13px] text-muted">W0G</span> + {formatAmount(BigInt(status.strategy.usdc), 6, 2)} <span className="text-[13px] text-muted">USDC</span></Value>
       ) : <Value>Strategy shipped</Value>}
-      <Note>Traders swap here against the signed price{fee ? `, paying ${fee}% per fill` : ""}.</Note>
+      <Note>Swaps fill at the signed price{fee ? `, ${fee}% fee` : ""}.</Note>
       <div className="mt-2 text-[13px] text-ink-2">
         {fillsError ? <span className="text-warn-ink">Fills unreadable right now</span> : fills === null ? <span className="text-muted">Reading fills</span> : fills.length === 0 ? <span>No fill yet</span> : (
           <span className="inline-flex flex-wrap items-center gap-x-2">
@@ -401,7 +414,7 @@ function FeesStation({ status }: { status: AgentStatus }) {
   return (
     <Station k="fees" name="Fees" chain="Base" lit={usdc > 0n}>
       <Value>{formatAmount(usdc, 6, 6)} <span className="text-[13px] text-muted">USDC</span></Value>
-      <Note>Collected from fills, waiting for the next funding run.</Note>
+      <Note>Waiting for the next funding run.</Note>
       {threshold ? (
         <div className="mt-3 max-w-[220px]">
           <div className="h-1 overflow-hidden rounded-[2px] bg-sunken" role="progressbar" aria-label="Fees against the funding threshold" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
@@ -471,7 +484,34 @@ function VaultStation({ status }: { status: AgentStatus }) {
         {days !== null ? <>About <span className="num font-medium text-ink">{days.toFixed(1)} days</span> of AI at the {formatAmount(cap, 18, 2)} 0G daily cap. </> : null}
         Spent today <span className="num text-ink">{formatAmount(spent, 18, 4)} 0G</span>. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
+      <WhatIf balanceWei={bal} capWei={cap} />
     </Station>
+  );
+}
+
+/** Drag a hypothetical fuel level and read what the agent's own budget lines would do with it. */
+function WhatIf({ balanceWei, capWei }: { balanceWei: bigint; capWei: bigint }) {
+  const start = Math.round(gaugePosition(balanceWei) * 300);
+  const [step, setStep] = useState(start);
+  const wei = BigInt(Math.round(10 ** (-2 + (3 * step) / 300) * 1e18));
+  const tier = tierForBalance(wei);
+  const model = MODELS[tier];
+  const days = capWei > 0n ? Number(wei) / Number(capWei) : null;
+  const v = Number(wei) / 1e18;
+  return (
+    <div className={cn("mt-4 max-w-[560px] rounded-card bg-panel px-4 py-3", `tone-${TIER_TONE[tier]}`)}>
+      <label htmlFor="fuel-what-if" className="flex items-baseline justify-between gap-3 text-[13px] text-muted">
+        <span>What if the fuel were</span>
+        <span className="num text-[16px] text-ink">{v < 0.1 ? v.toFixed(3) : v < 1 ? v.toFixed(2) : v.toFixed(1)} 0G</span>
+      </label>
+      <input id="fuel-what-if" type="range" min={0} max={300} value={step} onChange={(e) => setStep(Number(e.target.value))} className="mt-2 w-full accent-[var(--tone)]" aria-valuetext={`${v.toFixed(3)} 0G, tier ${tier}`} />
+      <p className="mt-1 text-[14px] text-ink-2" aria-live="polite">
+        <span className="font-semibold text-[var(--tone)]">{tierWord(tier)}</span>
+        {model ? <>, model <span className="num text-ink">{model}</span></> : ", no new AI runs"}
+        {days !== null && tier !== "PAUSED" ? <>, about <span className="num text-ink">{days < 1 ? `${Math.round(days * 24)} h` : `${days.toFixed(1)} days`}</span> at the daily cap</> : null}.
+        {step !== start ? <button type="button" onClick={() => setStep(start)} className="ml-2 text-muted underline underline-offset-4 hover:text-ink">Back to the real balance</button> : null}
+      </p>
+    </div>
   );
 }
 
@@ -509,7 +549,7 @@ function BrainStation({ status, nowMs }: { status: AgentStatus; nowMs: number })
 function PriceStation({ view, now, nowReady, ttl }: { view: View; now: number; nowReady: boolean; ttl: number }) {
   return (
     <Station k="price" name="Signed price" chain="Base" lit={!view.leg.open}>
-      <Note className="mt-0 text-ink-2">The brain's answer, signed and posted. The pool fills only until it expires.</Note>
+      <Note className="mt-0 text-ink-2">Signed by the brain. Fills stop at expiry.</Note>
       <div className="mt-3 space-y-3">
         <Fuse label="Buy 1 W0G" p={view.leg.buy} now={now} ready={nowReady} ttl={ttl} />
         <Fuse label="Sell 1 W0G" p={view.leg.sell} now={now} ready={nowReady} ttl={ttl} />

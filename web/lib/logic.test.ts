@@ -128,7 +128,8 @@ describe("funding and ledger", () => {
 });
 
 import { DEFAULT_BUDGET_CONFIG } from "../../agent/src/budget";
-import { FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, priceLeg } from "./machine";
+import { MODEL_BY_TIER } from "../../agent/src/brain";
+import { FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, MODELS, priceLeg, swapPerRun, tierForBalance } from "./machine";
 import { FUNDING_EVIDENCE } from "./evidence";
 
 describe("machine", () => {
@@ -168,5 +169,22 @@ describe("machine", () => {
     ], now, 48 * 3600_000);
     expect(beats.map((b) => b.requestId)).toEqual(["a", "b"]);
     expect(beats[1]!.x).toBeCloseTo(42 / 48);
+  });
+  test("what-if tiers and models follow the agent's own lines and names", () => {
+    expect(MODELS.NORMAL).toBe(MODEL_BY_TIER.NORMAL);
+    expect(MODELS.LOW).toBe(MODEL_BY_TIER.LOW);
+    expect(tierForBalance(FUEL_LINES.lowWei)).toBe("NORMAL");
+    expect(tierForBalance(FUEL_LINES.lowWei - 1n)).toBe("LOW");
+    expect(tierForBalance(FUEL_LINES.criticalWei - 1n)).toBe("CRITICAL");
+    expect(tierForBalance(FUEL_LINES.pauseWei - 1n)).toBe("PAUSED");
+  });
+  test("break-even swap volume is the latest 0G-billed run cost at the mid over the fee", () => {
+    const s = { mid: 0.1456, strategy: { hash: "0x", w0g: "0", usdc: "0", feeBps: 30 }, inferences: [
+      { requestId: "old", model: null, currency: "0g", totalCost: "100000000000000000", time: "2026-11-05T00:00:00Z" },
+      { requestId: "usd", model: null, currency: "usd", totalCost: "29", time: "2026-11-06T06:00:00Z" },
+      { requestId: "new", model: null, currency: "0g", totalCost: "281198000000000", time: "2026-11-06T05:00:00Z" },
+    ] } as never;
+    expect(swapPerRun(s)!.usdc).toBeCloseTo((0.000281198 * 0.1456) / 0.003, 9);
+    expect(swapPerRun({ ...(s as object), mid: null } as never)).toBeNull();
   });
 });

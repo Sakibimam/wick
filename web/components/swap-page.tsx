@@ -8,8 +8,7 @@ import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
 import { formatAmount } from "@/lib/amounts";
 import { formatPrice } from "@/lib/format";
-import { durationLabel } from "@/lib/machine";
-import { toMillis } from "@/lib/funding";
+import { durationLabel, swapPerRun } from "@/lib/machine";
 import { clock, CLOSING_SECONDS, latestByDirection, offMidPct, URGENT_SECONDS, type Direction, type Priced } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -92,19 +91,15 @@ function Clock({ d, p, now, ready, mid, active }: { d: Direction; p: Priced | nu
 
 /** The fee a swap pays, against what the agent's last AI run cost: how much trading buys one run, from live numbers only. */
 function FeeToBrain({ status }: { status: AgentStatus }) {
-  const run = [...status.inferences].filter((r) => r.currency === "0g" && r.totalCost).sort((a, b) => (toMillis(b.time) ?? 0) - (toMillis(a.time) ?? 0))[0];
-  if (!run || status.mid === null || !status.strategy || status.strategy.feeBps === 0) return null;
-  const cost0g = Number(run.totalCost) / 1e18;
-  const costUsdc = cost0g * status.mid;
-  const swapPerRun = costUsdc / (status.strategy.feeBps / 10_000);
+  const r = swapPerRun(status);
+  if (!r || !status.strategy) return null;
   return (
     <div className="mt-12 rounded-card bg-panel p-6">
       <p className="label">Swap volume that pays for one AI run</p>
-      <p className="mt-2 flex items-baseline gap-3 font-display font-semibold uppercase leading-none text-ink"><span className="num text-[56px]">{swapPerRun < 1 ? swapPerRun.toFixed(3) : swapPerRun.toFixed(2)}</span><span className="text-[22px] text-muted">USDC</span></p>
+      <p className="mt-2 flex items-baseline gap-3 font-display font-semibold uppercase leading-none text-ink"><span className="num text-[56px]">{r.usdc < 1 ? r.usdc.toFixed(3) : r.usdc.toFixed(2)}</span><span className="text-[22px] text-muted">USDC</span></p>
       <p className="mt-4 max-w-[52ch] text-[16px] leading-[1.6] text-ink-2">
-        The last run cost <span className="num text-ink">{cost0g.toFixed(7)} 0G</span>, about <span className="num text-ink">{costUsdc.toFixed(6)} USDC</span> at the pool mid. At a {(status.strategy.feeBps / 100).toFixed(2)}% fee, that much trading covers it.
+        The last run cost <span className="num text-ink">{r.cost0g.toFixed(7)} 0G</span>, about <span className="num text-ink">{r.costUsdc.toFixed(6)} USDC</span> at the pool mid. At a {(status.strategy.feeBps / 100).toFixed(2)}% fee, that much trading covers it.
       </p>
     </div>
   );
 }
-

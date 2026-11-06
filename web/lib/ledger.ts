@@ -55,8 +55,8 @@ export function loopSentence(loop: Loop): string {
       ? `The agent has signed ${plural(loop.signedPrices, "price", "prices")}. No taker has filled against them yet, so no fee has reached its AI account.`
       : "No fill has paid the agent yet, so there is nothing to trace.";
   }
-  if (state === "fees-only") return `Takers have paid ${usdc} in fees. It has not been turned into AI money yet.`;
+  if (state === "fees-only") return `The pool has earned ${usdc} in fees. It has not been turned into AI money yet.`;
   const steps = plural(loop.funding.filter((f) => describeStep(f.step).kind !== "charge").length, "funding step", "funding steps");
-  if (state === "funded") return `Takers paid ${usdc} in fees and the agent recorded ${steps}. No AI run has been paid yet.`;
-  return `Takers paid ${usdc} in fees. ${steps} moved money into the agent's AI account, and the 0G router billed ${plural(loop.inferences.length, "AI run", "AI runs")} against it.`;
+  if (state === "funded") return `The pool has earned ${usdc} in fees and the agent recorded ${steps}. No AI run has been paid yet.`;
+  return `The pool has earned ${usdc} in fees. ${steps} moved money into the agent's AI account, and the 0G router billed ${plural(loop.inferences.length, "AI run", "AI runs")} against it.`;
 }

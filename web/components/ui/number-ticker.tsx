@@ -18,7 +18,8 @@ const format = (n: number, dp: number) => Intl.NumberFormat("en-US", { minimumFr
 export function NumberTicker({ value, startValue = 0, delay = 0, className, decimalPlaces = 0, ...props }: NumberTickerProps) {
   const ref = useRef<HTMLSpanElement>(null)
   const reduce = useReducedMotion()
-  const motionValue = useMotionValue(startValue)
+  // Starts at the real value: a capture or a fast scroll never sees an empty tank. Only later changes animate.
+  const motionValue = useMotionValue(value)
   const springValue = useSpring(motionValue, { damping: 60, stiffness: 100 })
   const isInView = useInView(ref, { once: true, margin: "0px" })
   // A hidden tab runs no animation frames: count up only when someone is looking, otherwise print the value.
@@ -35,7 +36,7 @@ export function NumberTicker({ value, startValue = 0, delay = 0, className, deci
 
   return (
     <span ref={ref} className={cn("inline-block tabular-nums", className)} {...props}>
-      {format(reduce || !animate ? value : startValue, decimalPlaces)}
+      {format(value, decimalPlaces)}
     </span>
   )
 }

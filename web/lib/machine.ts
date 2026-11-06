@@ -24,10 +24,10 @@ export const TIER_TONE: Record<Tier, Tone> = { NORMAL: "ok", LOW: "warn", CRITIC
 
 export type HopKey = "swap" | "bridge" | "withdraw" | "deposit";
 export const HOPS: { key: HopKey; name: string; what: string; chainId: number }[] = [
-  { key: "swap", name: "Uniswap", what: "USDC fees buy wrapped 0G on Base.", chainId: 8453 },
-  { key: "bridge", name: "CCIP bridge", what: "Wrapped 0G crosses from Base to the 0G chain.", chainId: 8453 },
-  { key: "withdraw", name: "Unwrap", what: "Wrapped 0G becomes the native coin that pays for AI.", chainId: 16661 },
-  { key: "deposit", name: "Deposit", what: "depositFor puts the 0G in the agent's Payment Layer account.", chainId: 16661 },
+  { key: "swap", name: "Uniswap", what: "Fees buy wrapped 0G.", chainId: 8453 },
+  { key: "bridge", name: "CCIP bridge", what: "W0G crosses to the 0G chain.", chainId: 8453 },
+  { key: "withdraw", name: "Unwrap", what: "W0G becomes native 0G.", chainId: 16661 },
+  { key: "deposit", name: "Deposit", what: "depositFor fills the AI account.", chainId: 16661 },
 ];
 
 /** Latest recorded transaction for each of the four funding hops, by the agent's step ids. */
@@ -102,3 +102,23 @@ export function machineSentence(status: AgentStatus, leg: PriceLeg, nowSeconds: 
 
 const TIER_WORD: Record<Tier, string> = { NORMAL: "Running", LOW: "Running lean", CRITICAL: "Running on reserve", PAUSED: "Stopped" };
 export const tierWord = (t: Tier) => TIER_WORD[t];
+
+/** Models by tier, the same names as MODEL_BY_TIER in agent/src/brain.ts (a test pins them). */
+export const MODELS: Record<Tier, string | null> = { NORMAL: "0gm-1.0-35b-a3b", LOW: "qwen3.7-flash", CRITICAL: null, PAUSED: null };
+
+/** The tier a balance alone puts the agent in, by the agent's balance lines. Spend against the daily cap can lower it further. */
+export function tierForBalance(wei: bigint): Tier {
+  if (wei < FUEL_LINES.pauseWei) return "PAUSED";
+  if (wei < FUEL_LINES.criticalWei) return "CRITICAL";
+  if (wei < FUEL_LINES.lowWei) return "LOW";
+  return "NORMAL";
+}
+
+/** USDC of swaps whose maker fee covers the agent's latest AI run billed in 0G, priced at the pool mid. Null without a 0G-billed run. */
+export function swapPerRun(status: AgentStatus): { usdc: number; cost0g: number; costUsdc: number } | null {
+  const run = [...status.inferences].filter((r) => r.currency === "0g" && r.totalCost).sort((a, b) => (toMillis(b.time) ?? 0) - (toMillis(a.time) ?? 0))[0];
+  if (!run || status.mid === null || !status.strategy || status.strategy.feeBps === 0) return null;
+  const cost0g = Number(run.totalCost) / 1e18;
+  const costUsdc = cost0g * status.mid;
+  return { usdc: costUsdc / (status.strategy.feeBps / 10_000), cost0g, costUsdc };
+}

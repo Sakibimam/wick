@@ -186,7 +186,23 @@ function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHas
           <p className="text-[15px] font-medium text-ink">No signed price yet.</p>
           <p className="mt-0.5 text-[14px] text-muted">{reasonText(status.budget.reason)} The agent signs a price for each direction after an AI run, and each one lands here with its posting transaction.</p>
         </li>
-      ) : quotes.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+      ) : (
+        <>
+          {quotes.filter((q) => Number(q.expiry) * 1000 > nowMs).map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+          {quotes.some((q) => Number(q.expiry) * 1000 <= nowMs) ? (
+            <li>
+              <details className="group">
+                <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] text-ink-2 hover:bg-sunken">
+                  <span className="num text-ink">{quotes.filter((q) => Number(q.expiry) * 1000 <= nowMs).length}</span> earlier prices, each expired and replaced <span className="text-muted group-open:hidden">(show)</span>
+                </summary>
+                <ul className="divide-y divide-rule border-t border-rule">
+                  {quotes.filter((q) => Number(q.expiry) * 1000 <= nowMs).map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+                </ul>
+              </details>
+            </li>
+          ) : null}
+        </>
+      )}
     </Rows>
   );
 }
