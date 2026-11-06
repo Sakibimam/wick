@@ -109,8 +109,12 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 
 > Inference on 0G Private Computer in your main user flow, with request IDs
 
-- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts`) with `verify_tee: true`. The agent binds whatever TEE verdict the router returns, `null` included, into `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))`, stored on the board with the pair. A `0gm-1.0-35b-a3b` answer is signed only with `tee_verified: true` (`teeGate`); the TeeML provider is retried with backoff, and when it still answers 5xx the brain asks `qwen3.7-flash` once. The request id is required.
-- The swap page shows the 0G request behind the price the taker is about to fill. Live: request `5319a0b6-562e-4bbe-a141-dfb94fc20aaa`, onchain `inferenceId 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7` in quote tx [`0x7b2433ba…daec`](https://basescan.org/tx/0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec).
+- Every signed pair comes from a 0G Private Computer call (`askDecision`, `agent/src/brain.ts`) with `verify_tee: true`. The agent binds the router's verdict, including `null`, into `inferenceId = keccak256(abi.encode(string requestId, string provider, string teeVerified))` and stores it on the board with the pair. A `0gm-1.0-35b-a3b` answer is signed only with `tee_verified: true` (`teeGate`); the TeeML provider is retried with backoff, and when it still answers 5xx the brain asks `qwen3.7-flash` once. The request id is required.
+- The swap page shows the 0G request behind the price the taker is about to fill. Live: request `465f7df7-734f-40c6-929f-e6789df93b9d`, provider `0x000000003f486c7198d6203568a98d02b91f8044`, `inferenceId 0xf7dce81fe229967ef230c605407a1cfcbfb16c1db9a63f6c71fc7f9f2df56eeb` in quote tx [`0xe75b8628…5ef3`](https://basescan.org/tx/0xe75b86286eaff73792f585adf0fee3741a40292c718a415bb83aa697679e5ef3). This run's verdict was `null`, and `null` is what the inferenceId binds.
+```sh
+cast keccak "$(cast abi-encode 'f(string,string,string)' 465f7df7-734f-40c6-929f-e6789df93b9d 0x000000003f486c7198d6203568a98d02b91f8044 null)"
+# 0xf7dce81fe229967ef230c605407a1cfcbfb16c1db9a63f6c71fc7f9f2df56eeb, the inferenceId in the v2 quote tx above
+```
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
 
