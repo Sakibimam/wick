@@ -14,11 +14,12 @@ const lc = (h: string) => h.toLowerCase();
 /** A chain stand-in that applies each sent tx the way Aqua, the ERC-20s and the hook would, so post-conditions are real reads. */
 function chain(over: { commitment?: { w0g: bigint; usdc: bigint }; wallet?: { w0g: bigint; usdc: bigint }; allowance?: bigint } = {}) {
   const c = over.commitment ?? { w0g: 10n * E18, usdc: 50_000_000n };
-  const st = { slots: new Map<string, AquaSlot>([[FROM, { ...c, tokensCount: 2 }]]), allowance: { [lc(W0G)]: over.allowance ?? 10n ** 30n, [lc(USDC)]: over.allowance ?? 10n ** 30n } as Record<string, bigint>, hook: FROM as Hex, receipt: "success" as "success" | "reverted" | null, apply: true, sent: [] as { to: Address; data: Hex }[], wallet: { ...(over.wallet ?? { w0g: 12n * E18, usdc: 60_000_000n }), ethWei: 2n * 10n ** 14n } };
+  const st = { slots: new Map<string, AquaSlot>([[FROM, { ...c, tokensCount: 2 }]]), allowance: { [lc(W0G)]: over.allowance ?? 10n ** 30n, [lc(USDC)]: over.allowance ?? 10n ** 30n } as Record<string, bigint>, hook: FROM as Hex, receipt: "success" as "success" | "reverted" | null, docked: new Map<string, { w0g: bigint; usdc: bigint }>(), apply: true, sent: [] as { to: Address; data: Hex }[], wallet: { ...(over.wallet ?? { w0g: 12n * E18, usdc: 60_000_000n }), ethWei: 2n * 10n ** 14n } };
   const apply = (to: Address, data: Hex) => {
     if (lc(to) === lc(AQUA)) {
       const d = decodeFunctionData({ abi: harvestAbi, data });
-      if (d.functionName === "dock") { const sl = st.slots.get(lc(d.args[1] as Hex))!; if (sl.tokensCount !== 2) throw new Error("DockingShouldCloseAllTokens"); sl.tokensCount = 0xff; }
+      // Aqua.dock stores (0, 0xff): the balance is gone from the slot, so the pre-dock balance is kept where a historical read finds it.
+      if (d.functionName === "dock") { const h = lc(d.args[1] as Hex), sl = st.slots.get(h)!; if (sl.tokensCount !== 2) throw new Error("DockingShouldCloseAllTokens"); if (!st.docked.has(h)) st.docked.set(h, { w0g: sl.w0g, usdc: sl.usdc }); sl.w0g = 0n; sl.usdc = 0n; sl.tokensCount = 0xff; }
       if (d.functionName === "ship") {
         const [o] = decodeAbiParameters(parseAbiParameters("(address maker,uint256 traits,bytes data)"), d.args[1] as Hex);
         const h = lc(strategyHashOf({ maker: o.maker, traits: `0x${o.traits.toString(16).padStart(64, "0")}` as Hex, data: o.data }));
@@ -36,7 +37,7 @@ function chain(over: { commitment?: { w0g: bigint; usdc: bigint }; wallet?: { w0
     receipt: async () => st.receipt, readAllowance: async (token: Address) => st.allowance[lc(token)]!,
     readZeroGW0g: async () => 0n, readZeroGNative: async () => 0n, quoteSwapUsdcToW0g: async () => 0n, quoteSwapUsdcToEth: async () => 0n,
   };
-  const hio = { aquaSlot: async (h: Hex) => st.slots.get(lc(h)) ?? { w0g: 0n, usdc: 0n, tokensCount: 0 }, hookOrderHash: async () => st.hook };
+  const hio = { aquaSlot: async (h: Hex) => st.slots.get(lc(h)) ?? { w0g: 0n, usdc: 0n, tokensCount: 0 }, hookOrderHash: async () => st.hook, dockedBalances: async (h: Hex) => st.docked.get(lc(h)) ?? null };
   const ctx = (s: FundingState, now: number, fees: { w0g: bigint; usdc: bigint }): FundingCtx => {
     const cur = s.live ?? liveOrder, slot = st.slots.get(lc(cur.hash))!;
     return {
@@ -217,5 +218,21 @@ describe("harvest run", () => {
     expect(r.state.lastHarvestDecision?.reason).toBe("no_fees");
     expect(r.state.run).toBeNull();
     expect(c.st.sent.length).toBe(0);
+  });
+});
+
+describe("harvest sizes the ship from the docked balance", () => {
+  test("a fill that lands before the dock changes what is shipped: docked minus released, never the pre-dock plan", async () => {
+    const c = chain({ commitment: { w0g: 10n * E18, usdc: 10_000_000n }, wallet: { w0g: 12n * E18, usdc: 60_000_000n } });
+    const fees = { w0g: 0n, usdc: 10_000n };
+    let s = emptyFundingState(), now = 1_800_000_000_000;
+    const tick = async () => { const ctx = c.ctx(s, now += 300_000, fees); ctx.decision.baseGasPriceWei = 1_000_000n; const r = await fundingTick(s, ctx); s = r.state; return r.action; };
+    expect(await tick()).toStartWith("sent harvest-dock");
+    // A taker bought 1 W0G for 1 USDC between the decision read and the dock: the docked strategy held 9 W0G and 11 USDC.
+    c.st.docked.set(FROM, { w0g: 9n * E18, usdc: 11_000_000n });
+    for (let i = 0; i < 6 && s.run; i++) await tick();
+    const ship = c.st.sent.map((t) => decodeFunctionData({ abi: harvestAbi, data: t.data })).find((d) => d.functionName === "ship")!;
+    expect(ship.args[3]).toEqual([9n * E18, 11_000_000n - 10_000n]);
+    expect(s.lastHarvest!.inventory).toEqual({ w0g: (9n * E18).toString(), usdc: (11_000_000n - 10_000n).toString() });
   });
 });

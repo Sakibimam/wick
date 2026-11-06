@@ -110,6 +110,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
       io: {
         aquaSlot: async (hash: Hex) => { const [w, u] = await Promise.all([W0G, USDC].map(t => env.base.readContract({ address: AQUA, abi: harvestAbi, functionName: "rawBalances", args: [env.maker, AQUA_SWAPVM_ROUTER, hash, t] }))); return { w0g: w![0], usdc: u![0], tokensCount: w![1] === u![1] ? w![1] : Math.max(w![1], u![1]) }; },
         hookOrderHash: () => env.base.readContract({ address: env.hook!, abi: harvestAbi, functionName: "orderHash" }),
+        dockedBalances: (hash: Hex, dockTx: Hex | null) => aquaDockedBalances(env.base, env.maker, hash, dockTx),
       },
     } : undefined;
     const ctx = {
@@ -202,6 +203,25 @@ const billedWei = (run?: { billing: { currency: string | null; totalCost: string
 function lastRunCost(inferences: InferenceRecord[]): bigint | null { for (let i = inferences.length - 1; i >= 0; i--) { const r = inferences[i]!; if (r.currency === "0g" && r.totalCost && BigInt(r.totalCost) > 0n) return BigInt(r.totalCost); } return null; }
 function record(s: CronState, run: BilledRun, now: number, extra: Partial<InferenceRecord>) {
   s.inferences = [...s.inferences, { requestId: run.requestId, model: run.model, currency: run.billing.currency, totalCost: run.billing.totalCost, time: new Date(now).toISOString(), teeVerified: run.teeVerified, provider: run.provider, ...extra }].slice(-KEEP);
+}
+
+const aquaFlowAbi = parseAbi(["event Pushed(address maker,address app,bytes32 strategyHash,address token,uint256 amount)", "event Pulled(address maker,address app,bytes32 strategyHash,address token,uint256 amount)"]);
+/** What a dock closed: Aqua.dock stores (0, 0xff), so the balance is read at the block before the dock and moved by every
+ *  Aqua push and pull on the same strategy that executed earlier in the dock's own block. Null when the dock tx is unknown. */
+export async function aquaDockedBalances(client: PublicClient<any, any>, maker: Address, hash: Hex, dockTx: Hex | null): Promise<{ w0g: bigint; usdc: bigint } | null> {
+  if (!dockTx) return null;
+  const rc = await client.getTransactionReceipt({ hash: dockTx });
+  if (rc.status !== "success") return null;
+  const at = (token: Address) => client.readContract({ address: AQUA, abi: harvestAbi, functionName: "rawBalances", args: [maker, AQUA_SWAPVM_ROUTER, hash, token], blockNumber: rc.blockNumber - 1n });
+  const [w, u, logs] = await Promise.all([at(W0G), at(USDC), client.getLogs({ address: AQUA, events: aquaFlowAbi, fromBlock: rc.blockNumber, toBlock: rc.blockNumber })]);
+  if (w[1] !== 2 || u[1] !== 2) return null;
+  const bal = { w0g: BigInt(w[0]), usdc: BigInt(u[0]) };
+  for (const l of logs as { eventName: "Pushed" | "Pulled"; transactionIndex: number; args: { maker: Address; app: Address; strategyHash: Hex; token: Address; amount: bigint } }[]) {
+    if (l.transactionIndex >= rc.transactionIndex || l.args.maker.toLowerCase() !== maker.toLowerCase() || l.args.app.toLowerCase() !== AQUA_SWAPVM_ROUTER.toLowerCase() || l.args.strategyHash.toLowerCase() !== hash.toLowerCase()) continue;
+    const k = l.args.token.toLowerCase() === W0G.toLowerCase() ? "w0g" : l.args.token.toLowerCase() === USDC.toLowerCase() ? "usdc" : null;
+    if (k) bal[k] += l.eventName === "Pushed" ? l.args.amount : -l.args.amount;
+  }
+  return bal;
 }
 
 const NONCE_ERR = /nonce too low|nonce has already been used|replacement transaction underpriced|invalid nonce/i;

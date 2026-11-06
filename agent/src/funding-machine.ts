@@ -12,7 +12,8 @@ export type OrderJson = { maker: Address; traits: Hex; data: Hex };
 /** The Aqua strategy the maker runs now, and every strategy hash it replaced, so fill history survives a re-ship. */
 export type LiveOrder = { order: OrderJson; hash: Hex; amounts: { w0g: string; usdc: string }; shipTx: Hex | null; shippedAt: string | null; past: Hex[] };
 export type Pair2 = { w0g: string; usdc: string };
-export type HarvestRun = { from: Hex; to: Hex; order: OrderJson; inventory: Pair2; released: Pair2; docked: boolean; shipped: boolean; attempts: number; txs: Partial<Record<HarvestStepId, Hex>> };
+/** dockedAt: the strategy's balance the instant before the dock executed, the only true basis for the re-ship (null: not readable). */
+export type HarvestRun = { from: Hex; to: Hex; order: OrderJson; inventory: Pair2; released: Pair2; docked: boolean; shipped: boolean; attempts: number; txs: Partial<Record<HarvestStepId, Hex>>; sized?: boolean; dockedAt?: Pair2 | null };
 export type HarvestDecision = { fire: boolean; reason: string; fees: Pair2; released: Pair2; inventory: Pair2; commitment: Pair2; valueUsdc: number; costUsdc: number; costWei: string; thresholdUsdc: number };
 export type FundingRun = { id: string; kind: "fuel" | "gas" | "harvest"; startedAt: number; usdcIn: string; w0gFromFees: string; w0gBridge: string; minOut: string; step: FundingStepId; pending: null | { hash: Hex; chainId: 8453 | 16661; step: FundingStepId; sentAt: number }; zeroGW0gBefore?: string; harvest?: HarvestRun };
 export type FundingState = { run: null | FundingRun; funded: { usdc: string; w0g: string }; history: { runId: string; step: FundingStepId; txHash: Hex; chainId: number; time: string; ok: boolean }[]; lastDecision: FundingDecision | null; live?: LiveOrder; lastHarvest?: (HarvestRun & { id: string; completedAt: string }) | null; lastHarvestDecision?: HarvestDecision | null };
@@ -20,7 +21,8 @@ export type FundingInput = { accrued: { usdc: bigint; w0g: bigint }; funded: { u
 export type FundingIo = { send(tx: { chainId: 8453 | 16661; to: Address; data: Hex; value: bigint }): Promise<Hex>; receipt(chainId: 8453 | 16661, hash: Hex): Promise<"success" | "reverted" | null>; readAllowance(token: Address, spender: Address): Promise<bigint>; readZeroGW0g(): Promise<bigint>; readZeroGNative(): Promise<bigint>; quoteSwapUsdcToW0g(usdcIn: bigint): Promise<bigint>; quoteSwapUsdcToEth(usdcIn: bigint): Promise<bigint> };
 /** tokensCount per Aqua balance slot: 0 never shipped, 2 live (W0G + USDC), 0xff docked. */
 export type AquaSlot = { w0g: bigint; usdc: bigint; tokensCount: number };
-export type HarvestIo = { aquaSlot(strategyHash: Hex): Promise<AquaSlot>; hookOrderHash(): Promise<Hex> };
+/** dockedBalances: the docked hash's balance immediately before its dock tx executed (Aqua.dock stores zero), null when the dock tx is unknown. */
+export type HarvestIo = { aquaSlot(strategyHash: Hex): Promise<AquaSlot>; hookOrderHash(): Promise<Hex>; dockedBalances(strategyHash: Hex, dockTx: Hex | null): Promise<{ w0g: bigint; usdc: bigint } | null> };
 /** commitment is null while the live strategy is docked mid-harvest (Aqua's safeBalances reverts on a docked hash). */
 export type HarvestCtx = { live: LiveOrder; commitment: { w0g: bigint; usdc: bigint } | null; fees: { w0g: bigint; usdc: bigint }; hook: Address; gasFloorWei: bigint; io: HarvestIo };
 export type FundingCtx = { now: number; decision: Omit<FundingInput, "funded">; io: FundingIo; agent: Address; agentOwner: Address; slippageBps?: number; zeroGGasReserveWei: bigint; arrivalTimeoutMs?: number; harvest?: HarvestCtx };
@@ -255,6 +257,14 @@ async function harvestStep(s: FundingState, ctx: FundingCtx): Promise<{ state: F
   const approve = (token: Address, amount: bigint) => send(token, encodeFunctionData({ abi: fundingAbi.erc20, functionName: "approve", args: [AQUA, amount] }));
   const skip = (step: HarvestStepId) => { const r = harvestDone(s, ctx, step); return r.action.startsWith("harvested") ? r : null; };
   for (let i = 0; i < 5 && s.run; i++) {
+    // A fill can land between the decision read and the dock: once docked, re-size the ship from what the dock actually closed.
+    if (h.docked && !h.sized && run.step !== "harvest-dock") {
+      let d: { w0g: bigint; usdc: bigint } | null;
+      try { d = await hc.io.dockedBalances(h.from, h.txs["harvest-dock"] ?? null); } catch (e) { return { state: s, action: `harvest docked_read_failed: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]!.slice(0, 120)}` }; }
+      const w = ctx.decision.wallet, rel = { w0g: BigInt(h.released.w0g), usdc: BigInt(h.released.usdc) };
+      if (d) h.inventory = pair2({ w0g: min(max0(d.w0g - rel.w0g), w.w0g), usdc: min(max0(d.usdc - rel.usdc), w.usdc) });
+      h.dockedAt = d ? pair2(d) : null; h.sized = true;
+    }
     const inv = { w0g: BigInt(h.inventory.w0g), usdc: BigInt(h.inventory.usdc) };
     switch (run.step) {
       case "harvest-dock":

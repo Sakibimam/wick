@@ -23,3 +23,25 @@ describe("ccip fee", () => {
     expect(r.state.funding!.run!.step).toBe("ccip-send");
   });
 });
+
+import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters, type Hex } from "viem";
+import { aquaDockedBalances } from "../src/worker-tick.js";
+import { AGENT, LIVE_HASH, ROUTER } from "./fake-chain.js";
+import { AQUA } from "../src/funding-machine.js";
+
+describe("docked balance read", () => {
+  const flow = parseAbi(["event Pushed(address maker,address app,bytes32 strategyHash,address token,uint256 amount)", "event Pulled(address maker,address app,bytes32 strategyHash,address token,uint256 amount)"]);
+  const log = (name: "Pushed" | "Pulled", token: string, amount: bigint, block: bigint, txIndex: number, hash: Hex = LIVE_HASH) => ({ address: AQUA, topics: encodeEventTopics({ abi: flow, eventName: name }) as Hex[], data: encodeAbiParameters(parseAbiParameters("address,address,bytes32,address,uint256"), [AGENT, ROUTER, hash, token as Hex, amount]), blockNumber: block, transactionIndex: txIndex, logIndex: txIndex, transactionHash: `0x${String(txIndex).padStart(64, "0")}` as Hex });
+  test("balance at the block before the dock, plus Aqua flows earlier in the dock block, ignoring later txs and other strategies", async () => {
+    const c = fakeChain();
+    const N = 2_000_000n, dockTx = `0x${"d0".repeat(32)}` as Hex;
+    c.st.block = N + 5n;
+    c.st.receipts.set(dockTx, { blockNumber: N, transactionIndex: 4, status: "success" });
+    c.st.history.set(`${LIVE_HASH}:${N - 1n}`, { w0g: 10n * E18, usdc: 10_000_000n, tokensCount: 2 });
+    c.st.slots.set(LIVE_HASH, { w0g: 0n, usdc: 0n, tokensCount: 0xff });
+    c.st.logs.push(log("Pulled", W0G, E18, N, 2), log("Pushed", USDC, 1_000_000n, N, 2), log("Pushed", USDC, 7n, N, 6), log("Pushed", USDC, 5n, N, 1, `0x${"ee".repeat(32)}`));
+    const e = c.env();
+    expect(await aquaDockedBalances(e.base, AGENT, LIVE_HASH, dockTx)).toEqual({ w0g: 9n * E18, usdc: 11_000_000n });
+    expect(await aquaDockedBalances(e.base, AGENT, LIVE_HASH, null)).toBeNull();
+  });
+});
