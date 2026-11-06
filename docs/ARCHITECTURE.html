@@ -10992,7 +10992,13 @@
           (!window.matchMedia || !window.matchMedia('print').matches)
         );
       }
+      // Once overflow has cut the width for this viewport, keep it cut. Otherwise the cut reflows
+      // the header and cards, the observers re-measure the uncut width, and the layout oscillates.
+      var overflowCap = 0, overflowCapKey = '';
+      function viewportKey() { return window.innerWidth + 'x' + window.innerHeight; }
       function clear() {
+        overflowCap = 0;
+        overflowCapKey = '';
         html.style.removeProperty('--archify-reader-width');
         html.removeAttribute('data-reader-layout');
         html.removeAttribute('data-reader-overflow');
@@ -11029,6 +11035,8 @@
           ) - window.innerHeight;
           if (overflow > 1 && lastWidth > minWidth) {
             applyWidth(Math.max(minWidth, lastWidth - overflow * ratio - 4));
+            overflowCap = lastWidth;
+            overflowCapKey = viewportKey();
             html.setAttribute('data-reader-overflow', 'reduced');
           } else if (overflow > 1) {
             html.setAttribute('data-reader-overflow', 'authored');
@@ -11052,6 +11060,8 @@
         var availableSvgHeight = Math.max(1, window.innerHeight - fixedHeight);
         var desiredWidth = availableSvgHeight * ratio + chrome.diagramX;
         var width = Math.max(minWidth, Math.min(maxWidth, desiredWidth));
+        if (overflowCapKey !== viewportKey()) { overflowCap = 0; overflowCapKey = ''; }
+        if (overflowCap) width = Math.min(width, overflowCap);
         applyWidth(width);
         settleOverflow(minWidth);
         return {
@@ -11099,7 +11109,8 @@
         [header, guided, cards].forEach(function (element) { if (element) resizeObserver.observe(element); });
       }
       if (typeof MutationObserver === 'function') {
-        var contentObserver = new MutationObserver(schedule);
+        // New content in the header or cards is a real change, so it may earn back width a cut took.
+        var contentObserver = new MutationObserver(function () { overflowCap = 0; schedule(); });
         if (guided) contentObserver.observe(guided, { attributes: true, childList: true, subtree: true });
         if (cards) contentObserver.observe(cards, { attributes: true, childList: true, subtree: true });
         contentObserver.observe(html, { attributes: true, attributeFilter: ['data-embed', 'data-present'] });
