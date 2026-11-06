@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wick-quotes",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "kv_namespaces": [
+    {
+      "binding": "QUOTES_KV",
+      "id": "b5ea27a6f504456c93398c0c57eca944"
+    }
+  ],
+  // No cron: the account is at its cron cap, and this Worker only answers requests.
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "BASE_RPC_URL": "https://base-rpc.publicnode.com",
+    // The backend lane may move the board to a v2 address; change it here, nothing else reads it.
+    "BOARD_ADDRESS": "0x309933CE439Da6A059593d73B8c82E8C8447C3F8",
+    "MAKER": "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953",
+    "PRICE_ATOMIC": "10000",
+    "SETTLE_MODE": "facilitator",
+    "FACILITATOR_URL": "https://facilitator.payai.network",
+    "STATUS_URL": "https://wick.earn-shield-alerts.workers.dev/api/status"
+  }
+}

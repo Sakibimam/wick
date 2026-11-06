@@ -1,0 +1,20 @@
+{
+  "name": "wick-quotes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "pay": "bun run client/pay-and-quote.ts",
+    "fork-e2e": "bun run scripts/fork-e2e.ts"
+  },
+  "dependencies": {
+    "viem": "^2.57.16"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^5.9.2",
+    "wrangler": "4.156.0"
+  }
+}
