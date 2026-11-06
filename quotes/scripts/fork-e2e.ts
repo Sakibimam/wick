@@ -1,10 +1,12 @@
 // End to end on an anvil fork of Base: the Worker handler served over real HTTP, the reference client paying it,
 // USDC.transferWithAuthorization settled by a relayer, and the receipt read back from the fork.
-import { createPublicClient, createTestClient, http, parseAbi, toHex, walletActions, type Address, type Hex } from "viem";
+import { createPublicClient, createTestClient, getAddress, http, parseAbi, parseAbiItem, toHex, walletActions, type Address, type Hex } from "viem";
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { handle, liveDeps, type Env } from "../src/index";
 import { USDC } from "../src/x402";
+import type { Health, LiveQuote } from "../src/chain";
+import order from "../../web/worker/live-order-v2.json";
 
 const FORK_URL = process.env.FORK_URL || "https://base-rpc.publicnode.com";
 const PORT = 8547;
@@ -14,7 +16,19 @@ const WHALE: Address = "0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A"; // an EOA h
 const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function transfer(address,uint256) returns (bool)"]);
 const assert = (cond: unknown, what: string) => { if (!cond) throw new Error(`FAIL: ${what}`); console.log(`ok   ${what}`); };
 
-const anvil = Bun.spawn(["anvil", "--fork-url", FORK_URL, "--port", String(PORT), "--silent"], { env: { ...process.env, FOUNDRY_DISABLE_NIGHTLY_WARNING: "1" } });
+// Fork just after the board v2's latest QuotePosted (postPair emits one per direction), so a fresh v2 quote is live at the fork block.
+const posted = parseAbiItem("event QuotePosted(address indexed maker,address indexed tokenIn,address indexed tokenOut,uint256 rateE18,uint256 maxAmountIn,uint64 expiry,uint64 epoch,uint64 nonce,bytes32 inferenceId)");
+const live = createPublicClient({ chain: base, transport: http(FORK_URL) });
+const head = await live.getBlockNumber();
+// Base mines a block every 200 ms: a 900 s TTL spans 4,500 blocks. Walk back 2,000 blocks at a time, at most 10,000 (about 33 minutes).
+let post: Awaited<ReturnType<typeof live.getLogs<typeof posted>>>[number] | undefined;
+for (let to = head; !post && to > head - 10_000n; to -= 2_000n) {
+  post = (await live.getLogs({ address: getAddress(order.board), event: posted, args: { maker: MAKER }, fromBlock: to - 1_999n, toBlock: to })).at(-1);
+}
+if (!post) throw new Error(`no QuotePosted on board v2 ${order.board} in the last 10,000 blocks before ${head}`);
+const forkAt = process.env.FORK_BLOCK ? BigInt(process.env.FORK_BLOCK) : post.blockNumber + 1n;
+console.log(`board v2 ${order.board}: latest postPair tx ${post.transactionHash} in block ${post.blockNumber}, expiry ${post.args.expiry}, inferenceId ${post.args.inferenceId}`);
+const anvil = Bun.spawn(["anvil", "--fork-url", FORK_URL, "--fork-block-number", String(forkAt), "--port", String(PORT), "--silent"], { env: { ...process.env, FOUNDRY_DISABLE_NIGHTLY_WARNING: "1" } });
 let server: ReturnType<typeof Bun.serve> | undefined;
 try {
   const pub = createPublicClient({ chain: base, transport: http(RPC) });
@@ -27,6 +41,8 @@ try {
   const payer = privateKeyToAccount(payerPk).address;
   const relayer = mnemonicToAccount("test test test test test test test test test test test junk");
   const test = createTestClient({ chain: base, mode: "anvil", transport: http(RPC) }).extend(walletActions);
+  // The fork block is minutes old; mine from wall-clock time so the payer's EIP-3009 window (validAfter = now - 60) is open.
+  await test.setNextBlockTimestamp({ timestamp: BigInt(Math.floor(Date.now() / 1000)) });
   await test.impersonateAccount({ address: WHALE });
   await test.setBalance({ address: WHALE, value: 10n ** 18n });
   const fund = await test.writeContract({ account: WHALE, address: USDC, abi: erc20, functionName: "transfer", args: [payer, 1_000_000n] });
@@ -36,7 +52,7 @@ try {
   const env: Env = {
     QUOTES_KV: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)!) : null), put: async (k, v) => void kv.set(k, v) },
     BASE_RPC_URL: RPC,
-    BOARD_ADDRESS: "0x309933CE439Da6A059593d73B8c82E8C8447C3F8",
+    BOARD_ADDRESS: order.board,
     MAKER,
     PRICE_ATOMIC: "10000",
     SETTLE_MODE: "relayer",
@@ -45,6 +61,10 @@ try {
   };
   server = Bun.serve({ port: 0, fetch: (req) => handle(req, env, liveDeps(env)) });
   const QUOTES_URL = `http://127.0.0.1:${server.port}`;
+
+  const health = (await (await fetch(`${QUOTES_URL}/v1/health`)).json()) as Health;
+  console.log(`     | health ${JSON.stringify(health)}`);
+  assert(health.board === getAddress(order.board) && health.orderHash === order.strategyHash && health.quoteFresh, "health reads board v2, the v2 order hash, and a fresh quote");
 
   const unpaid = await fetch(`${QUOTES_URL}/v1/quote?tokenIn=USDC&amountIn=1000000`);
   assert(unpaid.status === 402, `unpaid call answers 402 (${unpaid.status})`);
@@ -62,6 +82,10 @@ try {
 
   const tx = out.match(/settlement tx (0x[0-9a-f]{64})/)?.[1] as Hex | undefined;
   assert(tx, "client printed a settlement tx");
+  const quote = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as LiveQuote;
+  assert(quote.board === getAddress(order.board) && quote.inferenceId === post.args.inferenceId && quote.expiry === String(post.args.expiry), `paid quote is the v2 post (nonce ${quote.nonce}, epoch ${quote.epoch})`);
+  assert(quote.requestId, `paid quote names its 0G Compute requestId ${quote.requestId}`);
+  assert(BigInt(quote.amountIn) <= BigInt(quote.maxAmountIn) && quote.depthLimited === BigInt(quote.amountIn) < 1_000_000n, `fill capped at maxAmountIn ${quote.maxAmountIn}: amountIn ${quote.amountIn}, amountOut ${quote.amountOut}`);
   const receipt = await pub.getTransactionReceipt({ hash: tx! });
   assert(receipt.status === "success", `fork receipt status 1 for ${tx} in block ${receipt.blockNumber}`);
   const [payerAfter, makerAfter] = await Promise.all([payer, MAKER].map((a) => pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [a] })));

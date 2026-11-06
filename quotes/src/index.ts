@@ -1,6 +1,6 @@
 // wick-quotes: other agents pay 0.01 USDC over x402 for Wick's signed price. The USDC lands on the maker, where the funding leg sweeps it to 0G Compute.
 import { formatUnits, getAddress, isAddress, type Address, type Hex } from "viem";
-import { authorizationUsed, confirm, readQuote, settle, W0G, type ChainEnv, type LiveQuote } from "./chain";
+import { authorizationUsed, confirm, readHealth, readQuote, settle, W0G, type ChainEnv, type Health, type LiveQuote } from "./chain";
 import { decodePayment, encodeHeader, requirements, USDC, verifyPayment, type Authorization, type PaymentPayload, type PaymentRequirements } from "./x402";
 
 export type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string): Promise<void> };
@@ -12,6 +12,7 @@ export type Deps = {
   readQuote(tokenIn: Address, amountIn: bigint): Promise<LiveQuote | null>;
   settle(p: PaymentPayload, req: PaymentRequirements): Promise<Hex>;
   confirm(tx: Hex, a: Authorization): Promise<{ block: bigint }>;
+  health(): Promise<Health>;
 };
 
 export type Stats = { paidQuotes: number; revenueAtomic: string; payers: Address[]; lastSettlementTx: Hex | null };
@@ -28,6 +29,7 @@ export const liveDeps = (env: Env): Deps => ({
   readQuote: (t, amt) => readQuote(env, t, amt, Math.floor(Date.now() / 1000)),
   settle: (p, r) => settle(env, p, r),
   confirm: (tx, a) => confirm(env, tx, a),
+  health: () => readHealth(env, Math.floor(Date.now() / 1000)),
 });
 
 async function readStats(kv: Kv): Promise<Stats> {
@@ -43,7 +45,14 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
     const s = await readStats(env.QUOTES_KV);
     return json({ paidQuotes: s.paidQuotes, revenueUsdc: formatUnits(BigInt(s.revenueAtomic), 6), distinctPayers: s.payers.length, lastSettlementTx: s.lastSettlementTx });
   }
-  if (url.pathname !== "/v1/quote") return json({ error: "not found", routes: ["/v1/quote?tokenIn=USDC|W0G&amountIn=<atomic>", "/v1/stats"] }, 404);
+  if (url.pathname === "/v1/health") {
+    try {
+      return json(await deps.health());
+    } catch (e) {
+      return json({ error: `board read failed: ${msg(e)}` }, 502);
+    }
+  }
+  if (url.pathname !== "/v1/quote") return json({ error: "not found", routes: ["/v1/quote?tokenIn=USDC|W0G&amountIn=<atomic>", "/v1/stats", "/v1/health"] }, 404);
 
   const tokenIn = TOKENS[(url.searchParams.get("tokenIn") ?? "").toUpperCase()];
   const raw = url.searchParams.get("amountIn") ?? "";

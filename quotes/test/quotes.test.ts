@@ -15,12 +15,15 @@ const memKv = () => {
   return { m, kv: { get: async (k: string) => (m.has(k) ? JSON.parse(m.get(k)!) : null), put: async (k: string, v: string) => void m.set(k, v) } as Kv };
 };
 
+// Shaped like board v2 getQuote(maker, USDC, W0G) read on Base: a 0.05 USDC maxAmountIn caps a 1 USDC ask.
 const fakeQuote: LiveQuote = {
-  board: "0x309933CE439Da6A059593d73B8c82E8C8447C3F8", maker: MAKER, tokenIn: USDC, tokenOut: "0x23cd099eB438CcA50349EE2BC809196b1ae00861",
-  rateE18: "6785728668511460271604626195821", expiry: String(NOW + 900), nonce: "8", inferenceId: "0xdd361a64c797711d40620a8d6fb32410539766f1cfc40613b039646bfe956bfa",
-  requestId: "65073141-8324-44a8-b819-c0f421c55ff8", postedTx: null, amountIn: "1000000", routerAmountOut: "6765371482505926889", strategyDepthOut: "2000000000000000000",
-  amountOut: "2000000000000000000", orderHash: "0xf2513850c1981305143c9655af1305ff35ed5ef52f0bd5d8588f3a8f02ac7f5e", readAtBlock: "1",
+  board: "0x0d87944FFFf253dBbbD07750AceE7898333218A5", maker: MAKER, tokenIn: USDC, tokenOut: "0x23cd099eB438CcA50349EE2BC809196b1ae00861",
+  rateE18: "6807967956184384449584994189312", maxAmountIn: "50000", expiry: String(NOW + 900), epoch: "1", nonce: "4", inferenceId: "0x9c5a450196e948ff620976ea6ab0b0b84f6eae2c208730650b1887a2e397efea",
+  requestId: "65073141-8324-44a8-b819-c0f421c55ff8", postedTx: null, requestedAmountIn: "1000000", amountIn: "50000", depthLimited: true,
+  routerAmountOut: "339377185606790812", strategyDepthOut: "1357492788767429240", amountOut: "339377185606790812",
+  orderHash: "0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc035", readAtBlock: "1",
 };
+const fakeHealth = { board: fakeQuote.board, orderHash: fakeQuote.orderHash, quoteFresh: true, expiry: fakeQuote.expiry, readAtBlock: "1" };
 
 // The chain stand-in: USDC's authorizationState flips only when a settlement lands, as on Base.
 let used: Set<string>;
@@ -32,6 +35,7 @@ const deps: Deps = {
   readQuote: async () => fakeQuote,
   settle: async (p) => { settles++; return toHex(settles, { size: 32 }); },
   confirm: async (_tx, a) => { if (confirmFails) throw new Error("settlement_reverted"); used.add(`${getAddress(a.from)}:${a.nonce}`); return { block: 42n }; },
+  health: async () => fakeHealth,
 };
 
 let env: Env;
@@ -123,6 +127,18 @@ describe("paid request", () => {
     const res = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": header } }), env, { ...deps, readQuote: async () => null });
     expect(res.status).toBe(503);
     expect(settles).toBe(0);
+  });
+});
+
+describe("health", () => {
+  test("answers the board, order hash and freshness without payment", async () => {
+    const res = await call(undefined, "https://wick-quotes.test/v1/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(fakeHealth);
+  });
+  test("a failed board read is a 502", async () => {
+    const res = await handle(new Request("https://wick-quotes.test/v1/health"), env, { ...deps, health: async () => { throw new Error("rpc down"); } });
+    expect(res.status).toBe(502);
   });
 });
 

@@ -1,0 +1,108 @@
+{
+  "source": "contracts/out/AgentQuoteBoardV2.sol/AgentQuoteBoardV2.json (forge build of contracts/src/AgentQuoteBoardV2.sol)",
+  "abi": [
+    {
+      "type": "function",
+      "name": "MAX_TTL",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getQuote",
+      "inputs": [
+        {
+          "name": "maker",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "tokenIn",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "tokenOut",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "internalType": "struct AgentQuoteBoardV2.Posted",
+          "components": [
+            {
+              "name": "rateE18",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "maxAmountIn",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "expiry",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "epoch",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "nonce",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "inferenceId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isQuoteCurrent",
+      "inputs": [
+        {
+          "name": "maker",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "tokenIn",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "tokenOut",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    }
+  ]
+}

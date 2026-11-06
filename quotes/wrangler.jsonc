@@ -16,8 +16,8 @@
   },
   "vars": {
     "BASE_RPC_URL": "https://base-rpc.publicnode.com",
-    // The backend lane may move the board to a v2 address; change it here, nothing else reads it.
-    "BOARD_ADDRESS": "0x309933CE439Da6A059593d73B8c82E8C8447C3F8",
+    // AgentQuoteBoardV2; must match board in web/worker/live-order-v2.json (test/board.test.ts fails otherwise).
+    "BOARD_ADDRESS": "0x0d87944FFFf253dBbbD07750AceE7898333218A5",
     "MAKER": "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953",
     "PRICE_ATOMIC": "10000",
     "SETTLE_MODE": "facilitator",
