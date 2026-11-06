@@ -79,6 +79,7 @@ export async function renderCard(): Promise<ImageResponse> {
   const fuel = status ? fmt0g(toNumber(status.budget.computeBalanceWei, "0G")) : null;
   const preset = status ? toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC") : 0.1;
   const perSwap = status?.strategy ? decisionsFor((preset * status.strategy.feeBps) / 10_000, status) : null;
+  const perUsdc = status?.strategy ? decisionsFor(status.strategy.feeBps / 10_000, status) : null;
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: C.paper, color: C.ink, padding: "56px 64px", fontFamily: display ? "Barlow Condensed" : "sans-serif" }}>
@@ -93,7 +94,7 @@ export async function renderCard(): Promise<ImageResponse> {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", fontSize: 96, lineHeight: 0.95, textTransform: "uppercase" }}>The market maker that pays for its own brain</div>
-          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One ${fmtUsdc(preset)} USDC swap pays for ${fmtDecisions(perSwap)} of its AI decisions`}</div> : null}
+          {perUsdc !== null && perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`Every 1 USDC traded pays for ${fmtDecisions(perUsdc)} of its AI decisions`}</div> : null}
         </div>
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />

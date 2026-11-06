@@ -79,7 +79,7 @@ function StatusStrip() {
           ) : <span aria-hidden className="skeleton h-3.5 w-24" />}
           {ready && s ? <span className="num whitespace-nowrap text-muted lg:hidden">next {clock(nextTickIn(now))}</span> : null}
           {tick && ready ? (
-            <span className={cn("hidden min-w-0 truncate lg:inline", tick.failed ? "text-warn-ink" : "text-muted")}>
+            <span className={cn("hidden min-w-0 truncate lg:inline", tick.failStreak >= 2 || leg?.open ? "text-warn-ink" : "text-muted")}>
               last tick {duration(Math.max(0, now * 1000 - tick.at))} ago, {tick.words}, next in {clock(nextTickIn(now))}
             </span>
           ) : null}

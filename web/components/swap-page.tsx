@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePostedAt } from "@/hooks/use-posted-at";
 import { Machine } from "@/components/machine";
 import { SwapTicket } from "@/components/swap-ticket";
 import { CopyLink } from "@/components/copy-link";
@@ -87,7 +88,7 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
         </dl>
       </div>
 
-      <WaysIn />
+      <WaysIn nowMs={nowMs} />
 
       <div className="border-t border-rule pt-6">
         <p className="label">Takers</p>
@@ -118,16 +119,19 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
 }
 
 /** The other ways money reaches the agent: a Uniswap v4 pool that routes into the strategy, and signed prices sold to other agents. */
-function WaysIn() {
+function WaysIn({ nowMs }: { nowMs: number }) {
   const q = useQuoteStats();
   const d = q.data;
+  const hookAt = usePostedAt(V4_HOOK.poolInitTx);
+  const cmd = `curl "${QUOTES_API}/v1/quote?tokenIn=${USDC}&amountIn=50000"`;
+  const [copied, setCopied] = useState(false);
   return (
     <div className="border-t border-rule pt-6">
       <p className="label">Two more ways in</p>
       <ul className="mt-3 space-y-4 text-[15px] text-ink-2">
         <li>
           <p className="flex items-center gap-2 font-medium text-ink"><ProtocolIcon protocol="uniswap" size={16} />Uniswap v4 pool</p>
-          <p className="mt-1">A hook on a v4 pool routes its swaps to the same signed price, so any Uniswap router can fill against Wick.</p>
+          <p className="mt-1">A hook on a v4 pool routes its swaps to the same signed price, so any Uniswap router can fill against Wick.{hookAt ? <span className="num text-muted"> Opened {relativeTime(hookAt * 1000, nowMs)}.</span> : null}</p>
           <CopyLink value={V4_HOOK.address} href={EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address)} label="Uniswap v4 hook" className="mt-1" />
         </li>
         <li>
@@ -137,7 +141,10 @@ function WaysIn() {
           ) : (
             <p className="mt-1">Any agent can buy the current signed price for 0.01 USDC over x402:</p>
           )}
-          <code className="mt-2 block overflow-x-auto whitespace-nowrap rounded-control bg-panel px-3 py-2 text-[13px] text-ink">curl &quot;{QUOTES_API}/v1/quote?tokenIn={USDC}&amp;amountIn=50000&quot;</code>
+          <div className="mt-2 flex items-stretch overflow-hidden rounded-control bg-panel">
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2 text-[13px] text-ink [mask-image:linear-gradient(to_right,black_85%,transparent)]">{cmd}</code>
+            <button type="button" onClick={() => void navigator.clipboard.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); })} className="shrink-0 border-l border-rule px-3 text-[13px] font-medium text-ink transition-colors duration-150 hover:bg-sunken" aria-label="Copy the curl command">{copied ? "Copied" : "Copy"}</button>
+          </div>
         </li>
       </ul>
     </div>

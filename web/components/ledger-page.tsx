@@ -104,7 +104,7 @@ function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[
       <Chronogram status={status} fills={fills} nowMs={nowMs} />
       <ul className="mt-8 flex flex-wrap gap-2 text-[13px]" aria-label="Agent budget">
         <li className={cn("inline-flex items-center gap-2 rounded-control bg-paper px-3 py-1.5 font-semibold text-ink", `tone-${meta.tone}`)}><span className="size-2 rounded-full bg-[var(--tone)]" aria-hidden />{meta.label} tier</li>
-        {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">{tierModel && tierModel !== lastModel ? `tier asks for ${tierModel}, router served ${lastModel}` : `model ${lastModel}`}</li> : null}
+        {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2" title={tierModel && tierModel !== lastModel ? `The ${status.budget.tier.toLowerCase()} tier asks for ${tierModel}` : undefined}>{tierModel && tierModel !== lastModel ? `router served ${lastModel}` : `model ${lastModel}`}</li> : null}
         <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
         <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">{fmtPct(BigInt(status.budget.spendCapPerDayWei) > 0n ? (Number(status.budget.spentTodayWei) / Number(status.budget.spendCapPerDayWei)) * 100 : 0)} of the daily cap used</li>
       </ul>
@@ -443,7 +443,7 @@ function PaidQuoteRow({ nowMs }: { nowMs: number }) {
     <ul className="mt-3 overflow-hidden rounded-card bg-panel">
       <EvidenceRow
         title="Paid quote feed"
-        plain={d.paidQuotes > 0 ? <>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402: {d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</> : <>Any agent can buy the current signed <Tk>W0G</Tk> price for 0.01 USDC over x402 at <code className="text-ink">{QUOTES_API.replace("https://", "")}/v1/quote</code>.</>}
+        plain={d.paidQuotes > 0 ? <>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402: {d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</> : <>Any agent can buy the current signed <Tk>W0G</Tk> price for 0.01 USDC over x402 at <code className="inline-block max-w-full truncate whitespace-nowrap align-bottom text-ink">{QUOTES_API.replace("https://", "")}/v1/quote</code>.</>}
         amount={d.paidQuotes > 0 ? <Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} /> : null}
         hash={d.lastSettlementTx ?? undefined}
         hashLabel="latest settlement"

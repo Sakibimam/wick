@@ -15,7 +15,7 @@ import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, EXPLORERS, QUOTES_API, V4_HOOK, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
 import { useQuoteStats } from "@/hooks/use-quote-stats";
-import { decisionCostUsd, decisionsFor, economicsOf, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { decisionCostUsd, decisionsFor, economicsOf, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { clock, countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
@@ -68,7 +68,7 @@ export function Machine(props: MachineProps) {
       <div className="mx-auto max-w-[1312px] px-4 sm:px-6 lg:px-12">
         <div
           ref={rootRef}
-          className="relative flex flex-col gap-9 pb-12 pt-8 lg:grid lg:min-h-[min(calc(100dvh-100px),880px)] lg:grid-cols-4 lg:grid-rows-[auto_minmax(0,1fr)_auto_auto] lg:gap-x-8 lg:gap-y-0 lg:pb-10 lg:pt-8 lg:[grid-template-areas:'pool_fees_swap_bridge'_'price_infield_infield_infield'_'price_._._withdraw'_'brain_vault_vault_deposit']"
+          className="relative flex flex-col gap-9 pb-12 pt-8 lg:grid lg:min-h-[min(calc(100dvh-100px),880px)] lg:grid-cols-4 lg:grid-rows-[auto_minmax(0,1fr)_auto_auto] lg:gap-x-8 lg:gap-y-0 lg:pb-10 lg:pt-6 lg:[grid-template-areas:'pool_fees_swap_bridge'_'price_infield_infield_infield'_'price_._._withdraw'_'brain_vault_vault_deposit']"
         >
           {segs.length > 0 ? <Circuit segs={segs} reduce={reduce} view={view!} now={now} ttl={status?.quoteTtlSeconds ?? 3600} /> : null}
 
@@ -254,7 +254,7 @@ function Pulses({ route, count, delay, dwell }: { route: Pt[]; count: number; de
 function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowReady }: { status: AgentStatus | undefined; econ: Economics | null; fills: Fill[] | null; loading: boolean; error: Error | null; onRetry: () => void; view: View | null; now: number; nowReady: boolean }) {
   const tone = status ? TIER_TONE[status.budget.tier] : "quiet";
   return (
-    <div className="relative z-10 flex flex-col justify-center lg:py-8 lg:pl-10 lg:pr-12 lg:[grid-area:infield]">
+    <div className="relative z-10 flex flex-col justify-center lg:py-5 lg:pl-10 lg:pr-12 lg:[grid-area:infield]">
       <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)] xl:gap-12">
         <div>
           <h1 id="machine-title" className="max-w-[18ch] text-[40px] sm:text-[48px]">Wick pays for its own brain</h1>
@@ -266,7 +266,7 @@ function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowR
               <div aria-hidden className="space-y-3"><div className="skeleton h-[88px] w-[5ch] text-[96px]" /><div className="skeleton h-5 w-72 max-w-full" /></div>
             ) : null}
           </div>
-          <div className="mt-5 min-h-[24px]" aria-live="polite">
+          <div className={cn("mt-5", view?.leg.open && status ? "hidden" : "min-h-[24px]")} aria-live="polite">
             {error && !status ? (
               <div role="alert" className="flex flex-wrap items-center gap-3">
                 <p className="text-[16px] text-danger-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent's status route is not answering, so the machine cannot be read right now." : `The status could not be read: ${error.message}`}</p>
@@ -307,11 +307,12 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
   const presetUsdc = toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC");
   const swapFee = status.strategy ? (presetUsdc * status.strategy.feeBps) / 10_000 : null;
   const perSwap = swapFee !== null ? decisionsFor(swapFee, status) : null;
+  const perUsdc = status.strategy ? decisionsFor(status.strategy.feeBps / 10_000, status) : null;
   const decisionUsd = decisionCostUsd(status);
   const lead = econ.coverage !== null && takers && takers.outside > 0
     ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
-    : perSwap !== null
-      ? { value: fmtDecisions(perSwap), label: <>AI decisions paid for by one {fmtUsdc(presetUsdc)} USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd(swapFee!)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
+    : perUsdc !== null && perSwap !== null
+      ? { value: fmtDecisions(perUsdc), label: <>AI decisions paid for by every 1 USDC traded</>, detail: <>one {fmtUsdc(presetUsdc)} USDC swap pays for {fmtDecisions(perSwap)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
       : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
   return (
     <div>
@@ -502,6 +503,7 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
 
 /** Fees earned set against AI spent, and how close they are to the threshold that starts the next funding run. */
 function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics }) {
+  const toCover = fillsToCover(econ, status, toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC"));
   const cover = econ.coverage;
   const threshold = econ.fundingThresholdUsdc;
   const toThreshold = threshold ? Math.min(1, econ.feesEarnedUsdc / threshold) : null;
@@ -510,7 +512,7 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
       <Value><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" /></Value>
       <div className="mt-3 max-w-[240px] space-y-3">
         {cover !== null ? (
-          <p className="num text-[13px] text-ink-2">Fees vs AI spent <span className={cover >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(cover * 100)}</span> of {fmtUsd(econ.aiSpentUsd)}</p>
+          <p className="num text-[13px] text-ink-2">Fees vs AI spent <span className={cover >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(cover * 100)}</span> ({fmtUsd(econ.feesEarnedUsdc)} / {fmtUsd(econ.aiSpentUsd)}){toCover ? `, ${toCover} more ${toCover === 1 ? "fill covers" : "fills cover"} it` : ""}</p>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
       </div>
@@ -585,7 +587,10 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
 /** Drag a hypothetical fuel level and read what the agent's own budget lines would do with it. */
 function WhatIf({ balanceWei }: { balanceWei: bigint }) {
   const start = Math.round(gaugePosition(balanceWei) * 300);
-  const [step, setStep] = useState(start);
+  // Follows the real balance until the reader moves it; only then is it a hypothetical.
+  const [picked, setPicked] = useState<number | null>(null);
+  const step = picked ?? start;
+  const setStep = (n: number) => setPicked(n === start ? null : n);
   const wei = BigInt(Math.round(10 ** (-2 + (3 * step) / 300) * 1e18));
   const tier = tierForBalance(wei);
   const model = MODELS[tier];
@@ -601,7 +606,7 @@ function WhatIf({ balanceWei }: { balanceWei: bigint }) {
         <span className="font-semibold text-[var(--tone)]">{tierWord(tier)}</span>
         {model ? <>, its tier model is <span className="num text-ink">{model}</span></> : ", no new AI runs"}
 .
-        {step !== start ? <button type="button" onClick={() => setStep(start)} className="ml-2 text-muted underline underline-offset-4 hover:text-ink">Back to the real balance</button> : null}
+        {picked !== null ? <button type="button" onClick={() => setPicked(null)} className="ml-2 text-muted underline underline-offset-4 hover:text-ink">Back to the real balance</button> : null}
       </p>
     </div>
   );
