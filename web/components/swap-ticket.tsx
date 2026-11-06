@@ -107,8 +107,12 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
     if (direction !== "buy-w0g") setDirection("buy-w0g");
     fill(presetUnits, 6);
   };
-  const failure = flow.problem ? failureCopy(flow.problem.kind, sell, flow.problem.detail) : null;
-  const staleCopy = quoteState === "stale" && quoteKind && quoteKind !== "other" ? failureCopy(quoteKind, sell) : null;
+  const failureCaps = {
+    perSwap: price?.quote.maxAmountIn ? `${fmtUnits(BigInt(price.quote.maxAmountIn), sell)} ${sell}` : null,
+    depth: status?.strategy ? `${fmtUnits(BigInt(buy === "W0G" ? status.strategy.w0g : status.strategy.usdc), buy)} ${buy}` : null,
+  };
+  const failure = flow.problem ? failureCopy(flow.problem.kind, sell, flow.problem.detail, failureCaps) : null;
+  const staleCopy = quoteState === "stale" && quoteKind && quoteKind !== "other" ? failureCopy(quoteKind, sell, undefined, failureCaps) : null;
   const sellUsd = amount ? usd(amount, sell) : null;
   const buyUsd = amountOut !== null ? usd(amountOut, buy) : null;
   const fee = status?.strategy ? status.strategy.feeBps / 100 : null;
