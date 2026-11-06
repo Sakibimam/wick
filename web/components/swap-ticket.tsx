@@ -15,8 +15,9 @@ import { useSwapFlow } from "@/hooks/use-swap";
 import { AgentError, fetchRouterQuote } from "@/lib/agent-api";
 import { erc20Abi } from "@/lib/abis";
 import { parseTyped } from "@/lib/amounts";
-import { AQUA_ROUTER, BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
+import { BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
 import { ctaFor } from "@/lib/cta";
+import { effectiveAllowance, PERMIT2, permit2Abi, UNIVERSAL_ROUTER } from "@/lib/v4";
 import { decisionCostUsd, feeFromAmount, fillCap, fmtDecisions, presetUsdcUnits } from "@/lib/economics";
 import { fmtPrice, fmtUnits, fmtUsd, significant, toNumber } from "@/lib/format";
 import { freshness, secondsLeft, type Direction, type Priced } from "@/lib/quotes";
@@ -56,7 +57,9 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
 
   const onBase = isConnected && chainId === BASE_CHAIN_ID;
   const balance = useReadContract({ address: sellTok.address, abi: erc20Abi, functionName: "balanceOf", args: address ? [address] : undefined, chainId: base.id, query: { enabled: Boolean(address) && onBase, refetchInterval: 15_000 } });
-  const allowance = useReadContract({ address: sellTok.address, abi: erc20Abi, functionName: "allowance", args: address ? [address, AQUA_ROUTER] : undefined, chainId: base.id, query: { enabled: Boolean(address) && onBase, refetchInterval: 15_000 } });
+  const erc20Allowance = useReadContract({ address: sellTok.address, abi: erc20Abi, functionName: "allowance", args: address ? [address, PERMIT2] : undefined, chainId: base.id, query: { enabled: Boolean(address) && onBase, refetchInterval: 15_000 } });
+  const permit2Allowance = useReadContract({ address: PERMIT2, abi: permit2Abi, functionName: "allowance", args: address ? [address, sellTok.address, UNIVERSAL_ROUTER] : undefined, chainId: base.id, query: { enabled: Boolean(address) && onBase, refetchInterval: 15_000 } });
+  const allowance = erc20Allowance.data !== undefined && permit2Allowance.data !== undefined ? effectiveAllowance(erc20Allowance.data, permit2Allowance.data, now) : undefined;
 
   // No wallet needed: the router quote is a public read, so anyone can price any amount.
   const quoteEnabled = Boolean(status && price && debouncedAmount !== null && !expired);
@@ -75,10 +78,10 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
   const maxIn = cap?.units ?? null;
   const overDepth = amount !== null && maxIn !== null && amount > maxIn;
 
-  const refreshChain = () => { void balance.refetch(); void allowance.refetch(); void queryClient.invalidateQueries({ queryKey: ["fills"] }); void queryClient.invalidateQueries({ queryKey: ["agent-status"] }); };
-  const flow = useSwapFlow({ account: address, order: status?.order, tokenIn: sell, tokenOut: buy, amount, quoteExpired: () => expired, onSettled: refreshChain });
+  const refreshChain = () => { void balance.refetch(); void erc20Allowance.refetch(); void permit2Allowance.refetch(); void queryClient.invalidateQueries({ queryKey: ["fills"] }); void queryClient.invalidateQueries({ queryKey: ["agent-status"] }); };
+  const flow = useSwapFlow({ account: address, tokenIn: sell, tokenOut: buy, amount, quoteExpired: () => expired, onSettled: refreshChain });
 
-  const cta = ctaFor({ connected: isConnected, chainId, baseChainId: BASE_CHAIN_ID, hasPrice: Boolean(price), priceExpired: expired, amount, balance: balance.data, quote: quoteState, allowance: allowance.data, phase: flow.phase, sellSymbol: sell, maxIn });
+  const cta = ctaFor({ connected: isConnected, chainId, baseChainId: BASE_CHAIN_ID, hasPrice: Boolean(price), priceExpired: expired, amount, balance: balance.data, quote: quoteState, allowance, phase: flow.phase, sellSymbol: sell, maxIn });
   const amountOut = quoteState === "ready" && quote.data ? BigInt(quote.data.amountOut) : null;
   // The router clamps an oversized amount to what it can fill; its price is that pair, never the typed amount over the clamped output.
   const quotedIn = quoteState === "ready" && quote.data ? BigInt(quote.data.amountIn) : null;
