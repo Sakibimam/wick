@@ -39,7 +39,7 @@ contract AgentQuoteTest is Test {
     ISwapVM private routerView;
 
     function setUp() public {
-        vm.createSelectFork(vm.envOr("ETH_RPC_URL", string("https://ethereum-rpc.publicnode.com")));
+        vm.createSelectFork(vm.envOr("ETH_RPC_URL", string("https://eth.drpc.org")), 26_354_000);
         maker = vm.addr(MAKER_KEY);
         agent = vm.addr(AGENT_KEY);
         taker = vm.addr(TAKER_KEY);

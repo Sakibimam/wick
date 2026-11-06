@@ -83,7 +83,7 @@ contract BaseW0GTest is Test {
     ISwapVM.Order private order;
 
     function setUp() public {
-        vm.createSelectFork(vm.envOr("BASE_RPC_URL", string("https://base-rpc.publicnode.com")));
+        vm.createSelectFork(vm.envOr("BASE_RPC_URL", string("https://base-rpc.publicnode.com")), 53_794_900);
 
         maker = vm.addr(MAKER_KEY);
         agent = vm.addr(AGENT_KEY);
