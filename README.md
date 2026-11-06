@@ -4,7 +4,7 @@
 
 An AI agent that trades stops when its compute bill goes unpaid. One builder running a live trading agent put it plainly: ["the host running my enclave ran out of credits and the agent flatlined for 3 days in the middle of the league."](https://x.com/Big14teru/status/2082055357388525631) ([@Big14teru](https://x.com/Big14teru), 2026-07-28)
 
-Wick is a trading agent that pays its own AI bill. It runs a 1inch Aqua market-making strategy on Base whose every fill pays a 30 bps fee, and those fees refill the 0G Private Computer account that prices its next quote. The vault was seeded once through the agent's own funding rail; once seeded, its trades are what refill it. The live app computes how many AI decisions one dollar of trading pays for from the last 0G-billed run: at the last run's cost on 2026-11-06 that is about 8 per 10 cents traded (a 0.0003 USDC fee against $0.000038 per run, [docs/ECONOMICS.md](docs/ECONOMICS.md)).
+Wick is a trading agent that pays its own AI bill. It runs a 1inch Aqua market-making strategy on Base whose every fill pays a 30 bps fee, and those fees refill the 0G Private Computer account that prices its next quote. The vault was seeded once through the agent's own funding rail; from then on only fees refill it, bridged by the cron once they are worth three times the live bridge cost. The live app computes how many AI decisions one dollar of trading pays for from the last 0G-billed run: at the last run's cost on 2026-11-06 that is about 8 per 10 cents traded (a 0.0003 USDC fee against $0.000038 per run, [docs/ECONOMICS.md](docs/ECONOMICS.md)).
 
 Architecture, threat model and every parameter's source: [ARCHITECTURE.md](ARCHITECTURE.md) and the interactive diagram [docs/ARCHITECTURE.html](docs/ARCHITECTURE.html).
 

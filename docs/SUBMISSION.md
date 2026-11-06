@@ -1,6 +1,6 @@
 # Wick
 
-> **Operator fill before submitting.** Team: [team]
+**Team.** Sakib Imam (solo)
 
 **One line.** Wick is a trading agent that pays its own AI bill: a 1inch Aqua market maker whose swap fees fund the 0G inference that sets its prices.
 
@@ -190,7 +190,19 @@ Full threat model and parameter table: [ARCHITECTURE.md](../ARCHITECTURE.md#thre
 
 ## Continuity disclosure
 
-Wick is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window opened at 2026-11-05 15:30 UTC (21:00 IST). The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history.
+Wick is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window opened at 2026-11-05 15:30 UTC (21:00 IST). The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history. The last commit before the window is [`40fa97b`](https://github.com/Sakibimam/wick/commit/40fa97b).
+
+### Before and during
+
+| At kickoff (`40fa97b`) | Built inside the window |
+| --- | --- |
+| v1 board and extruction: one signed quote per direction, freshness, agent rotation | v2 board and extruction: both directions from one signature, epochs that retire every live quote, the 600 s TWAP band checked on every fill, `maxAmountIn` |
+| Agent run by hand from local scripts | The agent as a Cloudflare Workers cron every 5 minutes, with RPC fallback, KV state and a gas floor |
+| One live loop on Base: ship, one 0G-priced quote, one fill | The model picks bid and ask half-spreads; guards refuse an answer that leans against inventory and re-post the last valid decision; the TEE verdict and provider are bound into every pair's `inferenceId` |
+| Funding rail run once by the agent's wallet: LI.FI gas, CCIP, `withdraw`, `depositFor` | The same rail as a resumable funding machine inside the cron, firing at 3 times its own live cost, plus Base gas top-up and fee harvest |
+| First web app | Uniswap v4 `AquaAggregatorHook`, live on Base with its v4 pool |
+| | `wick-quotes`: signed prices sold to other agents over x402 |
+| | Brain ledger, `/api/status` with stale-safe fallback, and the sponsor deck |
 
 ### Changelog
 
