@@ -55,12 +55,12 @@ cast keccak "5319a0b6-562e-4bbe-a141-dfb94fc20aaa0x833589fCD6eDb6E08f4c7C32D4f71
 
 ## 0G: Agents That Pay for Themselves
 
-Upkeep earns the way the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity. Every fill pays the strategy fee, the runtime accrues the agent's share from SwapVM `Swapped` events (`agent/src/runtime.ts:46`), and the funding leg moves value into the agent's 0G compute vault with no human step.
+Upkeep earns the way the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity. Every fill pays the strategy fee, the runtime accrues the agent's share from SwapVM `Swapped` events (`agent/src/runtime.ts:48`), and the funding leg moves value into the agent's 0G compute vault with no human step.
 
 > The full loop: money in, credit landing in the agent's 0G compute account, and inference paid from that balance, with tx hashes and request IDs
 
-- Money in: the fill [`0x62f874c5…81a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1) pays the 30 bps strategy fee; fee accrual at `agent/src/runtime.ts:46`.
-- Credit landing: the funding leg built at `agent/src/funding.ts:29-34` and driven at `agent/src/runtime.ts:64`, live on mainnet as [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d) and [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68). `Deposited.user` is the agent; vault credit moves 0 to 2.844 0G.
+- Money in: the fill [`0x62f874c5…81a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1) pays the 30 bps strategy fee; fee accrual at `agent/src/runtime.ts:48`.
+- Credit landing: the funding leg built at `agent/src/funding.ts:29-34` and driven at `agent/src/runtime.ts:66`, live on mainnet as [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d) and [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68). `Deposited.user` is the agent; vault credit moves 0 to 2.844 0G.
 - Inference paid from that balance: router request `798fb102-9f06-4bc5-9ec2-1dde3b716628` bills `"currency":"0g"`, and `balanceOf(agent)` on the Payment Layer moves 2.844 to 2.344 0G:
 
 ```sh
@@ -70,12 +70,12 @@ cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256
 
 > The agent running on its own during the demo with no manual top-up
 
-- One Bun process on a 15 second tick (`agent/src/runtime.ts:167`). Each tick reads the Uniswap mid and the vault balance, accrues fills, runs the budget policy, requotes when the policy calls for it, and starts the funding leg when accrued fees reach `FUNDING_THRESHOLD_USDC` (`agent/src/runtime.ts:66`).
-- Funding state persists after every step; a sent CCIP message is saved as `pendingFunding` (`agent/src/runtime.ts:32`), so a restart resumes the 0G side of the funding leg.
+- One Bun process on a 15 second tick (`agent/src/runtime.ts:161`). Each tick reads the Uniswap mid and the vault balance, accrues fills, runs the budget policy, requotes when the policy calls for it, and starts the funding leg when accrued fees reach `FUNDING_THRESHOLD_USDC` (`agent/src/runtime.ts:68`).
+- Funding state persists after every step; a sent CCIP message is saved as `pendingFunding` (`agent/src/runtime.ts:34`), so a restart resumes the 0G side of the funding leg.
 
 > A spend cap, and what the agent does when funds run low (it should degrade gracefully, not crash)
 
-- Spend cap: `SPEND_CAP_PER_DAY_WEI` (`agent/src/runtime.ts:135`). Spend is measured from the onchain vault balance (`agent/src/runtime.ts:126-129`), so the cap counts what the router actually drew.
+- Spend cap: `SPEND_CAP_PER_DAY_WEI` (`agent/src/runtime.ts:132`). Spend is measured from the onchain vault balance (`agent/src/runtime.ts:123-126`), so the cap counts what the router actually drew.
 - Degradation, a pure policy in `agent/src/budget.ts:14-17`:
 
 | Tier | Trigger | Behaviour |
@@ -93,7 +93,7 @@ Measured unit economics: `enable_thinking: false` takes one pricing decision fro
 
 > Inference on 0G Private Computer in your main user flow, with request IDs
 
-- Every price the runtime signs comes from a 0G Private Computer call (`agent/src/brain.ts:21`). The router request id is required (`agent/src/brain.ts:26-27`) and hashed into the onchain quote as `keccak256(requestId ‖ tokenIn ‖ tokenOut)` (`agent/src/runtime.ts:151`).
+- Every price the runtime signs comes from a 0G Private Computer call (`agent/src/brain.ts:21`). The router request id is required (`agent/src/brain.ts:26-27`) and hashed into the onchain quote as `keccak256(requestId ‖ tokenIn ‖ tokenOut)` (`agent/src/runtime.ts:148`).
 - The swap page shows the 0G request id beside the price the taker is about to fill (`web/components/backing-panel.tsx:51`). Live: request `5319a0b6-562e-4bbe-a141-dfb94fc20aaa`, onchain `inferenceId 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7` in quote tx [`0x7b2433ba…daec`](https://basescan.org/tx/0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec).
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
