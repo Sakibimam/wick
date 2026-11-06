@@ -17,7 +17,7 @@ export function OutcomeChip({ o, className }: { o: Outcome; className?: string }
 }
 
 /** What a run decided and what it is bound to on chain, each fact only when the agent reported it. */
-export function DecisionFacts({ raw, className, withModel }: { raw: Inference; className?: string; withModel?: boolean }) {
+export function DecisionFacts({ raw, className, withModel }: { raw: Inference & { providerIdentity?: string | null }; className?: string; withModel?: boolean }) {
   const facts: [string, ReactNode][] = [];
   const sides = sidesOf(raw);
   if (sides) facts.push(["Bid / ask from TWAP", `${sides.bid} / ${sides.ask} bps`]);
@@ -28,6 +28,7 @@ export function DecisionFacts({ raw, className, withModel }: { raw: Inference; c
   if (withModel && raw.model) facts.push(["Model", raw.model]);
   facts.push(["TEE verdict", raw.teeVerified === true ? "true, bound into inferenceId" : `${raw.teeVerified === false ? "false" : "null"}, bound as the router returned it`]);
   if (raw.provider) facts.push(["Provider", shortHash(raw.provider)]);
+  if (typeof raw.providerIdentity === "string" && raw.providerIdentity.length > 0) facts.push(["Provider identity", raw.providerIdentity]);
   if (raw.inferenceId) facts.push(["inferenceId", <CopyLink key="i" value={raw.inferenceId} label="inferenceId" />]);
   return (
     <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13px]", className)}>
