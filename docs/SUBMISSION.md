@@ -29,6 +29,7 @@ Agent, maker and deployer: [`0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953`](https:
 | Aqua (1inch, pinned) | Base | [`0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a`](https://basescan.org/address/0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a) |
 | AquaSwapVMRouter v1.0.2 (1inch, pinned) | Base | [`0x111111338c5091E8440b67B168bAe16a668AC0De`](https://basescan.org/address/0x111111338c5091E8440b67B168bAe16a668AC0De) |
 | Uniswap v3 W0G/USDC 0.3% | Base | [`0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e`](https://basescan.org/address/0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e) |
+| AquaAggregatorHook (Uniswap v4) | Base | [`0x1A35d13AE02a834E9b35A98cA1b9C87b30d72888`](https://basescan.org/address/0x1A35d13AE02a834E9b35A98cA1b9C87b30d72888), deploy [`0xa72b0d60…2427`](https://basescan.org/tx/0xa72b0d60b59900f8b89ca96c3c6612a18a04750e16c606fc1a0e68d6bbfb2427) |
 | Uniswap v4 PoolManager | Base | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
 | 0G Payment Layer | 0G chain | `0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32` |
 
@@ -53,6 +54,8 @@ Live v2 Aqua strategy `0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0
 | 13 | The Worker cron keeps pricing on 0G-billed runs: 0.000243, 0.000281 and 0.000272 0G, each posting both directions | requests `286d605d-7b73-4b09-882c-6605e2bcf64e`, `1002ff0b-2daf-48ae-b697-daa672d2dd47`, `65073141-8324-44a8-b819-c0f421c55ff8`; posts [`0x836477f5…c602`](https://basescan.org/tx/0x836477f516deadb72ad5d03b3bdc8722cf4d9aa2ad6c6360c4b2e54d4c57c602), [`0x5dff60e6…cc23`](https://basescan.org/tx/0x5dff60e69f27d1559d39930f15128f8cd16295597eeceac7502e9b8729adcc23) |
 | 14 | v2 cutover: dock v1, ship v2 with the TWAP band program, register the agent at epoch 1, grow the pool's oracle history | dock [`0x5585112e…e593`](https://basescan.org/tx/0x5585112eb78a2af2c8e89785c4709c63a83ca2b82638258b636f5a93f2f3e593), ship [`0x20822085…0ba7`](https://basescan.org/tx/0x20822085a78bc7c75e3123d2c95776d00b96632b625850452cd4de4be51f0ba7), `setAgent` [`0xbcf1a5a6…d75e`](https://basescan.org/tx/0xbcf1a5a6c66c865a74fbacd00ca83367af31921919d9bf40e5bc113b2267d75e), `increaseObservationCardinalityNext(20)` [`0x60dd0188…3729`](https://basescan.org/tx/0x60dd01887cb1c402ebb265d0f3c87b07eee8abf3b00677af19924e289c0d3729) |
 | 15 | An agent asks for a quote over x402 and gets HTTP 402 with `exact` scheme requirements, 10000 atomic USDC to the maker on Base | `curl -i "https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote?tokenIn=USDC&amountIn=100000"` |
+| 16 | The Worker cron posts a v2 pair: both directions from one signature, model-chosen skew, `maxAmountIn` and TTL with its reason, 88,391 gas | `postPair` [`0xe75b8628…5ef3`](https://basescan.org/tx/0xe75b86286eaff73792f585adf0fee3741a40292c718a415bb83aa697679e5ef3), router request `465f7df7-734f-40c6-929f-e6789df93b9d`, `inferenceId 0xf7dce81f…6eeb` |
+| 17 | Uniswap v4 hook live: deploy, `setOrder` to the v2 strategy, v4 pool `0xba432fbc…785e` initialised on the PoolManager | deploy [`0xa72b0d60…2427`](https://basescan.org/tx/0xa72b0d60b59900f8b89ca96c3c6612a18a04750e16c606fc1a0e68d6bbfb2427), `setOrder` [`0xf062d2d5…ec11`](https://basescan.org/tx/0xf062d2d5c839fd03ddddea6ff201cfa246c1e221d48b4335a327d201d2a7ec11), initialize [`0xee9b8414…9696`](https://basescan.org/tx/0xee9b8414c77c117231f020d604b684d7766076df89fdfbe816c9f97229649696) |
 
 After step 7, Aqua `safeBalances` for the strategy reads 1.357492788767429240 W0G and 0.6 USDC: the exact deltas the signed quote set. Anyone can recompute the quote's provenance:
 
@@ -72,7 +75,7 @@ Wick earns the two ways the prize text invites: "Other ways of earning count too
 | Money in, swap fees | fee charged inside the extruction at `contracts/src/AgentQuoteExtructionV2.sol:65-73`; accrued per fill by `accruedFees`, `agent/src/worker-tick.ts:53` | fill [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1), 300 atomic USDC fee |
 | Money in, paid by other agents | `quotes/src/index.ts:55` (402), `:65` (nonce check), `:73` (quote read before settlement), `:82` (settle) | live 402 at `https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote`; paid count at `/v1/stats` |
 | Credit landing | `decideFunding` (`agent/src/funding-machine.ts:28`) and its step machine: swap, `ccipSend`, await arrival, `W0G.withdraw`, `depositFor`, one step per tick, persisted in KV | [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d), [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68); `Deposited.user` is the agent; vault 0 to 2.844 0G |
-| Inference paid from that balance | `askDecision` (`agent/src/brain.ts:108`) records `x_0g_trace.billing` per run | requests `798fb102…`, `286d605d…`, `1002ff0b…`, `65073141…` all billed `"currency":"0g"`; `balanceOf(agent)` on the Payment Layer 2.844 to 2.344 0G |
+| Inference paid from that balance | `askDecision` (`agent/src/brain.ts:111`) records `x_0g_trace.billing` per run | requests `798fb102…`, `286d605d…`, `1002ff0b…`, `65073141…` all billed `"currency":"0g"`; `balanceOf(agent)` on the Payment Layer 2.844 to 2.344 0G |
 
 ```sh
 cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256)" \
@@ -103,7 +106,7 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 
 > Inference on 0G Private Computer in your main user flow, with request IDs
 
-- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts:108`) with `verify_tee: true`. A `0gm-1.0-35b-a3b` answer is signed only when the router reports `tee_verified: true` (`teeGate`, `:106`). The request id is required, and `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` is stored on the board with the pair.
+- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts:111`) with `verify_tee: true`. A `0gm-1.0-35b-a3b` answer is signed only when the router reports `tee_verified: true` (`teeGate`, `:109`). When that TeeML provider answers 5xx, the brain asks `qwen3.7-flash` once and records its TEE verdict as `null`, exactly as the router returned it. The request id is required, and `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` is stored on the board with the pair.
 - The swap page shows the 0G request behind the price the taker is about to fill. Live: request `5319a0b6-562e-4bbe-a141-dfb94fc20aaa`, onchain `inferenceId 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7` in quote tx [`0x7b2433ba…daec`](https://basescan.org/tx/0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec).
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
@@ -131,7 +134,7 @@ The position is a two-sided W0G/USDC strategy priced by an AI agent, where SwapV
 | post: expiry at most 900 s out, epoch current, nonce rising within the epoch, signer is the registered agent (EOA or ERC-1271) | `contracts/src/AgentQuoteBoardV2.sol:13`, `:169-180` |
 | both directions in one signature | `postPair`, `contracts/src/AgentQuoteBoardV2.sol:105` |
 
-Positions are demonstrated by tests and live:
+Positions are demonstrated by tests and live. `cd contracts && forge test` runs 69 tests, among them 34 v2 unit tests with 5 fuzz tests at 1,000 runs, 4 invariants at 256 runs x depth 64 and 8 v2 Base fork tests; the hook adds 20 Base fork tests, the agent 84, the web app and Worker 56, and the x402 API 15 (full table in the [README](../README.md#tests)).
 
 - `contracts/test/AgentQuoteV2.t.sol`: unit and fuzz tests for leaked-key rotation, epoch replay, TTL edges, band edges, `maxAmountIn` exact-in and exact-out, maker-favouring rounding and quote/swap equality.
 - `contracts/test/AgentQuoteV2.invariant.t.sol`: a handler that posts, fills and tries a leaked key.
@@ -174,7 +177,7 @@ Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibima
 
 A market maker that signs a bad price loses money to the first arbitrageur, so every guard sits before the signer and every miss means no quote:
 
-- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 700 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:94`); `composePair` (`agent/src/policy.ts:36`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
+- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 700 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:96`); `composePair` (`agent/src/policy.ts:39`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
 - A TeeML answer without `tee_verified: true` raises `tee_unverified`, and a router reply without a request id raises `request_id_missing`.
 - The tick holds when spot and TWAP differ by more than 150 bps (`MAX_SPOT_TWAP_GAP_BPS`, `agent/src/price.ts:43`).
 - At fill time the extruction re-checks epoch, expiry, band, size and depth, so the chain itself turns away an outdated or outsized price.
