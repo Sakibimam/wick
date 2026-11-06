@@ -312,7 +312,7 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
   const lead = econ.coverage !== null && takers && takers.outside > 0
     ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
     : perUsdc !== null && perSwap !== null
-      ? { value: fmtDecisions(perUsdc), label: <>AI decisions paid for by every 1 USDC traded</>, detail: <>one {fmtUsdc(presetUsdc)} USDC swap pays for {fmtDecisions(perSwap)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
+      ? { value: fmtDecisions(perUsdc), label: <>AI decisions paid for by every 1 USDC traded</>, detail: <>one {fmtUsdc(presetUsdc)} USDC swap pays for {fmtDecisions(perSwap)}<span className="hidden sm:inline">; one AI decision costs&nbsp;{fmtUsd(decisionUsd!)}</span></> }
       : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
   return (
     <div>
@@ -512,7 +512,7 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
       <Value><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" /></Value>
       <div className="mt-3 max-w-[240px] space-y-3">
         {cover !== null ? (
-          <p className="num text-[13px] text-ink-2">Fees vs AI spent <span className={cover >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(cover * 100)}</span> ({fmtUsd(econ.feesEarnedUsdc)} / {fmtUsd(econ.aiSpentUsd)}){toCover ? `, ${toCover} more ${toCover === 1 ? "fill covers" : "fills cover"} it` : ""}</p>
+          <div><p className="label">Fees vs AI spent <span className={cn("num text-[16px] font-medium", cover >= 1 ? "text-ok-ink" : "text-warn-ink")}>{fmtPct(cover * 100)}</span></p><p className="num text-[13px] text-muted">{fmtUsd(econ.feesEarnedUsdc)} of {fmtUsd(econ.aiSpentUsd)}{toCover ? `, ${toCover} more ${toCover === 1 ? "fill covers" : "fills cover"} it` : ""}</p></div>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
       </div>
@@ -579,13 +579,13 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
         {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</> : <> at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</>}. </> : null}
         Today it has used <span className="num text-ink">{fmtPct(cap > 0n ? (Number(spent) / Number(cap)) * 100 : 0)}</span> of that cap. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
-      <WhatIf balanceWei={bal} />
+      <WhatIf balanceWei={bal} served={runsOf(status)[0]?.model ?? null} />
     </Station>
   );
 }
 
 /** Drag a hypothetical fuel level and read what the agent's own budget lines would do with it. */
-function WhatIf({ balanceWei }: { balanceWei: bigint }) {
+function WhatIf({ balanceWei, served }: { balanceWei: bigint; served: string | null }) {
   const start = Math.round(gaugePosition(balanceWei) * 300);
   // Follows the real balance until the reader moves it; only then is it a hypothetical.
   const [picked, setPicked] = useState<number | null>(null);
@@ -604,7 +604,7 @@ function WhatIf({ balanceWei }: { balanceWei: bigint }) {
       <input id="fuel-what-if" type="range" min={0} max={300} value={step} onChange={(e) => setStep(Number(e.target.value))} className="mt-2 w-full accent-[var(--tone)]" aria-valuetext={`${fmt0g(v)} 0G, tier ${tier}`} />
       <p className="mt-1 text-[14px] text-ink-2" aria-live="polite">
         <span className="font-semibold text-[var(--tone)]">{tierWord(tier)}</span>
-        {model ? <>, its tier model is <span className="num text-ink">{model}</span></> : ", no new AI runs"}
+        {!model ? ", no new AI runs" : picked === null && served ? <>, router serving <span className="num text-ink" title={`The tier asks for ${model}`}>{served}</span></> : <>, the tier asks for <span className="num text-ink">{model}</span></>}
 .
         {picked !== null ? <button type="button" onClick={() => setPicked(null)} className="ml-2 text-muted underline underline-offset-4 hover:text-ink">Back to the real balance</button> : null}
       </p>

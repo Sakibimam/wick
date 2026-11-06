@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { decisionsFor, economicsOf, fmtDecisions, presetUsdcUnits } from "./economics";
 import { latestByDirection } from "./quotes";
-import { fmt0g, fmtPct, fmtUsdc, toNumber } from "./format";
+import { fmt0g, fmtPct, fmtUsdc, significant, toNumber } from "./format";
 import { statusSchema, type AgentStatus } from "./schema";
 
 export const OG_SIZE = { width: 1200, height: 630 };
@@ -99,7 +99,7 @@ export async function renderCard(): Promise<ImageResponse> {
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />
           <Stat label="Billed AI runs" value={status ? String(status.inferences.length) : "live"} />
-          <Stat label="Runway" value={econ?.runwayDays != null ? `${Math.floor(econ.runwayDays)}` : "live"} unit="days" color={C.ok} />
+          <Stat label="Runway" value={econ?.runwayDays != null ? significant(econ.runwayDays, 2) : "live"} unit="days" color={C.ok} />
         </div>
       </div>
     ),

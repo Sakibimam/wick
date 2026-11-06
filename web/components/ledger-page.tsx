@@ -416,7 +416,7 @@ function StatStrip({ status, econ, loop, nowMs }: { status: AgentStatus; econ: E
   const cells: { k: string; v: ReactNode }[] = [
     { k: "Fees earned", v: <Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" size={16} /> },
     { k: "AI spent", v: fmtUsd(econ.aiSpentUsd) },
-    { k: "Fees vs AI spent", v: econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a" },
+    { k: "Fees vs AI spent", v: econ.coverage !== null ? <span className={econ.coverage >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(econ.coverage * 100)}</span> : "n/a" },
     { k: "Funding transactions", v: String(loop.funding.length) },
     { k: "Billed AI runs", v: String(loop.inferences.length) },
     { k: "Last run", v: last?.atMs ? relativeTime(last.atMs, nowMs) : "n/a" },
@@ -448,7 +448,7 @@ function PaidQuoteRow({ nowMs }: { nowMs: number }) {
         hash={d.lastSettlementTx ?? undefined}
         hashLabel="latest settlement"
         href={d.lastSettlementTx ? txUrl(BASE_CHAIN_ID, d.lastSettlementTx) : null}
-        extra={d.lastSettlementTx ? null : { href: `${QUOTES_API}/v1/stats`, label: "feed stats" }}
+        extra={d.lastSettlementTx ? null : { href: `${QUOTES_API}/v1/stats`, label: `${d.paidQuotes} sold, feed stats` }}
         chainId={BASE_CHAIN_ID}
         nowMs={nowMs}
       />
