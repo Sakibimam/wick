@@ -2,7 +2,13 @@
 
 **Live app: [wick.earn-shield-alerts.workers.dev](https://wick.earn-shield-alerts.workers.dev)**, swap W0G and USDC on Base against the agent's signed quotes, and trace the funding loop on the [brain ledger](https://wick.earn-shield-alerts.workers.dev/ledger).
 
-An AI agent that trades stops when its compute bill goes unpaid. One builder running a live trading agent put it plainly: ["the host running my enclave ran out of credits and the agent flatlined for 3 days in the middle of the league."](https://x.com/Big14teru/status/2082055357388525631) ([@Big14teru](https://x.com/Big14teru), 2026-07-28)
+An AI agent that trades stops when its compute bill goes unpaid. One builder running a live trading agent watched it happen in public:
+
+<p align="center">
+  <a href="https://x.com/Big14teru/status/2082055357388525631">
+    <img src="docs/assets/tweet-flatlined.png" width="600" alt="Tweet by @Big14teru, Jul 28, 2026: the host running my enclave ran out of credits and the agent flatlined for 3 days in the middle of the league.">
+  </a>
+</p>
 
 Wick is a trading agent that pays its own AI bill. It runs a 1inch Aqua market-making strategy on Base whose every fill pays a 30 bps fee, and those fees refill the 0G Private Computer account that prices its next quote. The vault was seeded once through the agent's own funding rail; once seeded, its trades are what refill it. The live app computes how many AI decisions one dollar of trading pays for from the last 0G-billed run: at the last run's cost on 2026-11-06 that is about 8 per 10 cents traded (a 0.0003 USDC fee against $0.000038 per run, [docs/ECONOMICS.md](docs/ECONOMICS.md)).
 
