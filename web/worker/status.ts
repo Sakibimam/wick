@@ -72,16 +72,20 @@ export function quotesOf(posted: PostedQuote[], current: { tokenIn: Address; tok
     .map((p) => ({ tokenIn: p.tokenIn, tokenOut: p.tokenOut, rateE18: p.rateE18, expiry: p.expiry, inferenceId: p.inferenceId, requestId: p.requestId || null, postedTx: p.postedTx, maxAmountInPerSwap: p.maxAmountIn ?? null, perQuoteBudgetIn: p.budgetIn ?? null, budgetFromBlock: p.budgetFromBlock ?? null, maxAmountIn: p.maxAmountIn ?? null, epoch: p.epoch ?? null, nonce: p.nonce ?? null, board: p.board ?? BOARD, current: live.has(`${lc(p.tokenIn)}:${lc(p.inferenceId)}:${p.expiry}`) && Number(p.expiry) > nowSec }));
 }
 
+export function inferenceRows(cron: CronState | null) {
+  return [
+    ...INFERENCE_EVIDENCE.map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: null, skewBps: null, maxAmountIn: null, ttlSeconds: null, teeVerified: null, provider: null, outcome: "posted" })),
+    ...(cron?.inferences ?? []).map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: r.reason ?? null, skewBps: r.skewBps ?? null, spreadBps: r.spreadBps ?? null, postedSpreadBps: r.postedSpreadBps ?? null, bidHalfSpreadBps: r.bidHalfSpreadBps ?? null, askHalfSpreadBps: r.askHalfSpreadBps ?? null, postedBidHalfSpreadBps: r.postedBidHalfSpreadBps ?? null, postedAskHalfSpreadBps: r.postedAskHalfSpreadBps ?? null, maxAmountIn: r.maxAmountIn ?? null, maxAmountInUsdc: r.maxAmountInUsdc ?? null, ttlSeconds: r.ttlSeconds ?? null, teeVerified: r.teeVerified ?? null, provider: r.provider ?? null, providerIdentity: r.providerIdentity ?? null, attempts: r.attempts ?? null, fallbackFrom: r.fallbackFrom ?? null, inferenceId: r.inferenceId ?? null, outcome: r.outcome ?? "posted" })),
+  ];
+}
+
 /** The status document the swap and ledger pages render: chain reads first, then the cron's KV record for what only the agent knows. */
 export async function buildStatus(kv: Kv | null) {
   const cron = kv ? ((await kv.get("cron-state", "json")) as CronState | null) : null;
   const live = liveOrderOf(cron), orderHashes = orderHashesOf(live);
   const [chain, idx, all, v1] = await Promise.all([readChain(live.hash), readLogIndex(kv).catch(() => null), readAllFills(kv).catch(() => null), readV1Index(kv).catch(() => null)]);
   const nowSec = Math.floor(Date.now() / 1000);
-  const inferences = [
-    ...INFERENCE_EVIDENCE.map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: null, skewBps: null, maxAmountIn: null, ttlSeconds: null, teeVerified: null, provider: null, outcome: "posted" })),
-    ...(cron?.inferences ?? []).map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: r.reason ?? null, skewBps: r.skewBps ?? null, spreadBps: r.spreadBps ?? null, postedSpreadBps: r.postedSpreadBps ?? null, maxAmountIn: r.maxAmountIn ?? null, maxAmountInUsdc: r.maxAmountInUsdc ?? null, ttlSeconds: r.ttlSeconds ?? null, teeVerified: r.teeVerified ?? null, provider: r.provider ?? null, inferenceId: r.inferenceId ?? null, outcome: r.outcome ?? "posted" })),
-  ];
+  const inferences = inferenceRows(cron);
   const v2Posted = (cron?.posted ?? []).filter((p) => p.board && lc(p.board) === lc(BOARD_V2));
   const v1All = v1Records(v1?.posts ?? [], cron?.posted ?? []);
   const quotes = quotesOf([...v1All.filter((p) => p.requestId), ...v2Posted], chain.current, nowSec);
