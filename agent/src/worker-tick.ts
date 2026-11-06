@@ -224,6 +224,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const requotesPerDay = 86_400 / 300;
   const share = w0gDepthUsdc + usdcDepth > 0 ? Number((w0gDepthUsdc / (w0gDepthUsdc + usdcDepth)).toFixed(4)) : 0.5;
   const cap = Number(Math.max(w0gDepthUsdc, usdcDepth).toFixed(6));
+  if (!(cap > 0)) return hold("hold no_depth");
   /** Signs and posts one pair for a validated decision, and keeps both posted directions; throws when the post fails. */
   const postDecision = async (d: Decision, inferenceId: Hex, requestId: string) => {
     const sides = postedHalfSpreads(d.bidHalfSpreadBps, d.askHalfSpreadBps, decision.tier);
