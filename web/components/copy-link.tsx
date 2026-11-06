@@ -23,7 +23,7 @@ export function CopyLink({ value, href, label, extra, className }: Props) {
       if (!(e instanceof DOMException)) throw e;
     }
   };
-  const icon = "grid size-6 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 hover:bg-sunken hover:text-ink";
+  const icon = "grid size-8 shrink-0 sm:size-6 place-items-center rounded-control text-muted transition-colors duration-150 hover:bg-sunken hover:text-ink";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-0.5", className)}>
       <span className="num mr-1 min-w-0 truncate text-[13px] text-ink" title={value}>{shortHash(value)}</span>

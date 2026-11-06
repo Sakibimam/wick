@@ -88,9 +88,8 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
 
       <div className="border-t border-rule pt-6">
         <p className="label">Takers</p>
-        <p className="mt-2 flex items-baseline gap-3">
-          <span className="num font-display text-[56px] font-semibold leading-none text-ink">{takers ? takers.outside : "0"}</span>
-          <span className="text-[16px] text-ink-2">outside {takers?.outside === 1 ? "wallet has" : "wallets have"} filled{takers && takers.seedFills > 0 ? `, plus ${takers.seedFills} seed fill (agent)` : ""}</span>
+        <p className="num mt-2 text-[16px] text-ink-2">
+          {takers ? `${takers.distinct} ${takers.distinct === 1 ? "wallet has" : "wallets have"} filled so far${takers.seedFills > 0 ? `, including ${takers.seedFills} seed fill (agent)` : ""}. The next fill can be yours.` : <span aria-hidden className="skeleton inline-block h-4 w-64" />}
         </p>
         {fills && fills.length > 0 ? (
           <ul className="mt-4 divide-y divide-rule rounded-card bg-panel">

@@ -117,7 +117,7 @@ describe("clusters and ticks", () => {
   });
   test("tick streak goes amber only after two failures in a row", () => {
     expect(tickSummary(live)!.failStreak).toBe(1);
-    expect(tickSummary(live)!.words).toBe("failed, router returned HTTP 502");
+    expect(tickSummary(live)!.words).toBe("retrying");
     const two = { lastTicks: [{ at: "2026-11-06T07:10:00Z", outcome: "error: a" }, { at: "2026-11-06T07:05:00Z", outcome: "error: b" }, { at: "2026-11-06T07:00:00Z", outcome: "hold" }] };
     expect(tickSummary(two)!.failStreak).toBe(2);
     expect(tickSummary({ lastTicks: [{ at: "2026-11-06T07:10:00Z", outcome: "posted r" }] })!.failed).toBe(false);

@@ -25,10 +25,11 @@ export function ctaFor(i: CtaInput): Cta {
     const label = { approving: "Approving in your wallet", simulating: "Checking the price on chain", swapping: "Confirm the swap in your wallet", confirming: "Waiting for Base to confirm" }[i.phase];
     return { kind: "busy", label, enabled: false };
   }
+  // No fresh price means no fill for anyone, so that comes before asking for a wallet.
+  if (!i.hasPrice) return { kind: "no-price", label: "Waiting for the agent's price", enabled: false };
+  if (i.priceExpired) return { kind: "expired", label: "Waiting for the next signed price", enabled: false };
   if (!i.connected) return { kind: "connect", label: "Connect wallet", enabled: true };
   if (i.chainId !== i.baseChainId) return { kind: "switch", label: "Switch to Base", enabled: true };
-  if (!i.hasPrice) return { kind: "no-price", label: "Waiting for the agent's price", enabled: false };
-  if (i.priceExpired) return { kind: "expired", label: "Price expired, new signature pending", enabled: false };
   if (i.amount === null) return { kind: "enter", label: "Enter an amount", enabled: false };
   if (i.maxIn != null && i.amount > i.maxIn) return { kind: "depth", label: "Above the pool's depth right now", enabled: false };
   if (i.balance !== undefined && i.amount > i.balance) return { kind: "balance", label: `Not enough ${i.sellSymbol}`, enabled: false };

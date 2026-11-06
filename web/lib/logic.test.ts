@@ -83,7 +83,7 @@ describe("failures", () => {
 describe("cta order", () => {
   const ok: CtaInput = { connected: true, chainId: 8453, baseChainId: 8453, hasPrice: true, priceExpired: false, amount: 5n, balance: 10n, quote: "ready", allowance: 10n, phase: "idle", sellSymbol: "USDC" };
   test.each<[Partial<CtaInput>, string]>([
-    [{ connected: false }, "connect"], [{ chainId: 1 }, "switch"], [{ hasPrice: false }, "no-price"], [{ priceExpired: true }, "expired"],
+    [{ connected: false }, "connect"], [{ chainId: 1 }, "switch"], [{ hasPrice: false }, "no-price"], [{ priceExpired: true }, "expired"], [{ priceExpired: true, connected: false }, "expired"],
     [{ amount: null }, "enter"], [{ amount: 11n }, "balance"], [{ quote: "loading" as const }, "quoting"], [{ quote: "stale" as const }, "stale"],
     [{ quote: "error" as const }, "quote-error"], [{ allowance: 1n }, "approve"], [{}, "swap"], [{ phase: "swapping" as const }, "busy"],
     [{ maxIn: 4n }, "depth"], [{ maxIn: 5n }, "swap"],

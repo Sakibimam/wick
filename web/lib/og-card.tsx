@@ -65,6 +65,9 @@ export async function renderCard(): Promise<ImageResponse> {
   const econ = status ? economicsOf(status) : null;
   const p = status ? latestByDirection(status.quotes) : null;
   const fuel = status ? fmt0g(toNumber(status.budget.computeBalanceWei, "0G")) : null;
+  const nowS = Date.now() / 1000;
+  const fresh = p?.["buy-w0g"] && p["sell-w0g"] && p["buy-w0g"].expiry > nowS && p["sell-w0g"].expiry > nowS ? { ask: p["buy-w0g"], bid: p["sell-w0g"] } : null;
+  const perSwap = econ?.lastRun?.costUsd && status?.strategy ? (0.1 * status.strategy.feeBps) / 10_000 / econ.lastRun.costUsd : null;
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: C.paper, color: C.ink, padding: "56px 64px", fontFamily: display ? "Barlow Condensed" : "sans-serif" }}>
@@ -75,16 +78,16 @@ export async function renderCard(): Promise<ImageResponse> {
             <rect fill={C.ink} x="30.6" y="43" width="2.8" height="15" rx="1.4" />
           </svg>
           <div style={{ display: "flex", fontSize: 40, letterSpacing: 6 }}>WICK</div>
-          <div style={{ display: "flex", marginLeft: "auto", fontSize: 24, color: C.muted }}>live on Base and 0G</div>
+          <div style={{ display: "flex", marginLeft: "auto", fontSize: 24, color: C.muted }}>read from Base and 0G</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", fontSize: 96, lineHeight: 0.95, textTransform: "uppercase" }}>The market maker that pays for its own brain</div>
-          {econ?.coverage != null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`Fees earned cover ${fmtPct(econ.coverage * 100)} of its AI bill`}</div> : null}
+          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One 0.10 USDC swap pays for ${significant(perSwap, 2)} of its AI decisions`}</div> : null}
         </div>
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />
-          <Stat label="Signed price, ask / bid" value={p?.["buy-w0g"] && p["sell-w0g"] ? `${fmtPrice(p["buy-w0g"].priceUsdcPerW0g)} / ${fmtPrice(p["sell-w0g"].priceUsdcPerW0g)}` : "live"} unit="USDC" />
-          <Stat label="AI runs paid by fees" value={econ?.runsPaidByFees != null ? significant(econ.runsPaidByFees, 2) : status ? String(status.inferences.length) : "live"} color={C.ok} />
+          {fresh ? <Stat label="Signed price, ask / bid" value={`${fmtPrice(fresh.ask.priceUsdcPerW0g)} / ${fmtPrice(fresh.bid.priceUsdcPerW0g)}`} unit="USDC" /> : <Stat label="AI runs billed in 0G" value={status ? String(status.inferences.filter((r) => r.currency === "0g").length) : "live"} />}
+          <Stat label="Fees against AI spent" value={econ?.coverage != null ? fmtPct(econ.coverage * 100) : "live"} color={C.ok} />
         </div>
       </div>
     ),

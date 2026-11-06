@@ -284,8 +284,17 @@ function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowR
             ) : <span aria-hidden className="skeleton block h-5 w-[42ch] max-w-full" />}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild className="w-full sm:w-auto"><a href="#swap">Swap the signed price <ArrowDown className="size-4" aria-hidden /></a></Button>
-            <Button asChild variant="secondary" className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
+            {view?.leg.open ? (
+              <>
+                <Button asChild className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
+                <Button asChild variant="secondary" className="w-full sm:w-auto"><a href="#swap">Quote any amount <ArrowDown className="size-4" aria-hidden /></a></Button>
+              </>
+            ) : (
+              <>
+                <Button asChild className="w-full sm:w-auto"><a href="#swap">Swap the signed price <ArrowDown className="size-4" aria-hidden /></a></Button>
+                <Button asChild variant="secondary" className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
+              </>
+            )}
           </div>
         </div>
         <PriceClock status={status} view={view} now={now} nowReady={nowReady} loading={loading} />
@@ -298,9 +307,13 @@ function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowR
 function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Economics; fills: Fill[] | null }) {
   const fuel = toNumber(status.budget.computeBalanceWei, "0G");
   const takers = fills ? takersOf(status, fills) : null;
-  const lead = econ.coverage !== null
+  // Coverage only proves the loop once outside wallets pay the fees; until then the figure is what one swap buys.
+  const perSwap = econ.lastRun?.costUsd && status.strategy ? (0.1 * status.strategy.feeBps) / 10_000 / econ.lastRun.costUsd : null;
+  const lead = econ.coverage !== null && takers && takers.outside > 0
     ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
-    : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
+    : perSwap !== null
+      ? { value: significant(perSwap, 2), label: <>AI decisions paid for by one 0.10 USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd((0.1 * status.strategy!.feeBps) / 10_000)}; the last AI run cost {fmtUsd(econ.lastRun!.costUsd!)}</> }
+      : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
   return (
     <div>
       <p className="flex items-end gap-4">
@@ -325,12 +338,12 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runsPaidByFees, 2)}</dd>
           </div>
         ) : null}
-        <div>
-          <dt className="label">Takers</dt>
-          <dd className="num mt-0.5 text-[20px] text-ink">
-            {takers ? <>{takers.outside} <span className="text-[14px] text-muted">outside{takers.seedFills > 0 ? `, ${takers.seedFills} seed fill (agent)` : ""}</span></> : <span aria-hidden className="skeleton inline-block h-5 w-16 align-middle" />}
-          </dd>
-        </div>
+        {econ.coverage !== null ? (
+          <div>
+            <dt className="label">Fees against AI spent</dt>
+            <dd className="num mt-0.5 text-[20px] text-ink">{fmtPct(econ.coverage * 100)}</dd>
+          </div>
+        ) : null}
       </dl>
     </div>
   );
@@ -346,20 +359,25 @@ function PriceClock({ status, view, now, nowReady, loading }: { status: AgentSta
     { key: "ask", label: "Ask", who: "you buy W0G", p: view.leg.buy, cls: "ask" },
     { key: "bid", label: "Bid", who: "you sell W0G", p: view.leg.sell, cls: "bid" },
   ];
+  const open = view.leg.open;
+  const newest = [view.leg.buy, view.leg.sell].filter((p): p is Priced => p !== null).sort((x, y) => y.expiry - x.expiry)[0];
   return (
     <section aria-label="Signed prices" className="self-center rounded-card bg-panel p-5">
       <p className="flex items-center justify-between gap-3 text-[13px] text-muted">
         <span className="inline-flex items-center gap-1.5"><TokenIcon symbol="W0G" size={16} /><Tk>W0G</Tk> in USDC, signed by AI</span>
         <SourceNote>getQuote on the AgentQuoteBoard and the QuotePosted events, read through the Worker status route.</SourceNote>
       </p>
+      {open && newest ? (
+        <p className="num mt-3 rounded-control bg-sunken px-3 py-2 text-[13px] text-ink-2">{nowReady ? `Last prices ${countdown(Math.floor(newest.expiry - now))}. The agent is requoting.` : "Reading the chain clock"}</p>
+      ) : null}
       <div className="mt-4 space-y-5">
         {rows.map((r) => (
-          <div key={r.key} className={r.cls}>
+          <div key={r.key} className={open ? undefined : r.cls}>
             <p className="flex items-baseline justify-between gap-3">
-              <span className="text-[13px] text-ink-2"><span className="font-semibold text-[var(--tone)]">{r.label}</span> <Tk>{r.who}</Tk></span>
-              {r.p ? <span className={cn("num font-display text-[40px] font-semibold leading-none text-[var(--tone)]", r.p.expiry <= now && "line-through decoration-2 opacity-60")}>{fmtPrice(r.p.priceUsdcPerW0g)}</span> : <span className="text-[13px] text-muted">no signed price</span>}
+              <span className="text-[13px] text-ink-2"><span className={cn("font-semibold", open ? "text-ink-2" : "text-[var(--tone)]")}>{r.label}</span> <Tk>{r.who}</Tk></span>
+              {r.p ? <span className={cn("num font-display text-[40px] font-semibold leading-none", open ? "text-muted" : "text-[var(--tone)]")}>{fmtPrice(r.p.priceUsdcPerW0g)}</span> : <span className="text-[13px] text-muted">no signed price</span>}
             </p>
-            {r.p ? <Countdown expiry={r.p.expiry} now={now} ttl={ttl} ready={nowReady} className="mt-2 w-full" /> : null}
+            {r.p && !open ? <Countdown expiry={r.p.expiry} now={now} ttl={ttl} ready={nowReady} className="mt-2 w-full" /> : null}
           </div>
         ))}
       </div>
@@ -387,7 +405,7 @@ function CompactLoop({ status, view, now, nowReady }: { status: AgentStatus | un
   const fuseCls = secs <= URGENT_SECONDS ? "stroke-danger" : secs <= CLOSING_SECONDS ? "stroke-warn" : "stroke-ok";
   return (
     <figure className="-mx-2 lg:hidden" aria-label="The money loop">
-      <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto h-auto w-full max-w-[420px]" role="img" aria-label={view ? `Money loop, ${ORDER.filter((k) => view.edge[k] === "lit").length} of 8 legs proven on chain, price ${view.leg.open ? "expired" : "fresh"}` : "Reading the money loop"}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto h-auto w-full max-w-[300px] sm:max-w-[420px]" role="img" aria-label={view ? `Money loop, ${ORDER.filter((k) => view.edge[k] === "lit").length} of 8 legs proven on chain, price ${view.leg.open ? "expired" : "fresh"}` : "Reading the money loop"}>
         <circle cx={cx} cy={cy} r={R} fill="none" className="stroke-rule" strokeWidth={2} />
         {view ? ORDER.map((k, i) => {
           const st = view.edge[k];
@@ -499,14 +517,7 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
             <p className="num mt-1.5 text-[13px] text-ink-2">covers {fmtPct(cover * 100)} of {fmtUsd(econ.aiSpentUsd)} AI spent</p>
           </div>
         ) : null}
-        {toThreshold !== null && threshold ? (
-          <div>
-            <div className="h-1 overflow-hidden rounded-[2px] bg-sunken" role="progressbar" aria-label="Fees against the next funding run" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(toThreshold * 100)}>
-              <div className="h-full origin-left bg-ink-2" style={{ transform: `scaleX(${toThreshold})` }} />
-            </div>
-            <p className="num mt-1.5 text-[13px] text-muted">{fmtPct(toThreshold * 100)} of the {fmtUsdc(threshold)} USDC that starts the next funding run</p>
-          </div>
-        ) : null}
+        {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
       </div>
     </Station>
   );

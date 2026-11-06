@@ -68,9 +68,9 @@
   .chain-zg { --chain: var(--color-chain-zg); }
   .bid { --tone: var(--color-ok); }
   .ask { --tone: var(--color-danger); }
-  /* Barlow ships no slashed zero; this draws one over any digit zero wrapped by <Tk>. */
+  /* Barlow ships no slashed or dotted zero; this dots any ticker zero wrapped by <Tk>, so 0G never reads as OG. */
   .zero { position: relative; display: inline-block; }
-  .zero::after { content: ""; position: absolute; left: 50%; top: 26%; bottom: 26%; width: max(1px, 0.08em); background: currentColor; transform: translateX(-50%) rotate(32deg); border-radius: 1px; }
+  .zero::after { content: ""; position: absolute; left: 50%; top: 50%; width: 0.16em; height: 0.16em; min-width: 2px; min-height: 2px; border-radius: 9999px; background: currentColor; transform: translate(-50%, -45%); }
 }
 
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }

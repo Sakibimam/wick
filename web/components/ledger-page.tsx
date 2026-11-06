@@ -39,17 +39,18 @@ export function LedgerPage() {
   return (
     <>
       <div className="mx-auto max-w-[1312px] px-4 pt-12 sm:px-6 lg:px-12 lg:pt-16">
-        <h1 className="max-w-[18ch] text-[44px] sm:text-[60px] lg:text-[72px]">The loop, unrolled</h1>
-        <p className="mt-5 max-w-[62ch] text-[17px] text-ink-2" aria-live="polite">
+        <h1 className="max-w-[18ch] text-[40px] sm:text-[52px]">The loop, unrolled</h1>
+        <p className="mt-3 max-w-[62ch] text-[16px] text-ink-2" aria-live="polite">
           {loop ? <Tk>{loopSentence(loop)}</Tk> : status.isError ? "The agent is not answering, so the loop cannot be traced right now." : <span aria-hidden className="skeleton block h-5 w-[52ch] max-w-full" />}
         </p>
+        {status.data && econ && loop ? <StatStrip status={status.data} econ={econ} loop={loop} nowMs={nowMs} /> : status.isPending ? <div aria-hidden className="skeleton mt-8 h-[76px] w-full" /> : null}
       </div>
 
       <div className="mt-10">
         <GaugeBand status={status.data} fills={fills.data?.fills ?? []} nowMs={nowMs} loading={status.isPending} error={status.isError && !status.data ? status.error : null} onRetry={() => void status.refetch()} />
       </div>
 
-      <div className="mx-auto max-w-[1312px] px-4 py-14 sm:px-6 lg:px-12 lg:py-20">
+      <div className="mx-auto max-w-[1312px] px-4 pb-10 pt-14 sm:px-6 lg:px-12 lg:pb-12 lg:pt-20">
         {status.isPending ? <RailSkeleton /> : loop && status.data && econ ? (
           <ol className="relative space-y-16 before:absolute before:bottom-3 before:left-[6px] before:top-3 before:w-0.5 before:bg-rule" aria-label="The money loop in order">
             <Stage spine="base" name="Signed price" lit={status.data.quotes.length > 0} title="The agent shipped its order and signed prices" source={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt ? fmtBlock(status.data.readAt.baseBlock) : "latest"}. Order hash read from the router.`}>
@@ -99,11 +100,14 @@ function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[
   return (
     <div>
       <Chronogram status={status} fills={fills} nowMs={nowMs} />
-      <p className="mt-8 max-w-[75ch] text-[16px] leading-[1.6] text-ink-2">
-        <span className={cn("mr-2 inline-block size-2.5 rounded-full bg-[var(--tone)] align-middle", `tone-${meta.tone}`)} aria-hidden />
-        <span className="font-semibold text-ink">{meta.label}.</span> {meta.consequence} Fuel is <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" className="text-ink" /> in the Payment Layer
-        {status.readAt ? <span className="text-muted"> (<Tk>0G</Tk> block {fmtBlock(status.readAt.zeroGBlock)})</span> : null}, and today the agent has spent <span className="num text-ink">{fmt0g(toNumber(status.budget.spentTodayWei, "0G"))}</span> of its <span className="num text-ink">{fmt0g(toNumber(status.budget.spendCapPerDayWei, "0G"))} <Tk>0G</Tk></span> daily cap.
-      </p>
+      <ul className="mt-8 flex flex-wrap gap-2 text-[13px]" aria-label="Agent budget">
+        <li className={cn("inline-flex items-center gap-2 rounded-control bg-paper px-3 py-1.5 font-semibold text-ink", `tone-${meta.tone}`)}><span className="size-2 rounded-full bg-[var(--tone)]" aria-hidden />{meta.label} tier</li>
+        {status.budget.model ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">model {status.budget.model}</li> : null}
+        <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
+        <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">spent today {fmt0g(toNumber(status.budget.spentTodayWei, "0G"))} of {fmt0g(toNumber(status.budget.spendCapPerDayWei, "0G"))} <Tk>0G</Tk></li>
+        {status.readAt ? <li className="num rounded-control bg-paper px-3 py-1.5 text-muted"><Tk>0G</Tk> block {fmtBlock(status.readAt.zeroGBlock)}</li> : null}
+      </ul>
+      <p className="mt-3 max-w-[75ch] text-[14px] text-muted">{meta.consequence}</p>
     </div>
   );
 }
@@ -186,9 +190,12 @@ function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHas
   const quotes = [...status.quotes].sort((a, b) => Number(BigInt(b.expiry) - BigInt(a.expiry)));
   const live = quotes.filter((q) => Number(q.expiry) * 1000 > nowMs);
   const old = quotes.filter((q) => Number(q.expiry) * 1000 <= nowMs);
+  // With nothing live, the newest pair still leads as the latest price; only the rest fold away as earlier.
+  const latest = live.length ? [] : old.filter((q) => q.expiry === old[0]?.expiry);
+  const earlier = old.filter((q) => !latest.includes(q));
   return (
     <div>
-      <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{quotes.length}</span> signed prices, <span className="num text-ink">{live.length}</span> live</p>
+      <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{quotes.length}</span> signed prices{live.length ? <>, <span className="num text-ink">{live.length}</span> live</> : null}</p>
       <Rows>
         <EvidenceRow
           title="Aqua order on the router"
@@ -206,15 +213,15 @@ function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHas
           </li>
         ) : (
           <>
-            {live.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
-            {old.length > 0 ? (
+            {(live.length ? live : latest).map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+            {earlier.length > 0 ? (
               <li>
                 <details className="group">
                   <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] text-ink-2 transition-colors duration-150 hover:bg-sunken">
-                    <span className="num text-ink">{old.length}</span> earlier prices, each expired and replaced <span className="text-muted group-open:hidden">(show)</span>
+                    <span className="num text-ink">{earlier.length}</span> earlier prices, each expired and replaced <span className="text-muted group-open:hidden">(show)</span>
                   </summary>
                   <ul className="divide-y divide-rule border-t border-rule">
-                    {old.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+                    {earlier.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
                   </ul>
                 </details>
               </li>
@@ -341,7 +348,7 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
             {runs.map((r) => (
               <tr key={r.requestId} className="transition-colors duration-150 hover:bg-sunken">
                 <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.atMs ? utcStamp(r.atMs) : undefined}>{r.atMs ? relativeTime(r.atMs, nowMs) : "n/a"}</td>
-                <td className="num px-4 py-2.5 text-ink-2">{r.model ?? <span className="text-muted">not reported</span>}</td>
+                <td className="num px-4 py-2.5 text-ink-2">{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}</td>
                 {hasDecision ? <td className="px-4 py-2.5 text-ink-2">{[r.raw.reason, r.raw.skewBps != null ? `skew ${r.raw.skewBps} bps` : null].filter(Boolean).join(", ") || <span className="text-muted">n/a</span>}</td> : null}
                 <td className="whitespace-nowrap px-4 py-2.5 text-right text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</td>
                 <td className="num whitespace-nowrap px-4 py-2.5 text-right text-ink-2">
@@ -354,7 +361,7 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
           </tbody>
         </table>
       </div>
-      <p className="flex items-center gap-2 border-t border-rule px-4 py-2.5 text-[13px] text-muted"><ChainChip chainId={ZERO_G_CHAIN_ID} /> billed from the Payment Layer balance; the router keeps no on-chain hash per run, so each row links by request id.</p>
+      <p className="flex items-center gap-2 border-t border-rule px-4 py-2.5 text-[13px] text-muted"><ChainChip chainId={ZERO_G_CHAIN_ID} /> billed from the Payment Layer balance. Each run is keyed by its router request id.</p>
     </div>
   );
 }
@@ -404,5 +411,28 @@ function RailSkeleton() {
     <div aria-busy="true" aria-label="Reading the agent's records" className="space-y-10">
       {[0, 1, 2].map((i) => <div key={i} className="pl-10"><div className="skeleton mb-3 h-6 w-64" /><div className="skeleton h-20 w-full" /></div>)}
     </div>
+  );
+}
+
+/** The ledger's figures at a glance, each labelled, before the rows that prove them. */
+function StatStrip({ status, econ, loop, nowMs }: { status: AgentStatus; econ: Economics; loop: Loop; nowMs: number }) {
+  const last = econ.lastRun ?? runsOf(status)[0] ?? null;
+  const cells: { k: string; v: ReactNode }[] = [
+    { k: "Fees earned", v: <Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" size={16} /> },
+    { k: "AI spent", v: fmtUsd(econ.aiSpentUsd) },
+    { k: "Fees against AI", v: econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a" },
+    { k: "Funding transactions", v: String(loop.funding.length) },
+    { k: "Billed AI runs", v: String(loop.inferences.length) },
+    { k: "Last run", v: last?.atMs ? relativeTime(last.atMs, nowMs) : "n/a" },
+  ];
+  return (
+    <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-y border-rule py-5 sm:grid-cols-3 lg:grid-cols-6">
+      {cells.map((c) => (
+        <div key={c.k}>
+          <dt className="label">{c.k}</dt>
+          <dd className="num mt-1 text-[24px] leading-tight text-ink">{c.v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

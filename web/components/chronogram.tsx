@@ -66,6 +66,10 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
     const posts = status.quotes.filter((q) => q.requestId === r.requestId && q.postedTx && postTimes[q.postedTx]).map((q) => postTimes[q.postedTx!]!);
     if (ra !== null && posts.length) crossings.push({ a: ra, b: Math.min(...posts), from: "zg", key: `run-${r.requestId}` });
   }
+  // Gridlines every 6 hours of UTC so the long quiet stretches still read as time.
+  const SIX = 6 * 3600_000;
+  const ticks: number[] = [];
+  for (let t = Math.ceil(t0 / SIX) * SIX; t < nowMs - SIX / 3; t += SIX) if (x(t) - padL > 40) ticks.push(t);
   const counts = (Object.keys(KIND_LABEL) as Kind[]).map((k) => [k, marks.filter((m) => m.kind === k).length] as const);
   const lanes = (["base", "zg"] as const).map((lane) => ({ lane, groups: cluster(marks.filter((m) => m.lane === lane), (m) => (w > 0 ? x(m.atMs) / w : 0), 18 / Math.max(1, w)) }));
 
@@ -85,13 +89,21 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
                 const xa = x(c.a), xb = x(c.b);
                 return <path key={c.key} d={`M${xa} ${ya} C${xa} ${(ya + yb) / 2} ${xb} ${(ya + yb) / 2} ${xb} ${yb}`} fill="none" strokeWidth={1.5} strokeDasharray={c.key === "ccip" ? undefined : "3 4"} className={cn("stroke-[var(--chain)]", c.from === "base" ? "chain-base" : "chain-zg")} />;
               })}
+              {ticks.map((t) => (
+                <g key={t}>
+                  <line x1={x(t)} x2={x(t)} y1={ROW.base - 14} y2={ROW.zg + 14} className="stroke-rule" strokeWidth={1} strokeDasharray="2 4" />
+                  {w > 640 ? <text x={x(t)} y={ROW.zg + 30} textAnchor="middle" className="num fill-muted text-[12px]">{hourLabel(t)}</text> : null}
+                </g>
+              ))}
               {lanes.map(({ lane, groups }) => groups.map((g, i) => {
                 const cx = g.x * w, cy = ROW[lane];
-                const m = g.items[0]!;
+                // A fill is the rarest and most important event, so it is the shape a mixed cluster shows.
+                const m = g.items.find((it) => it.kind === "fill") ?? g.items.find((it) => it.kind === "run") ?? g.items[0]!;
+                const crowded = i > 0 && (g.x - groups[i - 1]!.x) * w < 28 && i % 2 === 1;
                 return (
                   <g key={`${lane}-${i}`} className={lane === "base" ? "chain-base" : "chain-zg"}>
                     <Shape kind={m.kind} cx={cx} cy={cy} />
-                    <CountBadge x={cx + 10} y={cy - 12} n={g.items.length} />
+                    <CountBadge x={cx + 10} y={crowded ? cy + 14 : cy - 12} n={g.items.length} />
                   </g>
                 );
               }))}
@@ -158,4 +170,9 @@ function usePostTimes(hashes: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   results.forEach((r, i) => { if (r.data) out[hashes[i]!] = r.data * 1000; });
   return out;
+}
+
+function hourLabel(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
 }
