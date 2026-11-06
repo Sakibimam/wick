@@ -115,6 +115,12 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 cast keccak "$(cast abi-encode 'f(string,string,string)' 465f7df7-734f-40c6-929f-e6789df93b9d 0x000000003f486c7198d6203568a98d02b91f8044 null)"
 # 0xf7dce81fe229967ef230c605407a1cfcbfb16c1db9a63f6c71fc7f9f2df56eeb, the inferenceId in the v2 quote tx above
 ```
+- A TEE-verified run, live on the TeeML provider `0x15aDd680050Ecd0B25eb7d480e7BB1f48594Eabe` (`0gm-1.0-35b-a3b-sia`, Intel TDX): request `0382461e-4f1b-453d-a52c-bfac9e6df957` answered with `tee_verified: true`, and its `inferenceId 0x35e3a8a65554c60c9208b3057c02ea2cf88e49a77c936e98d95458b9d45ce251` rides in quote tx [`0xe7052369…9a0c`](https://basescan.org/tx/0xe7052369ee4682adc060d8d23e0ddba6ee4194c07617466f4d091927472c9a0c) on the v2 board.
+
+```sh
+cast keccak "$(cast abi-encode 'f(string,string,string)' 0382461e-4f1b-453d-a52c-bfac9e6df957 0x15aDd680050Ecd0B25eb7d480e7BB1f48594Eabe true)"
+# 0x35e3a8a65554c60c9208b3057c02ea2cf88e49a77c936e98d95458b9d45ce251
+```
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
 
