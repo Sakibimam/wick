@@ -81,12 +81,20 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const wallet = createWalletClient({ account, chain: env.chain, transport: env.baseTransport ?? http(env.baseRpcUrl) });
   const rates = directionalRates(result.rateE18, result.spreadBps);
   let next = BigInt(nonce as bigint);
-  for (const [tokenIn, tokenOut, rate] of [[USDC, W0G, rates.usdcToW0g], [W0G, USDC, rates.w0gToUsdc]] as const) {
-    next++;
-    const q: Quote = { maker: env.maker, tokenIn, tokenOut, rateE18: rate, expiry: BigInt(Math.floor(now / 1000) + env.ttlSeconds), nonce: next, inferenceId: keccak256(toHex(result.requestId + tokenIn + tokenOut)) };
-    const sig = await signQuote(wallet, env.chain.id, env.board, q);
-    const sent = await post(env.base, wallet, env.board, q, sig);
-    s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), expiry: q.expiry.toString(), inferenceId: q.inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString() }].slice(-KEEP);
+  let posted = 0;
+  try {
+    for (const [tokenIn, tokenOut, rate] of [[USDC, W0G, rates.usdcToW0g], [W0G, USDC, rates.w0gToUsdc]] as const) {
+      next++;
+      const q: Quote = { maker: env.maker, tokenIn, tokenOut, rateE18: rate, expiry: BigInt(Math.floor(now / 1000) + env.ttlSeconds), nonce: next, inferenceId: keccak256(toHex(result.requestId + tokenIn + tokenOut)) };
+      const sig = await signQuote(wallet, env.chain.id, env.board, q);
+      const sent = await post(env.base, wallet, env.board, q, sig);
+      s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), expiry: q.expiry.toString(), inferenceId: q.inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString() }].slice(-KEEP);
+      posted++;
+    }
+  } catch (e) {
+    // The AI run is billed and any posted quote is on chain: keep both in state rather than losing them with the throw.
+    if (posted > 0) { s.lastMid = market.mid; s.quotedAt = now; }
+    return done(`partial ${posted}/2 ${result.requestId}: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
   }
   s.lastMid = market.mid; s.quotedAt = now;
   return done(`posted ${result.requestId}`);

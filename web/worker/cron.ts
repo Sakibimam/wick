@@ -18,14 +18,15 @@ export async function runCron(env: CronEnv): Promise<void> {
   const baseRpcUrl = env.BASE_RPC_URL || "https://mainnet.base.org";
   // mainnet.base.org answers Cloudflare egress with 429, so reads, sends and receipts fall through three public Base RPCs.
   const baseUrls = [...new Set(["https://base-rpc.publicnode.com", baseRpcUrl, "https://base.drpc.org"])];
-  const baseTransport = fallback(baseUrls.map((u) => http(u, { retryCount: 1 })));
+  // Workers on the free plan allow 50 subrequests per run: batch JSON-RPC calls, one attempt per endpoint, one fallback pass.
+  const baseTransport = fallback(baseUrls.map((u) => http(u, { retryCount: 0, batch: true })), { retryCount: 1 });
   const prev = ((await env.UPKEEP_KV.get("cron-state", "json")) as CronState | null) ?? emptyCronState();
   let next: CronState;
   try {
     ({ state: next } = await cronTick(prev, {
       // Agent sources carry their own viem type identity; at runtime wrangler aliases both to one copy.
-      base: createPublicClient({ chain, transport: baseTransport }) as never,
-      zeroG: createPublicClient({ transport: http(env.ZG_RPC_URL || "https://evmrpc.0g.ai", { retryCount: 2 }) }) as never,
+      base: createPublicClient({ chain, transport: baseTransport, batch: { multicall: true }, pollingInterval: 2_000 }) as never,
+      zeroG: createPublicClient({ transport: http(env.ZG_RPC_URL || "https://evmrpc.0g.ai", { retryCount: 1 }) }) as never,
       chain: chain as never,
       baseRpcUrl,
       baseTransport: baseTransport as never,
