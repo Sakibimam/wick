@@ -145,6 +145,9 @@ describe("clusters and ticks", () => {
     expect(tickSummary(refused)!.words).toBe("held: answer refused by guard");
     expect(tickSummary(refused)!.failed).toBe(false);
     expect(tickSummary(refused)!.failStreak).toBe(0);
+    const re = { lastTick: { at: "2026-11-06T10:00:00Z", outcome: "refused skew_against_inventory 4089ff32; refused model answer, reposted last valid decision" } };
+    expect(tickSummary(re)!.failed).toBe(false);
+    expect(tickSummary(re)!.words).toBe("answer refused by guard, last good price re-posted");
   });
 });
 
@@ -155,6 +158,10 @@ describe("run outcomes", () => {
     expect(outcomeOf({ outcome: "refused http_error" }).kind).toBe("failed");
     expect(outcomeOf({ outcome: "posted", postedSpreadBps: 155, skewBps: 150 }).label).toBe("Posted: 155 bps, lean +150");
     expect(outcomeOf({ outcome: "posted", postedSpreadBps: 155, bidHalfSpreadBps: 60, askHalfSpreadBps: 95 }).label).toBe("Posted: bid 60 / ask 95 bps");
+    expect(outcomeOf({ outcome: "posted", bidHalfSpreadBps: 40, askHalfSpreadBps: 80, postedBidHalfSpreadBps: 60, postedAskHalfSpreadBps: 95 }).label).toBe("Posted: bid 60 / ask 95 bps");
+    const reposted = outcomeOf({ outcome: "refused model answer, reposted last valid decision", reason: "skew_against_inventory: bid 20 with W0G share 0.97" });
+    expect(reposted).toMatchObject({ kind: "refused", label: "Refused: skew against inventory" });
+    expect(outcomeOf({ outcome: "post_failed" }).kind).toBe("failed");
   });
   test("reasons lose their variable names and keep their meaning", () => {
     const raw = "High w0gValueShare of 0.967 requires strong positive skew to shed inventory, realized vol of 22.86 bps widens spread above the 30bps floor, and low USDC balance restricts maxAmountIn.";

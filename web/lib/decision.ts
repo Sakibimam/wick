@@ -22,16 +22,31 @@ export type Outcome =
   | { kind: "refused"; code: string; label: string; why: string }
   | { kind: "failed"; code: string; label: string };
 
+type RunFields = Pick<Inference, "outcome" | "reason" | "postedSpreadBps" | "spreadBps" | "skewBps" | "bidHalfSpreadBps" | "askHalfSpreadBps" | "postedBidHalfSpreadBps" | "postedAskHalfSpreadBps">;
+
+/** The per-side half-spreads that went on chain: the posted pair after tier floors when reported, else the model's. */
+export function sidesOf(r: RunFields): { bid: number; ask: number } | null {
+  if (r.postedBidHalfSpreadBps != null && r.postedAskHalfSpreadBps != null) return { bid: r.postedBidHalfSpreadBps, ask: r.postedAskHalfSpreadBps };
+  if (r.bidHalfSpreadBps != null && r.askHalfSpreadBps != null) return { bid: r.bidHalfSpreadBps, ask: r.askHalfSpreadBps };
+  return null;
+}
+
 /** One run's outcome as a chip label: what it posted, or which guard refused it. */
-export function outcomeOf(r: Pick<Inference, "outcome" | "postedSpreadBps" | "spreadBps" | "skewBps" | "bidHalfSpreadBps" | "askHalfSpreadBps">): Outcome {
+export function outcomeOf(r: RunFields): Outcome {
   const o = (r.outcome ?? "posted").trim();
+  if (o === "post_failed") return { kind: "failed", code: o, label: "Post failed on Base" };
   if (o.startsWith("refused")) {
-    const code = o.split(/\s+/)[1] ?? "error";
+    // "refused <code>", or "refused model answer, ..." with the guard's code leading the recorded reason.
+    const code = /^refused model answer/.test(o) ? (/^([a-z_]+)(?::|$)/.exec(r.reason ?? "")?.[1] ?? "error") : (o.split(/\s+/)[1] ?? "error");
     const g = GUARD[code];
-    if (g) return { kind: "refused", code, label: `Refused: ${g.short}`, why: g.why };
+    if (g) {
+      const after = /reposted/.test(o) ? " The last decision that passed every guard was re-posted around the new TWAP." : /repost failed/.test(o) ? " Re-posting the last good decision failed, so the book waits for the next tick." : "";
+      return { kind: "refused", code, label: `Refused: ${g.short}`, why: g.why + after };
+    }
     return { kind: "failed", code, label: TRANSPORT.has(code) ? "No answer: router error" : `Stopped: ${code.replace(/_/g, " ")}` };
   }
-  if (r.bidHalfSpreadBps != null && r.askHalfSpreadBps != null) return { kind: "posted", label: `Posted: bid ${r.bidHalfSpreadBps} / ask ${r.askHalfSpreadBps} bps` };
+  const sides = sidesOf(r);
+  if (sides) return { kind: "posted", label: `Posted: bid ${sides.bid} / ask ${sides.ask} bps` };
   const spread = r.postedSpreadBps ?? r.spreadBps;
   if (spread != null) return { kind: "posted", label: `Posted: ${spread} bps${r.skewBps ? `, lean ${r.skewBps > 0 ? "+" : ""}${r.skewBps}` : ""}` };
   return { kind: "posted", label: "Posted" };
@@ -40,7 +55,7 @@ export function outcomeOf(r: Pick<Inference, "outcome" | "postedSpreadBps" | "sp
 /** Whether a cron tick outcome is a guard refusing an answer (a decision) rather than a transport failure. */
 export function isGuardRefusal(outcome: string): boolean {
   const m = /^refused\s+(\S+)/.exec(outcome);
-  return Boolean(m && GUARD[m[1]!]);
+  return Boolean(m && (GUARD[m[1]!] || /refused model answer/.test(outcome)));
 }
 
 /** The model's reason in reader words: its variable names spelled out, shares as percentages, units spaced. */

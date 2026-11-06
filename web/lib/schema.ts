@@ -54,6 +54,8 @@ export const inferenceSchema = z.object({
   // Per-side distance from the TWAP the agent signed; present once the agent reports both sides.
   bidHalfSpreadBps: soft(z.number().nullable()),
   askHalfSpreadBps: soft(z.number().nullable()),
+  postedBidHalfSpreadBps: soft(z.number().nullable()),
+  postedAskHalfSpreadBps: soft(z.number().nullable()),
   teeVerified: soft(z.boolean().nullable()),
   provider: soft(z.string().nullable()),
   inferenceId: soft(hex.nullable()),

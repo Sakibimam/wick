@@ -122,7 +122,7 @@ export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">)
   for (const t of ticks) { if (!failed(t)) break; failStreak++; }
   const o = last.outcome;
   // Outcomes are machine codes; the page says only what they mean for a taker.
-  const words = o.startsWith("posted") ? "signed a new price" : o.startsWith("hold") ? "held its price" : isGuardRefusal(o) ? "held: answer refused by guard" : "retrying";
+  const words = o.startsWith("posted") ? "signed a new price" : o.startsWith("hold") ? "held its price" : isGuardRefusal(o) ? (/reposted/.test(o) ? "answer refused by guard, last good price re-posted" : "held: answer refused by guard") : "retrying";
   return { at: Date.parse(last.at), words, failed: failed(last), failStreak };
 }
 

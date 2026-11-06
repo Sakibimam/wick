@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ShieldCheck } from "lucide-react";
 import { CopyLink } from "@/components/copy-link";
-import type { Outcome } from "@/lib/decision";
+import { sidesOf, type Outcome } from "@/lib/decision";
 import { fmtUsdc, shortHash } from "@/lib/format";
 import type { Inference } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,8 @@ export function OutcomeChip({ o, className }: { o: Outcome; className?: string }
 /** What a run decided and what it is bound to on chain, each fact only when the agent reported it. */
 export function DecisionFacts({ raw, className, withModel }: { raw: Inference; className?: string; withModel?: boolean }) {
   const facts: [string, ReactNode][] = [];
-  if (raw.bidHalfSpreadBps != null && raw.askHalfSpreadBps != null) facts.push(["Bid / ask from TWAP", `${raw.bidHalfSpreadBps} / ${raw.askHalfSpreadBps} bps`]);
+  const sides = sidesOf(raw);
+  if (sides) facts.push(["Bid / ask from TWAP", `${sides.bid} / ${sides.ask} bps`]);
   if (raw.postedSpreadBps != null) facts.push(["Spread posted", `${raw.postedSpreadBps} bps${raw.spreadBps != null && raw.spreadBps !== raw.postedSpreadBps ? ` (model asked ${raw.spreadBps})` : ""}`]);
   if (raw.skewBps != null) facts.push(["Lean", `${raw.skewBps > 0 ? "+" : ""}${raw.skewBps} bps`]);
   if (raw.maxAmountInUsdc != null) facts.push(["Size cap", `${fmtUsdc(raw.maxAmountInUsdc)} USDC per fill`]);

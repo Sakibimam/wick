@@ -376,7 +376,7 @@ function RunRow({ r, outcome, nowMs }: { r: Run; outcome: Outcome; nowMs: number
         </summary>
         <div className="mt-3 space-y-3 md:ml-[104px]">
           {outcome.kind === "refused" ? <p className="max-w-[72ch] text-[14px] leading-[1.5] text-ink">{outcome.why}</p> : null}
-          {reason ? <p className="max-w-[72ch] text-[14px] leading-[1.5] text-ink-2">{reason}</p> : null}
+          {raw.reason && outcome.kind !== "posted" ? <p className="num max-w-[72ch] text-[13px] text-muted">Guard check: {raw.reason}</p> : reason ? <p className="max-w-[72ch] text-[14px] leading-[1.5] text-ink-2">{reason}</p> : null}
           <DecisionFacts raw={raw} className="max-w-[720px] sm:grid-cols-2" />
           <CopyLink value={r.requestId} label="AI request id" />
         </div>
