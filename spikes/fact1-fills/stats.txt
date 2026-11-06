@@ -1,0 +1,19 @@
+== eth days 1.39 filled strategies 83 with live liq>$1: 80
+ total vol $100922 => $72737/day
+ per-strategy daily vol $: median 28 p75 159 p90 438 max 43406
+ per-strategy live liq $: median 394 p75 2176 p90 10653
+ daily turnover (vol/liq): median 0.05x p75 0.17x p90 0.40x max 0.82x
+ net (push-pull)/pull bps per strategy: median -134.9 p25 -192.8 p75 -39.4
+ aggregate net bps -48.2 (net $-486)
+ strategies with liq $100-2000: 42 median daily vol $18 median daily turnover 0.06x fills/day median 1.4 n with zero-fill? n/a (only filled strategies observed)
+== base days 7.0 filled strategies 25 with live liq>$1: 24
+ total vol $9418 => $1345/day
+ per-strategy daily vol $: median 0 p75 32 p90 143 max 835
+ per-strategy live liq $: median 111 p75 1176 p90 3138
+ daily turnover (vol/liq): median 0.02x p75 0.05x p90 0.11x max 0.19x
+ net (push-pull)/pull bps per strategy: median -89.4 p25 -205.2 p75 26.0
+ aggregate net bps 10.7 (net $10)
+ strategies with liq $100-2000: 8 median daily vol $32 median daily turnover 0.04x fills/day median 1.3 n with zero-fill? n/a (only filled strategies observed)
+== stable-stable only (price-drift-free)
+eth stable-only strategies 3 pull $535 push $535 net bps 2.5
+base stable-only strategies 3 pull $665 push $666 net bps 12.0

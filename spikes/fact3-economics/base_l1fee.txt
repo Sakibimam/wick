@@ -1,0 +1,3 @@
+Base ship txs (n=12) total USD median 0.00081, l1 part median 0.00000
+Base dock txs (n=7) total USD median 0.00054, l1 part median 0.00001
+=> Base requote (dock+ship) ~ $0.00134

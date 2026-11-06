@@ -1,0 +1,7 @@
+v4 spot USDT/0G 0.16949 ; v3 spot USDC/W0G 0.15984
+CCIP Base->0G flat fee $0.261
+   USD | A: Uniswap v4 0G/USDT (ETH)        | B: v3 W0G/USDC + CCIP (Base)   | C: LI.FI USDC->0G 
+     5 | 10.06% vs spot (fee 9.89%+impact) |  0.31% swap + 5.23% CCIP =  5.54% | 4.15%
+    20 | 10.32% vs spot (fee 9.89%+impact) |  0.32% swap + 1.31% CCIP =  1.63% | 4.14%
+   100 | 11.66% vs spot (fee 9.89%+impact) |  0.42% swap + 0.26% CCIP =  0.68% | 3.76%
+  1000 | 24.34% vs spot (fee 9.89%+impact) |  1.47% swap + 0.03% CCIP =  1.49% | n/a

@@ -1,0 +1,41 @@
+total 121 chat 97
+cheapest 14 chat by cost of 600in/150out:
+  $0.0000350  qwen3.7-flash                          in $0.029/M out $0.117/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000459  qwen-flash                             in $0.022/M out $0.219/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000547  qwen-flash-character                   in $0.036/M out $0.219/M ctx    8192 tools=False TeeTLS prov=3
+  $0.0000562  qwen2.5-vl-72b-instruct                in $0.045/M out $0.195/M ctx  128000 tools=False none prov=2
+  $0.0000613  qwen3.5-flash                          in $0.029/M out $0.292/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000900  gpt-5-nano                             in $0.050/M out $0.400/M ctx  400000 tools=True none prov=2
+  $0.0000966  qianfan-ocr                            in $0.081/M out $0.322/M ctx   61440 tools=False TeeTLS prov=2
+  $0.0001014  glm-5.3-flash                          in $0.090/M out $0.315/M ctx 1179648 tools=True TeeTLS prov=3
+  $0.0001050  qwen3.5-35b-a3b                        in $0.058/M out $0.467/M ctx  262144 tools=True TeeTLS prov=2
+  $0.0001200  0gm-1.0-35b-a3b                        in $0.080/M out $0.480/M ctx  262144 tools=True TeeML prov=1
+  $0.0001200  gemini-2.5-flash-lite                  in $0.100/M out $0.400/M ctx 1048576 tools=True none prov=2
+  $0.0001200  gpt-4.1-nano                           in $0.100/M out $0.400/M ctx 1047576 tools=True none prov=2
+  $0.0001350  minimax-m3.1-flash                     in $0.090/M out $0.540/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0001575  qwen3.5-27b                            in $0.087/M out $0.700/M ctx  262144 tools=True TeeTLS prov=2
+zero-priced chat: []
+cheapest WITH tools + ctx>=32k:
+  $0.0000350  qwen3.7-flash                          in $0.029/M out $0.117/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000459  qwen-flash                             in $0.022/M out $0.219/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000613  qwen3.5-flash                          in $0.029/M out $0.292/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0000900  gpt-5-nano                             in $0.050/M out $0.400/M ctx  400000 tools=True none prov=2
+  $0.0001014  glm-5.3-flash                          in $0.090/M out $0.315/M ctx 1179648 tools=True TeeTLS prov=3
+
+0gm / laya / vela / glm / qwen3.7 / minimax:
+  $0.0000350  qwen3.7-flash                          in $0.029/M out $0.117/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0001014  glm-5.3-flash                          in $0.090/M out $0.315/M ctx 1179648 tools=True TeeTLS prov=3
+  $0.0001200  0gm-1.0-35b-a3b                        in $0.080/M out $0.480/M ctx  262144 tools=True TeeML prov=1
+  $0.0001350  minimax-m3.1-flash                     in $0.090/M out $0.540/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0003500  qwen3.7-plus                           in $0.292/M out $1.167/M ctx 1000000 tools=True TeeTLS prov=2
+  $0.0004300  glm-5.3-flashx                         in $0.389/M out $1.312/M ctx 1000000 tools=True TeeTLS prov=3
+  $0.0008040  0gm-1.0-35b-a3b-sia                    in $0.536/M out $3.216/M ctx   32768 tools=False TeeML prov=1
+  $0.0008500  glm-5                                  in $0.667/M out $3.000/M ctx  202752 tools=True TeeTLS prov=3
+  $0.0009059  glm-5.2                                in $0.805/M out $2.818/M ctx 1179648 tools=True TeeTLS prov=2
+  $0.0012375  glm-5.3                                in $1.155/M out $3.630/M ctx 1179648 tools=True TeeML prov=4
+  $0.0012870  glm-5-turbo                            in $1.170/M out $3.900/M ctx  195000 tools=True TeeTLS prov=2
+  $0.0022500  glm-5.1                                in $2.100/M out $6.600/M ctx  206848 tools=True TeeTLS prov=2
+  $0.0024320  glm-5.2-fast-preview                   in $2.162/M out $7.566/M ctx 1179648 tools=True TeeTLS prov=2
+  $0.0039375  qwen3.7-max                            in $3.750/M out $11.250/M ctx 1000000 tools=True TeeTLS prov=2
+decisions model laya {'prompt': '0', 'completion': '0'} TeeML
+decisions model vela-2.0-9b {'prompt': '0.00000004', 'completion': '0'} TeeML

@@ -1,0 +1,3 @@
+pairs in non-RES fills: {('pull', 'PAXG'): 6, ('pull', '1INCH'): 11, ('push', 'PAXG'): 2, ('push', '1INCH'): 8, ('pull', 'XAUt'): 5, ('push', 'XAUt'): 1}
+Counter({'0x34b53a760cc91ed37085bfc6493621d10a6a25b8': 33})
+maker 0x34b5 fills by RES holders in window: 21 ; total fills touching 0x34b5: 32

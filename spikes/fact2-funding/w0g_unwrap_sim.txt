@@ -1,0 +1,13 @@
+holders with bal>0: 19 EOAs: 4
+0xaea32d2c EOA bal 540.6746 withdraw 540.674577 -> OK
+0xaea32d2c EOA bal 540.6746 withdraw 0.001000 -> OK
+0x55bc7ea1 EOA bal 7.2053 withdraw 7.205271 -> OK
+0x55bc7ea1 EOA bal 7.2053 withdraw 0.001000 -> OK
+0x49719d25 EOA bal 0.0000 withdraw 0.000001 -> OK
+0x49719d25 EOA bal 0.0000 withdraw 0.000001 -> OK
+0xae75b438 EOA bal 615.0065 withdraw 615.006472 -> OK
+0xae75b438 EOA bal 615.0065 withdraw 0.001000 -> OK
+0xad257cde contract bal 274.7660 withdraw 274.765956 -> REVERT {'code': 3, 'message': 'execution reverted'}
+0xad257cde contract bal 274.7660 withdraw 0.001000 -> REVERT {'code': 3, 'message': 'execution reverted'}
+0x23336572 contract bal 770654.1058 withdraw 770654.105798 -> REVERT {'code': 3, 'message': 'execution reverted'}
+0x23336572 contract bal 770654.1058 withdraw 0.001000 -> REVERT {'code': 3, 'message': 'execution reverted'}

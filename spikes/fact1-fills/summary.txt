@@ -1,0 +1,8 @@
+eth distinct tx.from 27 RES holders 21 non-holders 6
+  top takers by $: [('0x8c460482', 11, 21080), ('0x26a31136', 9, 17384), ('0x7e5797f5', 11, 13984)]
+  makers filled 54 top1 share 59.7% top2 77.4% top5 91.6%
+  distinct tx.to contracts 19 top3 [('0xad3b67bc', 201, 25304), ('0xfc98ee77', 48, 68068), ('0xd8246178', 29, 2837)]
+base distinct tx.from 4 RES holders 4 non-holders 0
+  top takers by $: [('0x0e0052a1', 202, 8008), ('0x70e59f9c', 35, 966), ('0x7b49bc3e', 31, 331)]
+  makers filled 16 top1 share 62.0% top2 91.4% top5 98.8%
+  distinct tx.to contracts 3 top3 [('0x477a535b', 202, 8008), ('0xad3b67bc', 66, 1298), ('0x00000000', 1, 113)]

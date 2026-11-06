@@ -1,0 +1,8 @@
+== eth gasPrice gwei 0.0401
+ ship txs sampled 5 single-strategy ship gas: [] median None multi-ship txs (gas,n): [(428155, 4), (530795, 5), (425234, 4), (434613, 4)]
+ dock txs sampled 25 single-dock gas: [35860, 35860, 35860, 35860, 35860, 35860] median 35860.0 multi (gas,n): [(200534, 10)]
+ per-requote gas (dock+ship) ~ 142898 => $0.0139 at current gas (ETH $2421)
+== base gasPrice gwei 0.0060
+ ship txs sampled 25 single-strategy ship gas: [55321, 55177, 447792, 55537, 83697, 55537] median 55537 multi-ship txs (gas,n): []
+ dock txs sampled 7 single-dock gas: [35860, 35860, 35860, 35644, 35860, 139233] median 35860 multi (gas,n): []
+ per-requote gas (dock+ship) ~ 91397 => $0.0013 at current gas (ETH $2421)

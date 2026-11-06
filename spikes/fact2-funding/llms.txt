@@ -1,0 +1,171 @@
+# 0G Documentation
+
+> 0G is the trust layer for AI. It combines private compute, encrypted storage, and an AI-native EVM L1 chain in one stack where AI work, from inference to agent actions, is verified and audited.
+
+This is the index of the technical documentation for 0G at https://docs.0g.ai, following the llmstxt.org standard. Sections mirror the site navigation. Every link points at the markdown version of a page; append .md to any docs URL to get that page as markdown, and use https://docs.0g.ai/llms-full.txt for the whole corpus in one file.
+
+Not here: what 0G is as a project and company is at https://0g.ai/llms.txt; the builder-focused overview, tools and funding are at https://build.0g.ai/llms.txt; how to buy, bridge or withdraw the 0G token is at https://get.0g.ai/llms.txt.
+
+## Start here
+
+- [0G Documentation](https://docs.0g.ai/index.md): Developer documentation for 0G (Zero Gravity), the trust layer for AI: private compute, encrypted storage, data availability, and an AI-native L1.
+- [AI Coding Context](https://docs.0g.ai/ai-context.md): Comprehensive 0G infrastructure context for AI coding assistants, including network configs, contract addresses, and SDK examples.
+
+## Introduction
+
+- [Understanding 0G](https://docs.0g.ai/introduction/understanding-0g.md): Learn what 0G (Zero Gravity) is — the first decentralized AI L1 chain with modular storage, compute, data availability, and the native 0G token.
+- [Vision & Mission](https://docs.0g.ai/introduction/vision-mission.md): 0G's mission is to make AI a public good through decentralized infrastructure — enabling open, censorship-resistant, and user-owned AI development.
+- [How to Get 0G Token](https://docs.0g.ai/introduction/how-to-get-0g.md): Learn how to buy, bridge, and swap 0G tokens through exchanges, cross-chain bridges, and 0G Hub. Includes wallet setup and supported trading pairs.
+
+## Concepts
+
+- [0G Chain](https://docs.0g.ai/concepts/chain.md): 0G Chain is an EVM-compatible L1 built for AI workloads, with sub-second finality for AI applications, DeFi, and on-chain agents.
+- [0G Compute Network](https://docs.0g.ai/concepts/compute.md): 0G Compute Network is a decentralized GPU marketplace for AI inference, fine-tuning, and model training — pay only for what you use.
+- [0G Storage](https://docs.0g.ai/concepts/storage.md): 0G Storage is a decentralized storage network for massive AI datasets: 10-100x cheaper, high throughput, and no vendor lock-in.
+- [0G DA](https://docs.0g.ai/concepts/da.md): 0G DA keeps blockchain data accessible, powering rollups, gaming chains, and high-frequency trading with scalable data availability.
+- [AI Alignment Nodes](https://docs.0g.ai/concepts/ai-alignment.md): Discover how 0G AI Alignment Nodes monitor AI systems, ensure safe behavior, and provide decentralized oversight for trustworthy AI operations.
+- [Agentic ID](https://docs.0g.ai/concepts/agentic-id.md): Agentic IDs (formerly INFTs) are a token standard for AI agent ownership, with encrypted intelligence, secure transfers, and ERC-7857.
+- [DePIN Providers](https://docs.0g.ai/concepts/depin.md): Explore how 0G integrates DePIN providers like io.net and Aethir for cost-effective, decentralized GPU computing for AI workloads.
+
+## Developer Hub
+
+- [Getting Started](https://docs.0g.ai/developer-hub/getting-started.md): Get started building on 0G — quickstart guides for storage, compute, data availability, and deploying smart contracts on the 0G Chain.
+- [0G Galileo Testnet](https://docs.0g.ai/developer-hub/testnet/testnet-overview.md): 0G Galileo Testnet network details including Chain ID, RPC endpoints, faucet access, contract addresses, and wallet setup.
+- [Mainnet Overview](https://docs.0g.ai/developer-hub/mainnet/mainnet-overview.md): 0G Mainnet network details including Chain ID, RPC endpoints, contract addresses, and wallet setup for production deployments.
+
+## Developer Hub / Building on 0G
+
+- [Building on 0G](https://docs.0g.ai/developer-hub/building-on-0g/introduction.md): Get started building on 0G. Add storage, compute, and DA services to any EVM, non-EVM, or Web2 application without migration.
+
+## Developer Hub / Building on 0G / 0G Chain
+
+- [Deploy Contracts on 0G Chain](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/deploy-contracts.md): Deploy and verify smart contracts on 0G Chain using Hardhat, Foundry, or Truffle. Includes EVM configuration, network setup, and precompile access.
+- [Staking Interfaces](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/staking-interfaces.md): 0G Chain staking smart contract interfaces for validators and delegators. Covers validator creation, delegation, rewards, and initialization guide.
+- [Validator Contract Functions](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/validator-contract-functions.md): Function reference for 0G Chain validator contracts: delegations, rewards, commission, and withdrawal management.
+- [0G Token Addresses](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/token-addresses.md): Official contract addresses for the 0G token: W0G on 0G Mainnet, W0G bridged with Chainlink CCIP on Ethereum, Base, Solana and Robinhood Chain, and the bridged 0G token on Ethereum and BNB Chain.
+
+## Developer Hub / Building on 0G / 0G Chain / Precompiles
+
+- [0G Chain Precompiles](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/precompiles/precompiles-overview.md): Overview of 0G Chain precompiled contracts including DASigners and Wrapped0GBase. Gas-efficient native operations for DA and DeFi integration.
+- [DASigners](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/precompiles/precompiles-dasigners.md): DASigners precompile reference for 0G Chain. Register signers, query quorums and epochs, and verify data availability via EVM smart contract calls.
+- [Wrapped 0G Base](https://docs.0g.ai/developer-hub/building-on-0g/contracts-on-0g/precompiles/precompiles-wrappedogbase.md): Wrapped0GBase precompile for 0G Chain. Wrap and unwrap native 0G tokens as ERC20 with quota-based mint and burn functions for DeFi compatibility.
+
+## Developer Hub / Building on 0G / 0G Chain / Indexing
+
+- [Goldsky Subgraphs](https://docs.0g.ai/developer-hub/building-on-0g/indexing/goldsky.md): Index 0G Chain data with Goldsky subgraphs and Mirror streaming. Query onchain data via GraphQL or stream it directly to your database.
+
+## Developer Hub / Building on 0G / 0G Compute
+
+- [0G Compute Overview](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/overview.md): Overview of the 0G Compute Network — a decentralized GPU marketplace for affordable AI inference, fine-tuning, and verifiable computation.
+
+## Developer Hub / Building on 0G / 0G Compute / For Developers / Router
+
+- [0G Compute Router](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/overview.md): A single OpenAI-compatible endpoint for every model on the 0G Compute Network. No SDK, no wallet keys — just an API key.
+- [Quickstart](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/quickstart.md): Four steps from zero to your first inference request.
+- [Principles](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/principles.md): The design choices behind the Router — API compatibility, on-chain settlement, failover, and verifiable execution.
+- [Models](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/models.md): Browse the live model catalog — pricing, context window, capabilities, and provider count.
+- [Provider Routing](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/routing.md): Control which provider serves your request — by latency, price, or specific on-chain address — via X-0G-Provider-* request headers.
+- [Authentication](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/authentication.md): API keys (sk-) call models; management keys (mk-) administer your account. Send either in the Authorization header.
+- [Data Privacy & Zero Data Retention](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/privacy.md): What the 0G Compute Router retains, what it never sees, and how to enforce sealed (TeeML-only) inference per API key or per request.
+- [Deposits & Billing](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/account/deposits.md): Deposit 0G tokens to the shared 0G Payment Layer, check your balance, and see how per-request cost is calculated.
+- [Rate Limits](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/rate-limits.md): How the Router throttles requests, what headers you'll see, and how to handle 429 responses.
+- [Errors](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/errors.md): HTTP status codes and error shapes returned by the Router.
+- [Router vs Direct](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/comparison.md): Which integration path to pick — Router gateway or Direct with wallet signing.
+- [Router FAQ](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/faq.md): Frequently asked questions about the 0G Compute Router.
+
+## Developer Hub / Building on 0G / 0G Compute / For Developers / Router / Features
+
+- [Chat Completions](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/features/chat-completions.md): OpenAI-compatible /v1/chat/completions with streaming, tool calling, JSON mode, and reasoning tokens.
+- [Image Generation](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/features/image-generation.md): Generate images on 0G Compute via synchronous (OpenAI-compatible) or asynchronous submit-and-poll endpoints.
+- [Audio Transcription](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/features/audio.md): Speech-to-text via the OpenAI-compatible /v1/audio/transcriptions endpoint.
+- [Verifiable Execution](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/features/verifiable-execution.md): Opt-in TEE signature verification for Router responses. Ask the Router to synchronously verify that a response came from an attested TEE provider.
+
+## Developer Hub / Building on 0G / 0G Compute / For Developers / Router / Clients & Dev Tools
+
+- [0gpc CLI](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/clients/0gpc-cli.md): Connect Claude Code, OpenCode, Pi, or Hermes Agent to the 0G Compute Router with one command — preview every change, undo any time.
+- [Claude Code](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/router/clients/claude-code.md): Configure Claude Code to run on the 0G Compute Router.
+
+## Developer Hub / Building on 0G / 0G Compute / For Developers / Direct
+
+- [Inference](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/inference.md): Run inference on 0G Compute via the Direct path: connect to providers, manage sub-accounts, and sign requests with your wallet.
+- [Fine-tuning](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/fine-tuning.md): Fine-tune AI models on 0G Compute Network. Prepare datasets, configure training, monitor tasks, and deploy LoRA adapters using the CLI.
+- [Account](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/account-management.md): Main account and per-provider sub-accounts for 0G Compute SDK services. Deposit, transfer, refund, and withdraw via Web UI, CLI, or SDK.
+
+## Developer Hub / Building on 0G / 0G Compute / For Providers
+
+- [Inference Provider](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/inference-provider.md): Set up an inference provider on 0G Compute Network. Monetize GPUs with TEE verification, automated billing, and OpenAI-compatible service endpoints.
+- [Fine-tuning Provider](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/fine-tuning-provider.md): Become a fine-tuning provider on 0G Compute Network. Set up TEE-secured GPU infrastructure with Docker and Intel TDX for model training services.
+
+## Developer Hub / Building on 0G / 0G Storage
+
+- [Storage SDK](https://docs.0g.ai/developer-hub/building-on-0g/storage/sdk.md): Integrate 0G decentralized storage using Go and TypeScript SDKs. Upload, download, and manage files with key-value storage and browser support.
+- [Storage CLI](https://docs.0g.ai/developer-hub/building-on-0g/storage/storage-cli.md): Use the 0G Storage CLI to upload, download, and manage files and directories. Includes KV operations, REST API gateway, and automation examples.
+
+## Developer Hub / Building on 0G / 0G DA
+
+- [DA Client Nodes](https://docs.0g.ai/developer-hub/building-on-0g/da-integration.md): Set up 0G DA Client, Encoder, and Retriever nodes. Includes hardware requirements, Docker installation, and configuration reference.
+- [Technical Deep Dive](https://docs.0g.ai/developer-hub/building-on-0g/da-deep-dive.md): Technical deep dive into 0G DA architecture covering erasure encoding, KZG commitments, DA sampling, difficulty adjustment, and the economic model.
+
+## Developer Hub / Building on 0G / 0G DA / Rollups and Appchains
+
+- [OP Stack on 0G DA](https://docs.0g.ai/developer-hub/building-on-0g/rollups-and-appchains/op-stack-on-0g-da.md): Deploy an OP Stack rollup using 0G DA for data availability. Full guide covering DA server setup, contract deployment, and L2 configuration.
+- [Arbitrum Nitro on 0G DA](https://docs.0g.ai/developer-hub/building-on-0g/rollups-and-appchains/arbitrum-nitro-on-0g-da.md): Run an Arbitrum Nitro rollup with 0G DA for cost-effective data availability. Includes DA provider integration and setup prerequisites.
+
+## Developer Hub / Building on 0G / Agentic IDs
+
+- [Agentic ID Overview](https://docs.0g.ai/developer-hub/building-on-0g/agentic-id/overview.md): Developer overview of Agentic IDs for tokenizing AI agents: ERC-7857, secure transfers, encryption, and 0G infrastructure integration.
+- [Agentic ID Integration Guide](https://docs.0g.ai/developer-hub/building-on-0g/agentic-id/integration.md): Build Agentic IDs on 0G: deploy contracts, manage encrypted AI metadata, implement secure transfers, and build AI agent marketplaces.
+- [ERC-7857 Standard](https://docs.0g.ai/developer-hub/building-on-0g/agentic-id/erc7857.md): ERC-7857 specification for encrypted NFT metadata: transfer architecture, TEE and ZKP oracle implementations, and security guidelines.
+- [ERC-8004 Trustless Agents](https://docs.0g.ai/developer-hub/building-on-0g/agentic-id/erc8004.md): 0G supports ERC-8004, the Trustless Agent standard, so agents on 0G are discoverable and interoperable. Includes registry addresses and 8004scan.
+
+## Run a Node
+
+- [Running a 0G Node](https://docs.0g.ai/run-a-node/overview.md): Overview of running nodes on the 0G network — validator, storage, DA, and archival nodes. Earn rewards by securing the network.
+- [Validator Node](https://docs.0g.ai/run-a-node/validator-node.md): Guide to running a 0G validator node — secure the network, process transactions, and earn rewards by staking 0G tokens.
+- [Migrating from geth to reth](https://docs.0g.ai/run-a-node/migrate-geth-to-reth.md): Run a 0G node with reth: geth vs reth comparison, a fresh reth setup, and a step-by-step geth to reth migration.
+- [Storage Node](https://docs.0g.ai/run-a-node/storage-node.md): Complete guide to running a 0G storage node, including hardware requirements, configuration, sharding, and Storage KV setup.
+- [Data Availability Node](https://docs.0g.ai/run-a-node/da-node.md): Step-by-step guide to setting up a 0G Data Availability node, including Docker and source builds, BLS key generation, and signer registration.
+- [Archival Node](https://docs.0g.ai/run-a-node/archival-node.md): Guide to running a 0G archival node for complete historical blockchain data storage, including setup and deployment steps.
+- [Community Docker Repository](https://docs.0g.ai/run-a-node/community-docker-repo.md): Community-maintained Docker images for running 0G nodes, including validator and DA node containers from third-party contributors.
+
+## Resources
+
+- [0G Whitepaper](https://docs.0g.ai/resources/whitepaper.md): Read and download the official 0G whitepaper detailing the architecture and vision behind 0G, the trust layer for AI.
+- [Security Policy](https://docs.0g.ai/resources/security.md): 0G security overview including completed audit reports, bug bounty program details, reward tiers, and responsible disclosure guidelines.
+- [How to Contribute](https://docs.0g.ai/resources/how-to-contribute.md): Learn how to contribute to the 0G open-source project, including contribution guidelines and community participation.
+- [Glossary](https://docs.0g.ai/resources/glossary.md): Comprehensive glossary of technical terms used in the 0G ecosystem, including blockchain, AI, storage, and DA concepts.
+
+## AI Alignment node
+
+- [AI Alignment Node Sale](https://docs.0g.ai/node-sale/node-sale-index.md): Overview of the 0G Foundation AI Alignment Node Sale, with links to participation details, benefits, and purchasing guides.
+- [0G AI Alignment Node - Guide](https://docs.0g.ai/node-sale/ai-alignment-node-user-guide.md): User guide for running a 0G AI Alignment Node or delegating to a NAAS provider, with setup instructions and monitoring tips.
+- [KYC Verification Guide](https://docs.0g.ai/node-sale/details/kyc-verification.md): Complete KYC verification guide for the 0G Alignment Node Portal using Blockpass, including document requirements and wallet signing.
+- [Node Sale FAQ](https://docs.0g.ai/node-sale/faq.md): Frequently asked questions about 0G AI Alignment Nodes — purchasing, hardware requirements, rewards, KYC, tokenomics, and node operations.
+- [Node Disclaimer](https://docs.0g.ai/node-sale/disclaimer.md): Legal disclaimer for the 0G Node License NFT sale, covering eligibility restrictions, terms, and regulatory disclosures.
+
+## AI Alignment node / Introduction
+
+- [Introduction](https://docs.0g.ai/node-sale/intro.md): Introduction to 0G AI Alignment Nodes, their role in monitoring decentralized network protocols, and why to run a node.
+- [Node Holder Benefits](https://docs.0g.ai/node-sale/intro/node-holder-benefits.md): Explore the rewards and benefits of holding a 0G AI Alignment Node, including up to 15% ecosystem supply allocation over 3 years.
+- [Sale Structure & Timeline](https://docs.0g.ai/node-sale/intro/sale-structure.md): 0G AI Alignment Node Sale structure, timeline, whitelist and public sale phases, and 32-tier pricing breakdown.
+- [Eligibility & Disclaimer](https://docs.0g.ai/node-sale/intro/eligibility.md): Eligibility requirements and whitelist participation details for the 0G AI Alignment Node Sale, including disclaimers.
+
+## AI Alignment node / AI Alignment node Details
+
+- [How to Purchase Nodes](https://docs.0g.ai/node-sale/details/purchasing-nodes.md): Step-by-step guide to purchasing 0G AI Alignment Nodes, including supported payment methods, promo codes, and wallet setup.
+- [Incentives & Rewards](https://docs.0g.ai/node-sale/details/incentives-and-rewards.md): Details on 0G node sale incentives, referral commissions, rebate programs, vesting schedules, and community rewards.
+- [Compliance and Regulatory Requirements](https://docs.0g.ai/node-sale/details/compliance-and-regulatory.md): Compliance and regulatory requirements for the 0G Node Sale, including Regulation S guidelines and information disclosure policies.
+
+## Other pages
+
+- [Babylon AVS on 0G DA](https://docs.0g.ai/developer-hub/building-on-0g/avs/babylon-avs-on-0g-da.md): Learn how to build and deploy a Babylon Actively Validated Service (AVS) using 0G's data availability layer.
+- [EigenLayer AVS on 0G DA](https://docs.0g.ai/developer-hub/building-on-0g/avs/eigenlayer-avs-on-0g-da.md): Learn how to build and deploy an EigenLayer Actively Validated Service (AVS) using 0G's data availability layer.
+- [Caldera on 0G DA](https://docs.0g.ai/developer-hub/building-on-0g/rollup-as-a-service/caldera-on-0g-da.md): Deploy rollups using Caldera's rollup-as-a-service platform with 0G DA for data availability. Documentation coming soon.
+- [0G Blog](https://docs.0g.ai/resources/blog.md): Stay up to date with the latest 0G news, product updates, and ecosystem announcements on the official blog.
+
+## Optional
+
+- [Full documentation corpus](https://docs.0g.ai/llms-full.txt): Every page in one markdown file with a Source line per page.
+- [0G project and company](https://0g.ai/llms.txt): What 0G is, who builds it, products, press and key links.
+- [0G Builder Hub](https://build.0g.ai/llms.txt): Builder-focused overview of the stack, tools, tutorials and funding.
+- [Get 0G](https://get.0g.ai/llms.txt): How and where to buy, bridge or withdraw the 0G token.

@@ -8,7 +8,13 @@ cache/
 broadcast/
 .progress/
 gtm/
-spikes/
+spikes/**
+!spikes/**/
+!spikes/**/FINDINGS.md
+!spikes/**/*.txt
+!spikes/**/*.py
+!spikes/**/*.sh
+!spikes/**/*.ts
 .DS_Store
 
 /contracts/broadcast/
