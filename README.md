@@ -2,7 +2,9 @@
 
 **Live app: [wick.earn-shield-alerts.workers.dev](https://wick.earn-shield-alerts.workers.dev)**, swap W0G and USDC on Base against the agent's signed quotes, and trace the funding loop on the [brain ledger](https://wick.earn-shield-alerts.workers.dev/ledger).
 
-Wick is a trading agent that pays its own AI bill. It runs a 1inch Aqua market-making strategy on Base whose every fill pays a 30 bps fee, and those fees fund the 0G Private Computer inference that sets its next price. One 10 cent trade pays for about 7 decisions: a fee of 0.0003 USDC against 36 to 41 micro-USD per 0G-billed run ([docs/ECONOMICS.md](docs/ECONOMICS.md)).
+An AI agent that trades stops when its compute bill goes unpaid. One builder running a live trading agent put it plainly: ["the host running my enclave ran out of credits and the agent flatlined for 3 days in the middle of the league."](https://x.com/Big14teru/status/2082055357388525631) ([@Big14teru](https://x.com/Big14teru), 2026-07-28)
+
+Wick is a trading agent that pays its own AI bill. It runs a 1inch Aqua market-making strategy on Base whose every fill pays a 30 bps fee, and those fees refill the 0G Private Computer account that prices its next quote. The vault was seeded once through the agent's own funding rail; once seeded, its trades are what refill it. The live app computes how many AI decisions one dollar of trading pays for from the last 0G-billed run: at the last run's cost on 2026-11-06 that is about 8 per 10 cents traded (a 0.0003 USDC fee against $0.000038 per run, [docs/ECONOMICS.md](docs/ECONOMICS.md)).
 
 Architecture, threat model and every parameter's source: [ARCHITECTURE.md](ARCHITECTURE.md) and the interactive diagram [docs/ARCHITECTURE.html](docs/ARCHITECTURE.html).
 
@@ -13,8 +15,8 @@ The live agent is a Cloudflare Workers cron: [`web/worker/cron.ts`](web/worker/c
 1. **Read.** The tick reads the Uniswap v3 W0G/USDC spot and its 600 second TWAP from `observe()`, the agent's 0G Payment Layer balance, its Base gas, the strategy's Aqua balances and the board.
 2. **Budget.** A pure policy turns the compute balance and today's billed spend against a 1 0G daily cap into a tier: NORMAL, LOW, CRITICAL or PAUSED.
 3. **Hold.** When spot and TWAP disagree by more than 150 bps the pool is moving or being pushed, and the tick posts nothing.
-4. **Think.** When the TWAP has moved 25 bps (100 bps in LOW) or the live pair is within 600 s of expiry, one 0G call with `verify_tee: true` returns spread, skew, `maxAmountIn`, lifetime and a one-sentence reason. NORMAL asks `0gm-1.0-35b-a3b` and signs its answer only with `tee_verified: true`. When that TeeML provider answers 5xx, the brain asks `qwen3.7-flash` once instead and records its TEE verdict as `null`, exactly as the router returned it.
-5. **Compose.** Code centres both directions on the TWAP, applies the skew, and posts a spread of at least the tier floor (30, 60 or 120 bps). The model chooses how to quote; it never writes the price. `composePair` refuses any pair more than 790 bps from the TWAP before the signer sees it.
+4. **Think.** When the TWAP has moved 25 bps (100 bps in LOW) or the live pair is near expiry, one 0G call with `verify_tee: true` returns a bid half-spread, an ask half-spread, `maxAmountIn`, a lifetime of 840 to 900 s and a one-sentence reason, guided by an inventory goal stated in words. NORMAL asks `0gm-1.0-35b-a3b` and signs its answer only with `tee_verified: true`, retrying the TeeML provider with backoff. When it still answers 5xx, the brain asks `qwen3.7-flash` once instead. Whatever TEE verdict the router returns, `null` included, is bound into the pair's `inferenceId`.
+5. **Compose.** Code places the bid and the ask around the TWAP at the larger of the model's half-spread and the tier floor (30, 60 or 120 bps). The model chooses how to quote; it never writes the price. A guard refuses an answer that leans against the inventory, and a refused answer never reaches the signer: the last decision that passed every guard is re-posted around the new TWAP instead. `composeQuotes` refuses any pair more than 790 bps from the TWAP before the signer sees it.
 6. **Sign.** The agent signs both directions in one EIP-712 `Pair` and posts it with one `postPair` transaction. Its `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` binds the pair to the 0G request, the provider that answered and the TEE verdict.
 7. **Fill.** A taker swaps through the deployed, unmodified 1inch AquaSwapVMRouter v1.0.2. The Aqua program runs `AgentQuoteExtructionV2` at opcode `0x20`, which re-checks the quote on chain and prices the fill at the signed rate minus the 30 bps fee.
 8. **Fund.** The same tick advances a resumable funding machine by one chain step: fee USDC to W0G on Uniswap v3, Chainlink CCIP to the 0G chain, `W0G.withdraw`, then `PaymentLayer.depositFor` on the agent's own compute account. The router bills the next decision against that balance.
@@ -101,9 +103,9 @@ cast keccak "5319a0b6-562e-4bbe-a141-dfb94fc20aaa0x833589fCD6eDb6E08f4c7C32D4f71
 # 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7, stored on the v1 board with the quote
 ```
 
-## The brain pays for itself, onchain
+## The compute vault, seeded once through the agent's own rail
 
-The agent's wallet funds its own 0G compute account through the same path the funding machine takes, then its inference bills in 0G against that balance.
+The vault was seeded once, by the agent's wallet, over the same path the funding machine takes. From then on the machine bridges fees on its own once they reach 3 times the live bridge cost (0.81 USDC at the 2026-11-06 reads), and every inference bills in 0G against that balance.
 
 | Step | Chain | Transaction |
 |---|---|---|
@@ -121,7 +123,7 @@ cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256
 
 ## How fees reach 0G
 
-Inside the same cron, the funding machine in [`agent/src/funding-machine.ts`](agent/src/funding-machine.ts) moves one chain step per tick, persisted in KV: approve and swap fee USDC to W0G on Uniswap v3, approve and `ccipSend` to the 0G chain, await arrival, `W0G.withdraw`, then `PaymentLayer.depositFor` on the agent's own compute account. A run fires only when unfunded fees are worth 3 times its own cost (CCIP `getFee` plus Base gas plus 0G gas, about $0.75 at today's reads), and it spends only `min(unfunded fees, wallet balance above the strategy's committed inventory)`, so seed inventory never leaves the strategy. The same machine buys Base gas from fee USDC on the Uniswap v3 USDC/WETH 0.05% pool when the gas wallet falls under 0.0001 ETH. Earnings count swap fees from decoded SwapVM fills plus x402 revenue from the quote API's `/v1/stats`.
+Inside the same cron, the funding machine in [`agent/src/funding-machine.ts`](agent/src/funding-machine.ts) moves one chain step per tick, persisted in KV: approve and swap fee USDC to W0G on Uniswap v3, approve and `ccipSend` to the 0G chain, await arrival, `W0G.withdraw`, then `PaymentLayer.depositFor` on the agent's own compute account. A run fires only when unfunded fees are worth 3 times its own cost (CCIP `getFee` plus Base gas plus 0G gas: 0.81 USDC at the 2026-11-06 reads, recomputed every tick), and it spends only `min(unfunded fees, wallet balance above the strategy's committed inventory)`, so seed inventory never leaves the strategy. The same machine buys Base gas from fee USDC on the Uniswap v3 USDC/WETH 0.05% pool when the gas wallet falls under 0.0001 ETH. Earnings count swap fees from decoded SwapVM fills plus x402 revenue from the quote API's `/v1/stats`.
 
 ## When money runs low
 
@@ -134,7 +136,7 @@ Spend is counted from the router's own per-request bill (`x_0g_trace.billing`) a
 | CRITICAL | under 0.1 0G or 90% of the cap | no inference; the last pair rides to its expiry |
 | PAUSED | cap reached, under 0.05 0G, or Base gas under 0.00003 ETH | no posting; every fill reverts `StaleQuote` until fees refill it |
 
-The posted spread is the larger of the model's spread and the tier floor, so a degraded agent always quotes wider.
+Each posted half-spread is the larger of the model's and the tier floor, so a degraded agent always quotes wider.
 
 ## Numbers, with their source
 
@@ -149,15 +151,15 @@ The posted spread is the larger of the model's spread and the tier floor, so a d
 
 ## Tests
 
-Re-run on 2026-11-06 at commit `838f712`:
+Re-run on 2026-11-06 at commit `1cae758`:
 
 | Suite | Tests | Command |
 | --- | --- | --- |
 | Contracts | 69: 34 v2 unit (5 fuzz at 1,000 runs), 4 v2 invariants at 256 runs x depth 64, 1 handler reach test, 8 v2 Base fork (1 fuzz at 1,000 runs), 17 v1 Ethereum fork, 5 v1 Base fork | `cd contracts && forge test` |
-| Agent | 84 | `cd agent && bun test` |
-| Web and Worker | 56 | `cd web && bun test` |
+| Agent | 115 | `cd agent && bun test` |
+| Web and Worker | 66 | `cd web && bun test` |
 | Uniswap v4 hook | 20, on a Base fork through the deployed PoolManager and Universal Router 2.1.2 | `cd hook && forge test` |
-| x402 quote API | 15 | `cd quotes && bun test` |
+| x402 quote API | 25 | `cd quotes && bun test` |
 
 End to end on anvil forks of Base:
 

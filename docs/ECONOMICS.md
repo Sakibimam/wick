@@ -4,7 +4,7 @@
 
 Wick is a market maker. Every swap against its Aqua strategy pays a 0.30% fee. Wick spends that fee on three things: the AI call that sets its next price on 0G, the Base gas to post that price, and, now and then, one bridge trip that refills its 0G compute account.
 
-The AI call is the cheap part. One pricing decision costs about 40 millionths of a dollar, so a 10 cent swap pays for about 7 decisions. Gas to post the signed price on Base costs about 28 times the AI call, so gas sets the break-even line. A requote breaks even at about 38 cents of swap volume. Other agents also pay 1 cent in USDC over x402 for each signed quote they read, and one paid quote covers about 9 requotes.
+The AI call is the cheap part. One pricing decision costs about 40 millionths of a dollar. The live app computes decisions per dollar traded from the last 0G-billed run: at the last run's cost on 2026-11-06 ($0.000038) a 10 cent swap pays for about 8 decisions. Gas to post the signed price on Base costs about 28 times the AI call, so gas sets the break-even line. A requote breaks even at about 38 cents of swap volume. Other agents also pay 1 cent in USDC over x402 for each signed quote they read, and one paid quote covers about 9 requotes.
 
 Every number below names the call, transaction or file that produced it.
 
@@ -36,14 +36,15 @@ A swap of volume V pays `V x 0.0030` in fees.
 | one requote, inference plus gas | $0.00114 | $0.38 | 0.00114 / 0.003 |
 | one funding run (k = 3) | $0.75 threshold | $250 | 3 x ($0.242 CCIP + $0.0064 Base gas) / 0.003 |
 
-**What a 0.10 USDC swap funds.** Fee 0.0003 USDC. Divided by 40 micro-USD that is 7.5 decisions, so one 10 cent trade funds about 7 of Wick's next decisions. Against the all-in requote cost it is 0.26 requotes.
+**What a 0.10 USDC swap funds.** Fee 0.0003 USDC. Divided by the last 0G-billed run on 2026-11-06, 0.0002547 0G or $0.000038 at the pool mid, that is 7.9, so one 10 cent trade funds about 8 of Wick's next decisions and 1 USDC traded funds about 80. The hero, the swap receipt, the ledger's fill rows and the share card all divide by that same last run and round to the nearest decision, so the figure moves with the live cost. At the planning figure of 40 micro-USD it is 7.5. Against the all-in requote cost it is 0.26 requotes.
 
-**Per day.** Wick requotes on a 25 bps TWAP move or when its live pair is within 600 s of expiry. v2 pairs live 700 to 900 s, so the renewal lands on every 5 minute cron tick and the v2 cadence is 288 requotes a day. Daily cost is `requotes/day x $0.00114`.
+**Per day.** Wick requotes on a 25 bps TWAP move or when its live pair is within 600 s of expiry. v2 pairs live 840 to 900 s and renew inside a 360 s window, so a steady pair renews every second 5 minute tick: 144 requotes a day, the `requotesPerDay` the status route reports. The ceiling is one pair per tick, 288 a day, and the tables below use that ceiling. Daily cost is `requotes/day x $0.00114`.
 
 | Cadence | Requotes/day | Cost/day | Swap volume/day to break even |
 | --- | --- | --- | --- |
 | v1, measured on 2026-11-06 (decisions at 05:10, 05:45 and 06:40 UTC in `/api/status`) | about 29 | $0.033 | $11 |
-| v2, one pair per 5 minute cron tick | 288 | $0.328 | $109 |
+| v2, live: a pair every second cron tick | 144 | $0.164 | $55 |
+| v2 ceiling, one pair per 5 minute cron tick | 288 | $0.328 | $109 |
 
 ## Funding threshold
 
@@ -55,7 +56,7 @@ threshold = k x cost            (k = 3, agent/src/funding-machine.ts decideFundi
 fire      = unfunded fee value >= threshold
 ```
 
-At today's reads that is `3 x (0.000109 ETH + 482,000 x 0.006 gwei) = 0.000336 ETH`, about $0.75. With k = 3 the bridge fee is at most a third of every run, and the threshold follows the live CCIP `getFee` and Base gas price instead of a fixed dollar figure. Only fees fund a run: `spendable = min(unfunded fees, wallet balance above the strategy's committed inventory)`, so seed inventory never leaves the strategy.
+At today's reads that is `3 x (0.000109 ETH + 482,000 x 0.006 gwei) = 0.000336 ETH`, about $0.75; the live threshold the status route reported on 2026-11-06 is 0.81 USDC (`fundingThresholdUsdc`). With k = 3 the bridge fee is at most a third of every run, and the threshold follows the live CCIP `getFee` and Base gas price instead of a fixed dollar figure. Only fees fund a run: `spendable = min(unfunded fees, wallet balance above the strategy's committed inventory)`, so seed inventory never leaves the strategy.
 
 Gas pays for itself the same way. When the Base balance falls under the gas top-up line, the run of kind `gas` swaps a share of fee USDC to ETH on the Uniswap v3 USDC/WETH 0.05% pool and unwraps it to the agent, again only once the share is worth `k` times the 206,000 gas the leg uses.
 

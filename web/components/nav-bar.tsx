@@ -79,8 +79,7 @@ function StatusStrip() {
           {word ? (
             <span className={cn("inline-flex items-center gap-2 whitespace-nowrap text-ink-2", tone)}>
               <span aria-hidden className="size-2 rounded-full bg-[var(--tone)]" />
-              {word}
-              {gas ? <span className="num hidden text-muted sm:inline" title={`Base gas above the agent's floor, at ${gas.perDay} posts a day`}>, gas {significant(gas.days, 2)} d</span> : null}
+              <span>{word}{gas ? <span className="num hidden text-muted sm:inline" title={`Base gas above the agent's floor, at ${gas.perDay} posts a day`}>, gas {significant(gas.days, 2)} d</span> : null}</span>
             </span>
           ) : <span aria-hidden className="skeleton h-3.5 w-24" />}
           {ready && s ? <span className="num whitespace-nowrap text-muted lg:hidden">next {clock(nextTickIn(now))}</span> : null}

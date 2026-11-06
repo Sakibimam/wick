@@ -1,8 +1,10 @@
 # Wick
 
+> **Operator fill before submitting.** Team: [team]
+
 **One line.** Wick is a trading agent that pays its own AI bill: a 1inch Aqua market maker whose swap fees fund the 0G inference that sets its prices.
 
-**Description.** Wick runs a two-sided W0G/USDC Aqua strategy on Base that fills only at prices its agent signed after a 0G Private Computer inference. Each tick the model chooses spread, skew, size and lifetime; code centres both prices on the Uniswap v3 TWAP and signs them as one EIP-712 pair carrying the 0G request id, provider and TEE verdict. A SwapVM Extruction on the deployed, unmodified AquaSwapVMRouter re-checks on every fill that the quote is from the agent's current epoch, unexpired, inside 800 bps of the 600 second TWAP read from `observe()`, and within its `maxAmountIn`. Fees route through Uniswap and Chainlink CCIP into the agent's own 0G Payment Layer vault from inside the cron, once they are worth three times the bridge cost. Takers arrive through the Wick swap page and a Uniswap v4 aggregator hook, and other agents buy Wick's signed price over x402.
+**Description.** Wick runs a two-sided W0G/USDC Aqua strategy on Base that fills only at prices its agent signed after a 0G Private Computer inference. Each tick the model chooses a bid half-spread, an ask half-spread, a size and a lifetime; code places both prices around the Uniswap v3 TWAP and signs them as one EIP-712 pair carrying the 0G request id, provider and TEE verdict. A SwapVM Extruction on the deployed, unmodified AquaSwapVMRouter re-checks on every fill that the quote is from the agent's current epoch, unexpired, inside 800 bps of the 600 second TWAP read from `observe()`, and within its `maxAmountIn`. The agent's 0G Payment Layer vault was seeded once through the agent's own rail (Uniswap, Chainlink CCIP, `depositFor`); from then on the cron bridges fees over that same rail once they are worth three times the live bridge cost. Takers arrive through the Wick swap page and a Uniswap v4 aggregator hook, and other agents buy Wick's signed price over x402.
 
 | Field | Value |
 | --- | --- |
@@ -13,7 +15,6 @@
 | Architecture, threat model, parameters | [ARCHITECTURE.md](../ARCHITECTURE.md), interactive [docs/ARCHITECTURE.html](ARCHITECTURE.html) |
 | Unit economics | [docs/ECONOMICS.md](ECONOMICS.md) |
 | Uniswap feedback | [FEEDBACK.md](../FEEDBACK.md), form link `https://github.com/Sakibimam/wick/blob/main/FEEDBACK.md` |
-| Team | [team] |
 | Track | Continuity |
 
 ## Deployed contracts
@@ -66,7 +67,9 @@ cast keccak "5319a0b6-562e-4bbe-a141-dfb94fc20aaa0x833589fCD6eDb6E08f4c7C32D4f71
 
 ## 0G: Agents That Pay for Themselves
 
-Wick earns the two ways the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity, paid at 30 bps per fill. The other agents pay 0.01 USDC per signed quote over x402. The funding machine moves fee value into the agent's 0G compute vault from inside the cron, with no human step.
+Wick earns the two ways the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity, paid at 30 bps per fill. The other agents pay 0.01 USDC per signed quote over x402.
+
+The vault was seeded once through the agent's own rail: steps 8 to 11 above are that seed run, by the agent's wallet, over the exact path the funding machine drives. From then on the machine bridges fees from inside the cron, with no human step, once spendable fees reach 3 times the live bridge cost (0.81 USDC at the 2026-11-06 reads). Every inference since the seed bills in 0G against that vault.
 
 > The full loop: money in, credit landing in the agent's 0G compute account, and inference paid from that balance, with tx hashes and request IDs
 
@@ -74,7 +77,7 @@ Wick earns the two ways the prize text invites: "Other ways of earning count too
 | --- | --- | --- |
 | Money in, swap fees | fee charged inside the extruction at `contracts/src/AgentQuoteExtructionV2.sol:65-73`; accrued per fill by `accruedFees`, `agent/src/worker-tick.ts:53` | fill [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1), 300 atomic USDC fee |
 | Money in, paid by other agents | `quotes/src/index.ts:55` (402), `:65` (nonce check), `:73` (quote read before settlement), `:82` (settle) | live 402 at `https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote`; paid count at `/v1/stats` |
-| Credit landing | `decideFunding` (`agent/src/funding-machine.ts:28`) and its step machine: swap, `ccipSend`, await arrival, `W0G.withdraw`, `depositFor`, one step per tick, persisted in KV | [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d), [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68); `Deposited.user` is the agent; vault 0 to 2.844 0G |
+| Credit landing, seed run over the funding machine's rail | `decideFunding` (`agent/src/funding-machine.ts:28`) and its step machine: swap, `ccipSend`, await arrival, `W0G.withdraw`, `depositFor`, one step per tick, persisted in KV | [`ccipSend 0xd0b46ef5…876e`](https://ccip.chain.link/tx/0xd0b46ef5b745bf9931d3633d41b3e9c124566289753fe1062c7b18e3754c876e), [`withdraw 0x6e12d8d0…5a0d`](https://chainscan.0g.ai/tx/0x6e12d8d0e62f70123c0bbafa7a977cb6e60e556c2c690e4fb4ce47df7b0b5a0d), [`depositFor 0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68); `Deposited.user` is the agent; vault 0 to 2.844 0G |
 | Inference paid from that balance | `askDecision` (`agent/src/brain.ts:111`) records `x_0g_trace.billing` per run | requests `798fb102…`, `286d605d…`, `1002ff0b…`, `65073141…` all billed `"currency":"0g"`; `balanceOf(agent)` on the Payment Layer 2.844 to 2.344 0G |
 
 ```sh
@@ -82,7 +85,7 @@ cast call 0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32 "balanceOf(address)(uint256
   0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953 --rpc-url https://evmrpc.0g.ai
 ```
 
-A funding run fires only when unfunded fees are worth `k = 3` times its own cost (CCIP `getFee` plus 482,000 Base gas plus 0G gas), about $0.75 at today's reads, and it spends only fees: `min(unfunded fees, wallet balance above the strategy's committed inventory)`. The same machine refills Base gas from fee USDC through the Uniswap v3 USDC/WETH 0.05% pool when the gas wallet falls under 0.0001 ETH. Math in [docs/ECONOMICS.md](ECONOMICS.md).
+A funding run fires only when unfunded fees are worth `k = 3` times its own cost (CCIP `getFee` plus 482,000 Base gas plus 0G gas), 0.81 USDC at the 2026-11-06 reads and recomputed every tick, and it spends only fees: `min(unfunded fees, wallet balance above the strategy's committed inventory)`. The same machine refills Base gas from fee USDC through the Uniswap v3 USDC/WETH 0.05% pool when the gas wallet falls under 0.0001 ETH. Math in [docs/ECONOMICS.md](ECONOMICS.md).
 
 > The agent running on its own during the demo with no manual top-up
 
@@ -106,7 +109,7 @@ A funding run fires only when unfunded fees are worth `k = 3` times its own cost
 
 > Inference on 0G Private Computer in your main user flow, with request IDs
 
-- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts:111`) with `verify_tee: true`. A `0gm-1.0-35b-a3b` answer is signed only when the router reports `tee_verified: true` (`teeGate`, `:109`). When that TeeML provider answers 5xx, the brain asks `qwen3.7-flash` once and records its TEE verdict as `null`, exactly as the router returned it. The request id is required, and `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))` is stored on the board with the pair.
+- Every signed pair comes from one 0G Private Computer call (`askDecision`, `agent/src/brain.ts`) with `verify_tee: true`. The agent binds whatever TEE verdict the router returns, `null` included, into `inferenceId = keccak256(abi.encode(requestId, provider, teeVerified))`, stored on the board with the pair. A `0gm-1.0-35b-a3b` answer is signed only with `tee_verified: true` (`teeGate`); the TeeML provider is retried with backoff, and when it still answers 5xx the brain asks `qwen3.7-flash` once. The request id is required.
 - The swap page shows the 0G request behind the price the taker is about to fill. Live: request `5319a0b6-562e-4bbe-a141-dfb94fc20aaa`, onchain `inferenceId 0xa084340d4e3fb5e3328761d25335ad5fcfd25a223be18fba092f95b3afb4e7e7` in quote tx [`0x7b2433ba…daec`](https://basescan.org/tx/0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec).
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
@@ -134,7 +137,7 @@ The position is a two-sided W0G/USDC strategy priced by an AI agent, where SwapV
 | post: expiry at most 900 s out, epoch current, nonce rising within the epoch, signer is the registered agent (EOA or ERC-1271) | `contracts/src/AgentQuoteBoardV2.sol:13`, `:169-180` |
 | both directions in one signature | `postPair`, `contracts/src/AgentQuoteBoardV2.sol:105` |
 
-Positions are demonstrated by tests and live. `cd contracts && forge test` runs 69 tests, among them 34 v2 unit tests with 5 fuzz tests at 1,000 runs, 4 invariants at 256 runs x depth 64 and 8 v2 Base fork tests; the hook adds 20 Base fork tests, the agent 84, the web app and Worker 56, and the x402 API 15 (full table in the [README](../README.md#tests)).
+Positions are demonstrated by tests and live. `cd contracts && forge test` runs 69 tests, among them 34 v2 unit tests with 5 fuzz tests at 1,000 runs, 4 invariants at 256 runs x depth 64 and 8 v2 Base fork tests; the hook adds 20 Base fork tests, the agent 115, the web app and Worker 66, and the x402 API 25, all re-run at commit `1cae758` on 2026-11-06 (full table in the [README](../README.md#tests)).
 
 - `contracts/test/AgentQuoteV2.t.sol`: unit and fuzz tests for leaked-key rotation, epoch replay, TTL edges, band edges, `maxAmountIn` exact-in and exact-out, maker-favouring rounding and quote/swap equality.
 - `contracts/test/AgentQuoteV2.invariant.t.sol`: a handler that posts, fills and tries a leaked key.
@@ -177,7 +180,8 @@ Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibima
 
 A market maker that signs a bad price loses money to the first arbitrageur, so every guard sits before the signer and every miss means no quote:
 
-- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 700 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:96`); `composePair` (`agent/src/policy.ts:39`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
+- The model never writes a price. It returns a bid and an ask half-spread of 5 to 500 bps each, `maxAmountInUsdc` up to strategy depth and a TTL of 840 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts`); `composeQuotes` (`agent/src/policy.ts`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`).
+- An answer that leans against the inventory (`skew_against_inventory`) or breaks any bound is refused before the signer, and the last decision that passed every guard is re-posted around the new TWAP. The ledger shows each refusal with its guard.
 - A TeeML answer without `tee_verified: true` raises `tee_unverified`, and a router reply without a request id raises `request_id_missing`.
 - The tick holds when spot and TWAP differ by more than 150 bps (`MAX_SPOT_TWAP_GAP_BPS`, `agent/src/price.ts:43`).
 - At fill time the extruction re-checks epoch, expiry, band, size and depth, so the chain itself turns away an outdated or outsized price.
@@ -186,4 +190,40 @@ Full threat model and parameter table: [ARCHITECTURE.md](../ARCHITECTURE.md#thre
 
 ## Continuity disclosure
 
-Wick is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window. The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history.
+Wick is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window opened at 2026-11-05 15:30 UTC (21:00 IST). The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history.
+
+### Changelog
+
+From `git log --format='%h %ad %s'`, times in IST. 29 commits before kickoff, 77 inside the window as of `1cae758`.
+
+**Before the event window (2026-11-05, 02:56 to 20:18 IST)**
+
+| Commit | Date | Work |
+| --- | --- | --- |
+| `ae1859d` | 2026-11-05 02:56 | repository initialised |
+| `b429ebd` to `537e703` | 2026-11-05 03:45 to 04:09 | pinned Foundry project, the v1 agent-signed Aqua quote extruction, freshness and agent rotation, fork tests |
+| `334dc9c` to `29c704f` | 2026-11-05 04:15 to 04:30 | the W0G/USDC market-making agent, Base deploy and ship scripts |
+| `4ebad02` to `0b6f804` | 2026-11-05 04:58 to 10:45 | first web app, signed-quote runtime, fork end to end |
+| `d149aa9` | 2026-11-05 11:51 | live 0G router shapes: request id, thinking off, cost capture |
+| `bbcbffe` | 2026-11-05 15:35 | Base mainnet loop: ship, live 0G quote, fill |
+| `aa8f3e5` | 2026-11-05 20:00 | the funding rail: LI.FI gas, CCIP to the 0G chain, `withdraw`, `depositFor` |
+| `77bd44a`, `40fa97b` | 2026-11-05 20:18 | architecture diagram, public README |
+
+**Inside the event window (2026-11-05 21:48 IST onward)**
+
+| Commit | Date | Work |
+| --- | --- | --- |
+| `24a7144` | 2026-11-05 21:48 | the seeded compute vault documented end to end |
+| `6453189` to `ad2039a` | 2026-11-06 09:06 to 11:01 | the agent moves into a Cloudflare Workers cron with a gas floor, live chain routes, RPC fallback |
+| `193e177` to `15f87ce` | 2026-11-06 11:03 to 12:36 | the money-loop UI, chain hues, the Wick name |
+| `c533e47` | 2026-11-06 13:01 | v2 board and extruction: one-signature pairs, epochs, TWAP band, `maxAmountIn` |
+| `fad83e1`, `2544580` | 2026-11-06 13:04 to 13:10 | Uniswap v4 aggregator hook and its deploy script |
+| `8a3ea3f` | 2026-11-06 13:08 | `wick-quotes`: signed prices sold over x402 |
+| `893a385`, `71b3e83` | 2026-11-06 13:30 to 13:39 | v2 cron tick, cutover script, Worker on the v2 board |
+| `37b8894` | 2026-11-06 14:14 | the hook live on Base |
+| `881006e` | 2026-11-06 14:39 | fee harvest inside the funding machine |
+| `4137d08` to `1cae758` | 2026-11-06 15:33 to 15:39 | bid and ask half-spreads, refused answers re-post the last valid decision, depth and per-quote budget caps |
+
+### What's next
+
+Wick's trajectory is more doors for outside takers and tighter bounds per quote. The Uniswap v4 hook and the x402 feed already open the strategy to any router and any agent; the next step is routing integrations that send real flow through both. On the signing side, a cumulative per-quote cap enforced on chain extends today's off-chain per-quote budget, and a dedicated maker key separates `ship` and `dock` from the agent key, using the `setAgent` separation the board already supports.

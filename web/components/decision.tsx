@@ -26,12 +26,12 @@ export function DecisionFacts({ raw, className, withModel }: { raw: Inference; c
   if (raw.maxAmountInUsdc != null) facts.push(["Size cap", `${fmtUsdc(raw.maxAmountInUsdc)} USDC per fill`]);
   if (raw.ttlSeconds != null) facts.push(["Lifetime", `${raw.ttlSeconds} s`]);
   if (withModel && raw.model) facts.push(["Model", raw.model]);
-  facts.push(["TEE verdict", raw.teeVerified === true ? "verified" : raw.teeVerified === false ? "not verified" : "none returned, bound as null"]);
+  facts.push(["TEE verdict", raw.teeVerified === true ? "true, bound into inferenceId" : `${raw.teeVerified === false ? "false" : "null"}, bound as the router returned it`]);
   if (raw.provider) facts.push(["Provider", shortHash(raw.provider)]);
   if (raw.inferenceId) facts.push(["inferenceId", <CopyLink key="i" value={raw.inferenceId} label="inferenceId" />]);
   return (
     <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13px]", className)}>
-      {facts.map(([k, v]) => <div key={k} className="flex items-center justify-between gap-3 border-b border-rule pb-1"><dt className="text-muted">{k}</dt><dd className="num text-right text-ink-2">{v}</dd></div>)}
+      {facts.map(([k, v]) => <div key={k} className="flex items-center justify-between gap-3 border-b border-rule pb-1"><dt className="shrink-0 whitespace-nowrap text-muted">{k}</dt><dd className="num text-right text-ink-2">{v}</dd></div>)}
     </dl>
   );
 }
