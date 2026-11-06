@@ -1,6 +1,7 @@
 import { TOKENS } from "./config";
-import { formatAmount, toBaseUnits } from "./amounts";
-import { describeStep, sortFunding, toMillis } from "./funding";
+import { toBaseUnits } from "./amounts";
+import { fmtUnits } from "./format";
+import { sortFunding, toMillis } from "./funding";
 import type { AgentStatus, FundingStep, Inference } from "./schema";
 
 export type Fill = {
@@ -12,6 +13,9 @@ export type Fill = {
   tokenOut: string;
   amountIn: bigint;
   amountOut: bigint;
+  /** Reported by the fills route once the agent ships it; derived from the fee rate otherwise. */
+  feeUsdc?: number | null;
+  decisionsFunded?: number | null;
 };
 
 export type Loop = {
@@ -49,14 +53,14 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** One sentence that states the loop result from the rows beneath it, nothing else. */
 export function loopSentence(loop: Loop): string {
   const state = loopState(loop);
-  const usdc = `${formatAmount(loop.accruedUsdc, TOKENS.USDC.decimals, 6)} USDC`;
+  const usdc = `${fmtUnits(loop.accruedUsdc, "USDC")} USDC`;
   if (state === "no-activity") {
     return loop.signedPrices > 0
       ? `The agent has signed ${plural(loop.signedPrices, "price", "prices")}. No taker has filled against them yet, so no fee has reached its AI account.`
       : "No fill has paid the agent yet, so there is nothing to trace.";
   }
   if (state === "fees-only") return `The pool has earned ${usdc} in fees. It has not been turned into AI money yet.`;
-  const steps = plural(loop.funding.filter((f) => describeStep(f.step).kind !== "charge").length, "funding step", "funding steps");
+  const steps = plural(loop.funding.length, "funding transaction", "funding transactions");
   if (state === "funded") return `The pool has earned ${usdc} in fees and the agent recorded ${steps}. No AI run has been paid yet.`;
-  return `The pool has earned ${usdc} in fees. ${steps} moved money into the agent's AI account, and the 0G router billed ${plural(loop.inferences.length, "AI run", "AI runs")} against it.`;
+  return `The pool has earned ${usdc} in fees. ${steps} carried money to the agent's AI account on 0G, and the router billed ${plural(loop.inferences.length, "AI run", "AI runs")} against it.`;
 }

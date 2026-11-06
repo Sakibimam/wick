@@ -5,7 +5,8 @@ import { USDC, W0G } from "./config";
 import { ctaFor, type CtaInput } from "./cta";
 import { describeStep, toMillis, txUrl } from "./funding";
 import { buildLoop, loopSentence } from "./ledger";
-import { clock, freshness, impliedPrice, latestByDirection, offMidPct, spreadPct } from "./quotes";
+import { freshness, impliedPrice, latestByDirection, offMidPct, spreadPct } from "./quotes";
+import { clock, countdown, fmt0g, fmtBlock, fmtPrice, fmtUnits, fmtUsdc, shortHash } from "./format";
 import { classifyFailure, classifyQuoteError } from "./revert";
 import { statusSchema } from "./schema";
 
@@ -85,6 +86,7 @@ describe("cta order", () => {
     [{ connected: false }, "connect"], [{ chainId: 1 }, "switch"], [{ hasPrice: false }, "no-price"], [{ priceExpired: true }, "expired"],
     [{ amount: null }, "enter"], [{ amount: 11n }, "balance"], [{ quote: "loading" as const }, "quoting"], [{ quote: "stale" as const }, "stale"],
     [{ quote: "error" as const }, "quote-error"], [{ allowance: 1n }, "approve"], [{}, "swap"], [{ phase: "swapping" as const }, "busy"],
+    [{ maxIn: 4n }, "depth"], [{ maxIn: 5n }, "swap"],
   ])("case", (over, kind) => expect(ctaFor({ ...ok, ...over }).kind).toBe(kind));
   test("only connect, switch, approve and swap are enabled", () => {
     expect(ctaFor({ ...ok, priceExpired: true }).enabled).toBe(false);
@@ -114,7 +116,7 @@ describe("funding and ledger", () => {
   test("loop sentence only claims what the rows show", () => {
     expect(loopSentence(buildLoop(status(), []))).toContain("nothing to trace");
     expect(loopSentence(buildLoop(status({ quotes: [quote(USDC, W0G, "1", 10), quote(W0G, USDC, "1", 10, "bb")] }), []))).toContain("signed 2 prices");
-    expect(loopSentence(buildLoop(status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" } }), []))).toContain("2.5 USDC");
+    expect(loopSentence(buildLoop(status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" } }), []))).toContain("2.50 USDC");
     const tx = sig("b");
     const funded = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: [{ step: "deposit-payment-layer", txHash: tx, chainId: 16661, time: 1 }] });
     expect(loopSentence(buildLoop(funded, []))).toContain("No AI run has been paid yet");

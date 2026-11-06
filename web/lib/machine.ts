@@ -1,6 +1,7 @@
 import { describeStep, toMillis, type StageKind } from "./funding";
 import { freshness, latestByDirection, type Priced } from "./quotes";
 import { reasonText } from "./tiers";
+import { duration as ago } from "./format";
 import type { AgentStatus, FundingStep, Inference, Tier } from "./schema";
 
 /** The agent's budget lines, the same numbers as DEFAULT_BUDGET_CONFIG in agent/src/budget.ts (a test pins them). */
@@ -27,7 +28,7 @@ export const HOPS: { key: HopKey; name: string; what: string; chainId: number }[
   { key: "swap", name: "Uniswap", what: "Fees buy wrapped 0G.", chainId: 8453 },
   { key: "bridge", name: "CCIP bridge", what: "W0G crosses to the 0G chain.", chainId: 8453 },
   { key: "withdraw", name: "Unwrap", what: "W0G becomes native 0G.", chainId: 16661 },
-  { key: "deposit", name: "Deposit", what: "depositFor fills the AI account.", chainId: 16661 },
+  { key: "deposit", name: "Deposit", what: "0G lands in the account that pays for AI runs.", chainId: 16661 },
 ];
 
 /** Latest recorded transaction for each of the four funding hops, by the agent's step ids. */
@@ -42,7 +43,7 @@ export function hopEvidence(funding: FundingStep[]): Record<HopKey, FundingStep 
   return out;
 }
 
-export type Beat = { requestId: string; atMs: number; model: string | null; costLabel: string | null; x: number };
+export type Beat = { requestId: string; atMs: number; model: string | null; x: number };
 
 /** AI runs inside the window ending now, placed on 0..1. Runs older than the window are dropped. */
 export function heartbeat(inferences: Inference[], nowMs: number, windowMs: number): Beat[] {
@@ -51,16 +52,9 @@ export function heartbeat(inferences: Inference[], nowMs: number, windowMs: numb
     .map((r) => ({ r, at: toMillis(r.time) }))
     .filter((x): x is { r: Inference; at: number } => x.at !== null && x.at >= start && x.at <= nowMs)
     .sort((a, b) => a.at - b.at)
-    .map(({ r, at }) => ({ requestId: r.requestId, atMs: at, model: r.model, costLabel: costLabel(r), x: (at - start) / windowMs }));
+    .map(({ r, at }) => ({ requestId: r.requestId, atMs: at, model: r.model, x: (at - start) / windowMs }));
 }
 
-export function costLabel(r: Pick<Inference, "currency" | "totalCost">): string | null {
-  if (r.totalCost == null) return null;
-  const n = Number(r.totalCost);
-  if (r.currency === "0g") return `${(n / 1e18).toFixed(8).replace(/0+$/, "").replace(/\.$/, "")} 0G`;
-  if (r.currency === "usd") return `$${(n / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
-  return null;
-}
 
 export type PriceLeg = { buy: Priced | null; sell: Priced | null; open: boolean; soonest: Priced | null };
 
@@ -78,15 +72,6 @@ export function fuseLeft(expiry: number, nowSeconds: number, ttlSeconds: number)
   return Math.min(1, Math.max(0, (expiry - nowSeconds) / ttlSeconds));
 }
 
-const ago = (ms: number) => {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 90) return `${s} s`;
-  const m = Math.round(s / 60);
-  if (m < 90) return `${m} min`;
-  const h = Math.round(m / 60);
-  return h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
-};
-export { ago as durationLabel };
 
 /** One sentence of what the machine is doing right now, built only from the status document and the chain clock. */
 export function machineSentence(status: AgentStatus, leg: PriceLeg, nowSeconds: number): string {
@@ -121,4 +106,19 @@ export function swapPerRun(status: AgentStatus): { usdc: number; cost0g: number;
   const cost0g = Number(run.totalCost) / 1e18;
   const costUsdc = cost0g * status.mid;
   return { usdc: costUsdc / (status.strategy.feeBps / 10_000), cost0g, costUsdc };
+}
+
+export type Tick = { at: string; outcome: string };
+const failed = (t: Tick) => !(t.outcome === "hold" || t.outcome.startsWith("posted"));
+
+/** The agent's last cron tick in plain words, and how many ticks in a row have failed (newest first in lastTicks). */
+export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">): { at: number; words: string; failed: boolean; failStreak: number } | null {
+  const ticks: Tick[] = status.lastTicks?.length ? [...status.lastTicks].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) : status.lastTick ? [status.lastTick] : [];
+  const last = ticks[0];
+  if (!last) return null;
+  let failStreak = 0;
+  for (const t of ticks) { if (!failed(t)) break; failStreak++; }
+  const o = last.outcome;
+  const words = o === "hold" ? "held its price" : o.startsWith("posted") ? "signed a new price" : o.startsWith("error: ") ? `failed, ${o.slice(7)}` : o.startsWith("partial") ? "posted one side only" : o === "secrets_not_set" ? "is missing its keys" : o;
+  return { at: Date.parse(last.at), words, failed: failed(last), failStreak };
 }

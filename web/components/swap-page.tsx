@@ -3,15 +3,18 @@
 import { useMemo, useState } from "react";
 import { Machine } from "@/components/machine";
 import { SwapTicket } from "@/components/swap-ticket";
+import { CopyLink } from "@/components/copy-link";
+import { Amount, ProtocolIcon, Tk } from "@/components/token-mark";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
-import { formatAmount } from "@/lib/amounts";
-import { formatPrice } from "@/lib/format";
-import { durationLabel, swapPerRun } from "@/lib/machine";
-import { clock, CLOSING_SECONDS, latestByDirection, offMidPct, URGENT_SECONDS, type Direction, type Priced } from "@/lib/quotes";
+import { BASE_CHAIN_ID, TOKENS } from "@/lib/config";
+import { economicsOf, fillEconomics, maxFillIn, runCost, takersOf } from "@/lib/economics";
+import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, relativeTime, significant } from "@/lib/format";
+import { txUrl } from "@/lib/funding";
+import type { Fill } from "@/lib/ledger";
+import { latestByDirection, type Direction, type Priced } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
-import { cn } from "@/lib/utils";
 
 export function SwapPage() {
   const status = useAgentStatus();
@@ -33,73 +36,81 @@ export function SwapPage() {
         now={now}
         nowReady={ready}
       />
-      <section id="swap" aria-labelledby="swap-title" className="scroll-mt-4 bg-paper">
-        <div className="mx-auto grid max-w-[1312px] grid-cols-1 gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] lg:gap-20 lg:px-12 lg:py-28">
+      <section id="swap" aria-labelledby="swap-title" className="scroll-mt-4 border-t border-rule bg-paper">
+        <div className="mx-auto grid max-w-[1312px] grid-cols-1 gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] lg:gap-20 lg:px-12 lg:py-20">
           <div>
             <h2 id="swap-title" className="text-[40px] lg:text-[52px]">Trade the signed price</h2>
-            <p className="mb-8 mt-4 max-w-[44ch] text-[16px] text-ink-2">W0G is wrapped 0G on Base. You swap with the agent's Aqua strategy at the price its AI run signed, and your fee starts the trip to its next run.</p>
+            <p className="mb-8 mt-4 max-w-[44ch] text-[16px] text-ink-2"><Tk>W0G</Tk> is wrapped <Tk>0G</Tk> on Base. You swap with the agent&apos;s 1inch Aqua strategy at the price its AI run signed, and your fee starts the trip to its next run.</p>
             <SwapTicket status={status.data} priced={priced} direction={direction} setDirection={setDirection} now={now} nowReady={ready} />
           </div>
-          <PriceBoard status={status.data} priced={priced} direction={direction} now={now} ready={ready} loading={status.isPending} />
+          <Economics status={status.data} priced={priced} fills={fills.data?.fills ?? null} nowMs={now * 1000} loading={status.isPending} />
         </div>
       </section>
     </>
   );
 }
 
-/** The two signed prices as launch clocks: time left set directly above the price it counts down. */
-function PriceBoard({ status, priced, direction, now, ready, loading }: { status: AgentStatus | undefined; priced: Record<Direction, Priced | null>; direction: Direction; now: number; ready: boolean; loading: boolean }) {
-  if (loading) return <div aria-busy="true" className="space-y-6 lg:pt-32"><div className="skeleton h-14 w-72" /><div className="skeleton h-14 w-72" /><div className="skeleton h-24 w-full" /></div>;
+/** What a swap is worth to the agent: depth it can fill, what one AI run costs in swap volume, and who has filled so far. */
+function Economics({ status, priced, fills, nowMs, loading }: { status: AgentStatus | undefined; priced: Record<Direction, Priced | null>; fills: Fill[] | null; nowMs: number; loading: boolean }) {
+  if (loading) return <div aria-busy="true" className="space-y-6 lg:pt-28"><div className="skeleton h-32 w-full" /><div className="skeleton h-40 w-full" /><div className="skeleton h-32 w-full" /></div>;
   if (!status) return null;
-  const mid = status.mid;
+  const econ = economicsOf(status);
+  const buyMax = maxFillIn("buy-w0g", status, priced["buy-w0g"]);
+  const sellMax = maxFillIn("sell-w0g", status, priced["sell-w0g"]);
+  const takers = fills ? takersOf(status, fills) : null;
   return (
-    <div data-ui className="lg:pt-2">
-      <div className="space-y-10">
-        {(["buy-w0g", "sell-w0g"] as const).map((d) => <Clock key={d} d={d} p={priced[d]} now={now} ready={ready} mid={mid} active={d === direction} />)}
+    <div className="space-y-10 lg:pt-28">
+      {econ.breakEvenFillUsdcPerRun !== null && econ.lastRun ? (
+        <div>
+          <p className="label">Swap volume that pays for one AI run</p>
+          <p className="mt-2 font-display text-[64px] font-semibold leading-none text-ink"><Amount value={fmtUsdc(econ.breakEvenFillUsdcPerRun)} symbol="USDC" size={28} unitClassName="text-[24px]" /></p>
+          <p className="mt-3 max-w-[56ch] text-[16px] leading-[1.6] text-ink-2">
+            The last AI run cost <span className="num text-ink">{runCost(econ.lastRun)}</span>. At the {status.strategy ? `${(status.strategy.feeBps / 100).toFixed(2)}%` : ""} maker fee, that much trading pays for the next one.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="border-t border-rule pt-6">
+        <p className="label flex items-center gap-1.5"><ProtocolIcon protocol="aqua" size={14} />Depth the strategy can fill right now</p>
+        <dl className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="ask">
+            <dt className="text-[13px] text-ink-2"><span className="font-semibold text-[var(--tone)]">Buy</span> <Tk>W0G</Tk>, pay up to</dt>
+            <dd className="mt-1 text-[24px] text-ink">{buyMax !== null ? <Amount value={fmtUnits(buyMax, "USDC")} symbol="USDC" /> : "no price signed"}</dd>
+            {status.strategy ? <dd className="num text-[13px] text-muted">for up to {fmt0g(Number(status.strategy.w0g) / 1e18)} <Tk>W0G</Tk> in the strategy</dd> : null}
+          </div>
+          <div className="bid">
+            <dt className="text-[13px] text-ink-2"><span className="font-semibold text-[var(--tone)]">Sell</span> <Tk>W0G</Tk>, pay up to</dt>
+            <dd className="mt-1 text-[24px] text-ink">{sellMax !== null ? <Amount value={fmtUnits(sellMax, "W0G")} symbol="W0G" /> : "no price signed"}</dd>
+            {status.strategy ? <dd className="num text-[13px] text-muted">for up to {fmtUsdc(Number(status.strategy.usdc) / 1e6)} USDC in the strategy</dd> : null}
+          </div>
+        </dl>
       </div>
-      <p className="num mt-12 max-w-[60ch] text-[16px] leading-[1.6] text-ink-2">
-        Pool mid on Uniswap <span className="text-ink">{mid !== null ? `${formatPrice(mid)} USDC` : "unavailable"}</span>
-        {status.strategy ? <>, the strategy can pay out <span className="text-ink">{formatAmount(BigInt(status.strategy.w0g), 18, 4)} W0G and {formatAmount(BigInt(status.strategy.usdc), 6, 2)} USDC</span>, the maker fee is <span className="text-ink">{(status.strategy.feeBps / 100).toFixed(2)}%</span></> : null}
-        , and a funding run starts at <span className="text-ink">{status.fundingThresholdUsdc ?? "10"} USDC</span> of fees.
-        {status.readAt ? <span className="text-muted"> Read at Base block {Number(status.readAt.baseBlock).toLocaleString("en-US")}.</span> : null}
-      </p>
-      <FeeToBrain status={status} />
-    </div>
-  );
-}
 
-function Clock({ d, p, now, ready, mid, active }: { d: Direction; p: Priced | null; now: number; ready: boolean; mid: number | null; active: boolean }) {
-  const name = d === "buy-w0g" ? "Buy W0G" : "Sell W0G";
-  if (!p) return <div><p className="mono text-[16px] text-muted">no signature yet</p><p className="font-display text-[40px] font-semibold uppercase leading-none text-muted">{name}</p></div>;
-  const left = Math.max(0, Math.floor(p.expiry - now));
-  const tone = left <= URGENT_SECONDS ? "danger" : left <= CLOSING_SECONDS ? "warn" : "ok";
-  const off = offMidPct(p.priceUsdcPerW0g, mid);
-  return (
-    <div className={cn("transition-opacity duration-200", active ? "opacity-100" : "opacity-60")}>
-      <p className={cn("mono text-[16px]", left > 0 ? (tone === "ok" ? "text-ok-ink" : tone === "warn" ? "text-warn-ink" : "text-danger-ink") : "text-danger-ink")}>
-        {!ready ? "reading the chain clock" : left > 0 ? `T-${clock(left)}` : `Expired ${durationLabel((now - p.expiry) * 1000)} ago, the pool refuses this side`}
-      </p>
-      <p className="mt-1 flex flex-wrap items-baseline gap-x-4 font-display font-semibold uppercase leading-none text-ink">
-        <span className="text-[40px] lg:text-[56px]">{name}</span>
-        <span className={cn("num text-[40px] lg:text-[56px]", left <= 0 && "text-muted line-through decoration-danger decoration-2")}>{formatPrice(p.priceUsdcPerW0g)}</span>
-        <span className="text-[22px] text-muted">USDC</span>
-      </p>
-      {off !== null ? <p className="num mt-2 text-[13px] text-muted">{off >= 0 ? "+" : ""}{off.toFixed(2)}% against the pool mid</p> : null}
-    </div>
-  );
-}
-
-/** The fee a swap pays, against what the agent's last AI run cost: how much trading buys one run, from live numbers only. */
-function FeeToBrain({ status }: { status: AgentStatus }) {
-  const r = swapPerRun(status);
-  if (!r || !status.strategy) return null;
-  return (
-    <div className="mt-12 rounded-card bg-panel p-6">
-      <p className="label">Swap volume that pays for one AI run</p>
-      <p className="mt-2 flex items-baseline gap-3 font-display font-semibold uppercase leading-none text-ink"><span className="num text-[56px]">{r.usdc < 1 ? r.usdc.toFixed(3) : r.usdc.toFixed(2)}</span><span className="text-[22px] text-muted">USDC</span></p>
-      <p className="mt-4 max-w-[52ch] text-[16px] leading-[1.6] text-ink-2">
-        The last run cost <span className="num text-ink">{r.cost0g.toFixed(7)} 0G</span>, about <span className="num text-ink">{r.costUsdc.toFixed(6)} USDC</span> at the pool mid. At a {(status.strategy.feeBps / 100).toFixed(2)}% fee, that much trading covers it.
-      </p>
+      <div className="border-t border-rule pt-6">
+        <p className="label">Takers</p>
+        <p className="mt-2 flex items-baseline gap-3">
+          <span className="num font-display text-[56px] font-semibold leading-none text-ink">{takers ? takers.outside : "0"}</span>
+          <span className="text-[16px] text-ink-2">outside {takers?.outside === 1 ? "wallet has" : "wallets have"} filled{takers && takers.seedFills > 0 ? `, plus ${takers.seedFills} seed fill (agent)` : ""}</span>
+        </p>
+        {fills && fills.length > 0 ? (
+          <ul className="mt-4 divide-y divide-rule rounded-card bg-panel">
+            {fills.slice(0, 4).map((f) => {
+              const e = fillEconomics(f, status);
+              const inSym = f.tokenIn.toLowerCase() === TOKENS.USDC.address.toLowerCase() ? "USDC" : "W0G";
+              return (
+                <li key={`${f.txHash}-${f.amountIn}`} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-[13px]">
+                  <span className="flex items-center gap-2 text-ink">
+                    <Amount value={fmtUnits(f.amountIn, inSym)} symbol={inSym} size={14} />
+                    {e.seed ? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">seed fill (agent)</span> : null}
+                  </span>
+                  <span className="num text-muted">{e.feeUsdc !== null ? `fee ${fmtUsd(e.feeUsdc)}` : ""}{e.decisionsFunded !== null ? `, funds ${significant(e.decisionsFunded, 2)} decisions` : ""}</span>
+                  <span className="flex items-center gap-2"><CopyLink value={f.txHash} href={txUrl(BASE_CHAIN_ID, f.txHash)} label="fill transaction" />{f.timeMs ? <span className="num text-muted">{relativeTime(f.timeMs, nowMs)}</span> : null}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }

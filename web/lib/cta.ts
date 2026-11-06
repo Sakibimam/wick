@@ -13,9 +13,11 @@ export type CtaInput = {
   allowance: bigint | undefined;
   phase: Phase;
   sellSymbol: string;
+  /** Largest input the strategy can fill right now; above it the router reverts. */
+  maxIn?: bigint | null;
 };
 
-export type Cta = { kind: "connect" | "switch" | "no-price" | "expired" | "enter" | "balance" | "quoting" | "stale" | "quote-error" | "approve" | "swap" | "busy"; label: string; enabled: boolean };
+export type Cta = { kind: "connect" | "switch" | "no-price" | "expired" | "enter" | "balance" | "quoting" | "stale" | "quote-error" | "approve" | "swap" | "busy" | "depth"; label: string; enabled: boolean };
 
 /** The one button's state, in the order a taker would hit the problems. */
 export function ctaFor(i: CtaInput): Cta {
@@ -28,6 +30,7 @@ export function ctaFor(i: CtaInput): Cta {
   if (!i.hasPrice) return { kind: "no-price", label: "Waiting for the agent's price", enabled: false };
   if (i.priceExpired) return { kind: "expired", label: "Price expired, new signature pending", enabled: false };
   if (i.amount === null) return { kind: "enter", label: "Enter an amount", enabled: false };
+  if (i.maxIn != null && i.amount > i.maxIn) return { kind: "depth", label: "Above the pool's depth right now", enabled: false };
   if (i.balance !== undefined && i.amount > i.balance) return { kind: "balance", label: `Not enough ${i.sellSymbol}`, enabled: false };
   if (i.quote === "loading" || i.quote === "idle") return { kind: "quoting", label: "Getting the router quote", enabled: false };
   if (i.quote === "stale") return { kind: "stale", label: "Price is stale, swap refused", enabled: false };

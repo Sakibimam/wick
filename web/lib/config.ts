@@ -39,3 +39,9 @@ export const EXPLORERS: Record<number, { name: string; tx: (h: string) => string
 };
 
 export const CHAIN_NAMES: Record<number, string> = { [BASE_CHAIN_ID]: LOCAL_FORK ? "Base fork" : "Base", [ZERO_G_CHAIN_ID]: "0G" };
+
+/** Official marks, served from public/tokens. A test fails if any symbol or chain here has no file. */
+export const TOKEN_ICON: Record<TokenSymbol | "0G", string> = { USDC: "/tokens/usdc.svg", W0G: "/tokens/w0g.svg", "0G": "/tokens/0g.svg" };
+export const CHAIN_ICON: Record<number, string> = { [BASE_CHAIN_ID]: "/tokens/base.svg", [ZERO_G_CHAIN_ID]: "/tokens/0g.svg" };
+export const PROTOCOL_ICON = { aqua: "/tokens/1inch.svg", uniswap: "/tokens/uniswap.svg", ccip: "/tokens/ccip.svg" } as const;
+export type Protocol = keyof typeof PROTOCOL_ICON;

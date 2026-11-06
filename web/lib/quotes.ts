@@ -58,13 +58,6 @@ export function freshness(expiry: number, nowSeconds: number): Freshness {
   return left <= CLOSING_SECONDS ? "closing" : "fresh";
 }
 
-export function clock(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  const two = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`;
-}
 
 /** Signed difference between the two prices, as a fraction of their midpoint. Positive when buying costs more than selling pays. */
 export function spreadPct(sell: Priced | null, buy: Priced | null): number | null {

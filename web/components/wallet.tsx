@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useConnect, useConnection, useConnectors, useDisconnect } from "wagmi";
 import { Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { truncateHex } from "@/lib/amounts";
+import { shortHash } from "@/lib/format";
 import { DEV_ACCOUNT, LOCAL_FORK } from "@/lib/config";
 
 type Ctx = { open: () => void };
@@ -29,20 +29,22 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
     setChosen(null);
     ref.current?.showModal();
   }, [reset]);
-  const openOrConnect = useCallback(() => {
-    if (connectors.length === 1 && connectors[0]) {
-      connect({ connector: connectors[0] });
-      return;
-    }
-    open();
-  }, [connectors, connect, open]);
+  const [hasEthereum, setHasEthereum] = useState(false);
+  useEffect(() => setHasEthereum("ethereum" in window), []);
+  // Named wallets from EIP-6963 replace the generic "Injected" entry; an installed Coinbase extension replaces the SDK entry.
+  const named = connectors.filter((c) => c.type === "injected" && c.id !== "injected");
+  const shown = connectors.filter((c) => {
+    if (c.id === "injected") return named.length === 0 && hasEthereum;
+    if (c.id === "coinbaseWalletSDK") return !named.some((n) => n.id === "com.coinbase.wallet");
+    return true;
+  });
 
   useEffect(() => {
     if (isConnected) ref.current?.close();
   }, [isConnected]);
 
   return (
-    <WalletDialogContext.Provider value={{ open: openOrConnect }}>
+    <WalletDialogContext.Provider value={{ open }}>
       {children}
       <dialog
         ref={ref}
@@ -55,10 +57,10 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="sm" onClick={close} aria-label="Close"><X className="size-4" aria-hidden /></Button>
         </div>
         <div className="grid grid-cols-1 gap-2 p-5">
-          {connectors.length === 0 ? (
-            <p className="text-[14px]">{LOCAL_FORK ? "This page runs on a local fork and has no test account. Start it with scripts/dev-fork.sh, which sets NEXT_PUBLIC_DEV_ACCOUNT." : "No browser wallet was found. Install a wallet extension that supports Base, then reload this page."}</p>
+          {LOCAL_FORK && shown.length === 0 ? (
+            <p className="text-[14px]">This page runs on a local fork and has no test account. Start it with scripts/dev-fork.sh, which sets NEXT_PUBLIC_DEV_ACCOUNT.</p>
           ) : (
-            connectors.map((c) => (
+            shown.map((c) => (
               <Button
                 key={c.uid}
                 variant="secondary"
@@ -66,11 +68,12 @@ export function WalletDialogProvider({ children }: { children: ReactNode }) {
                 loading={isPending && chosen === c.uid}
                 onClick={() => { setChosen(c.uid); connect({ connector: c }); }}
               >
-                {c.icon ? <img src={c.icon} alt="" className="size-5 rounded-sm" /> : <Wallet className="size-4" aria-hidden />}
-                {c.type === "mock" && DEV_ACCOUNT ? `Fork test account ${truncateHex(DEV_ACCOUNT, 6, 4)}` : c.name}
+                {c.icon ? <img src={c.icon} alt="" className="size-5 rounded-sm" /> : c.id === "coinbaseWalletSDK" ? <img src="/tokens/coinbase-wallet.svg" alt="" className="size-5 rounded-sm" /> : <Wallet className="size-4" aria-hidden />}
+                {c.type === "mock" && DEV_ACCOUNT ? `Fork test account ${shortHash(DEV_ACCOUNT)}` : c.id === "injected" ? "Browser wallet" : c.name}
               </Button>
             ))
           )}
+          {!LOCAL_FORK && named.length === 0 ? <p className="text-[13px] text-muted">No wallet extension was found in this browser. Coinbase Wallet works from a phone or a passkey, or install any wallet that supports Base and reload.</p> : null}
           {error ? <p role="alert" className="text-[13px] text-danger-ink">{error.message.split("\n")[0]}</p> : null}
         </div>
       </dialog>
@@ -88,7 +91,7 @@ export function WalletButton({ className }: { className?: string }) {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="mono hidden rounded-control bg-panel px-2.5 py-1.5 text-[13px] text-ink sm:inline" title={address}>{truncateHex(address, 6, 4)}</span>
+        <span className="num hidden rounded-control bg-panel px-2.5 py-1.5 text-[13px] text-ink sm:inline" title={address}>{shortHash(address)}</span>
         <Button variant="ghost" size="sm" onClick={() => disconnect()}>Disconnect</Button>
       </div>
     );

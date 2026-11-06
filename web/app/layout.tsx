@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description,
   applicationName: "Wick",
   openGraph: { type: "website", siteName: "Wick", title, description, url: "/" },
-  twitter: { card: "summary", title, description },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0d0d10" };

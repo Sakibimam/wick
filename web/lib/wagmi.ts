@@ -1,5 +1,5 @@
 import { createConfig, http } from "wagmi";
-import { injected, mock } from "wagmi/connectors";
+import { coinbaseWallet, injected, mock } from "wagmi/connectors";
 import { base } from "wagmi/chains";
 import { BASE_RPC_URL, DEV_ACCOUNT, LOCAL_FORK } from "./config";
 
@@ -7,7 +7,11 @@ import { BASE_RPC_URL, DEV_ACCOUNT, LOCAL_FORK } from "./config";
 const chain = LOCAL_FORK ? { ...base, rpcUrls: { default: { http: [BASE_RPC_URL] } } } : base;
 
 // A browser wallet on chain 8453 would broadcast to Base mainnet, so on a fork the only wallet is the fork's unlocked test account.
-const connectors = LOCAL_FORK ? (DEV_ACCOUNT ? [mock({ accounts: [DEV_ACCOUNT], features: { reconnect: true } })] : []) : [injected()];
+// EIP-6963 discovery adds every installed extension by name and icon; Coinbase Wallet also covers phones and smart wallets.
+// WalletConnect is left out: it needs a project id and none is configured.
+const connectors = LOCAL_FORK
+  ? (DEV_ACCOUNT ? [mock({ accounts: [DEV_ACCOUNT], features: { reconnect: true } })] : [])
+  : [injected(), coinbaseWallet({ appName: "Wick", appLogoUrl: "https://wick.earn-shield-alerts.workers.dev/icon.svg", preference: { options: "all" } })];
 
 export const wagmiConfig = createConfig({
   chains: [chain],

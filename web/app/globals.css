@@ -66,9 +66,15 @@
   .tone-quiet { --tone: var(--color-quiet); }
   .chain-base { --chain: var(--color-chain-base); }
   .chain-zg { --chain: var(--color-chain-zg); }
+  .bid { --tone: var(--color-ok); }
+  .ask { --tone: var(--color-danger); }
+  /* Barlow ships no slashed zero; this draws one over any digit zero wrapped by <Tk>. */
+  .zero { position: relative; display: inline-block; }
+  .zero::after { content: ""; position: absolute; left: 50%; top: 26%; bottom: 26%; width: max(1px, 0.08em); background: currentColor; transform: translateX(-50%) rotate(32deg); border-radius: 1px; }
 }
 
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes flicker { 0%, 100% { transform: scaleY(1); } 40% { transform: scaleY(0.92) scaleX(1.03); } 70% { transform: scaleY(1.04); } }
 
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
