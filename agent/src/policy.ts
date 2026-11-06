@@ -43,6 +43,13 @@ export function composeQuotes(p: { twapMid: number; bidHalfSpreadBps: number; as
   if (Math.max(deviation01Bps, deviation10Bps) > BAND_SAFE_BPS) throw new RangeError(`pair leaves the on-chain band: ${Math.max(deviation01Bps, deviation10Bps).toFixed(1)} bps`);
   return { rate01E18: BigInt(Math.round(bid * 1e6)), rate10E18: BigInt(Math.round(1e30 / ask)), maxIn0: BigInt(Math.floor(p.maxAmountInUsdc / p.twapMid * 1e18)), maxIn1: BigInt(Math.floor(p.maxAmountInUsdc * 1e6)), deviation01Bps, deviation10Bps };
 }
+/** The largest input whose output, after the strategy's fee, fits depthOut at the quoted rate (the extruction reverts above it),
+ *  capped at quoteMaxIn. The same inversion /api/quote and wick-quotes apply, so what the board advertises is fillable. */
+export function depthCap(depthOut: bigint, rateE18: bigint, feeBps: number, quoteMaxIn: bigint): bigint {
+  if (rateE18 === 0n) return 0n;
+  const byDepth = (((depthOut * 10_000n) / (10_000n - BigInt(feeBps))) * 10n ** 18n) / rateE18;
+  return byDepth < quoteMaxIn ? byDepth : quoteMaxIn;
+}
 /** Annualisation-free realized volatility: standard deviation of log returns between consecutive mids, in bps. */
 export function realizedVolBps(mids: number[]): number {
   const r: number[] = []; for (let i = 1; i < mids.length; i++) if (mids[i]! > 0 && mids[i - 1]! > 0) r.push(Math.log(mids[i]! / mids[i - 1]!));

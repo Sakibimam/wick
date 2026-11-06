@@ -102,3 +102,19 @@ describe("a refused answer never empties the book", () => {
     expect(r.outcome).toStartWith("refused spread_out_of_range");
   });
 });
+
+describe("advertised size never exceeds depth", () => {
+  test("each side's maxAmountIn is clamped to the input whose output the strategy can pay, before postPair", async () => {
+    const c = fakeChain();
+    c.st.slots.set(LIVE_HASH.toLowerCase(), { w0g: E18, usdc: 6_836n, tokensCount: 2 });
+    const r = await cronTick(emptyCronState(), c.env({ now: NOW, fetchImpl: router(() => ({ bidHalfSpreadBps: 60, askHalfSpreadBps: 40, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "W0G heavy" })) }));
+    expect(r.outcome).toStartWith("posted");
+    const p = c.st.sent.find((t) => t.fn === "postPair")!.args[0] as { rate01E18: bigint; rate10E18: bigint; maxIn0: bigint; maxIn1: bigint };
+    const byDepth0 = 6_836n * 10_000n / 9_970n * E18 / p.rate01E18;
+    expect(byDepth0 < 10n ** 17n).toBe(true); // ~0.047 W0G, where 0.05 USDC of size alone would advertise ~0.34 W0G
+    expect(p.maxIn0).toBe(byDepth0);
+    expect(p.maxIn1).toBe(50_000n);
+    // every advertised input is fillable: its output at the quoted rate, net of the fee, fits the strategy's balance
+    expect(p.maxIn0 * p.rate01E18 / E18 * 9_970n / 10_000n <= 6_836n).toBe(true);
+  });
+});

@@ -9,7 +9,7 @@ import { fundingAbi, quoteCcipFee, W0G_ZERO_G, ZERO_G_PAYMENT_LAYER } from "./fu
 import { decideFunding, emptyFundingState, fundingTick, harvestAbi, AQUA_SWAPVM_ROUTER, WETH_BASE, type FundingState, type HarvestCtx, type LiveOrder } from "./funding-machine.js";
 import { signPair, type Pair } from "./signer.js";
 import { boardV2Abi, eip1559Fees, postPair } from "./poster.js";
-import { composeQuotes, cronPolicy, GAS_FLOOR_WEI, postedHalfSpreads, realizedVolBps, tierSpreadBps } from "./policy.js";
+import { composeQuotes, cronPolicy, depthCap, GAS_FLOOR_WEI, postedHalfSpreads, realizedVolBps, tierSpreadBps } from "./policy.js";
 
 export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; bidHalfSpreadBps?: number | null; askHalfSpreadBps?: number | null; postedBidHalfSpreadBps?: number | null; postedAskHalfSpreadBps?: number | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number; fallbackFrom?: string | null };
 export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address; gasCostWei?: string };
@@ -169,9 +169,12 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     const sides = postedHalfSpreads(d.bidHalfSpreadBps, d.askHalfSpreadBps, decision.tier);
     const composed = composeQuotes({ twapMid: market.twapMid, bidHalfSpreadBps: sides.bid, askHalfSpreadBps: sides.ask, maxAmountInUsdc: d.maxAmountInUsdc });
     // spreadBps / postedSpreadBps / skewBps are the half-spreads restated as width and lean for readers of the older record shape.
-    const detail = { reason: d.reason, bidHalfSpreadBps: d.bidHalfSpreadBps, askHalfSpreadBps: d.askHalfSpreadBps, postedBidHalfSpreadBps: sides.bid, postedAskHalfSpreadBps: sides.ask, spreadBps: Math.round((d.bidHalfSpreadBps + d.askHalfSpreadBps) / 2), postedSpreadBps: Math.round((sides.bid + sides.ask) / 2), skewBps: Math.round((sides.bid - sides.ask) / 2), maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: d.maxAmountInUsdc, ttlSeconds: d.ttlSeconds, inferenceId };
+    const detail: Partial<InferenceRecord> = { reason: d.reason, bidHalfSpreadBps: d.bidHalfSpreadBps, askHalfSpreadBps: d.askHalfSpreadBps, postedBidHalfSpreadBps: sides.bid, postedAskHalfSpreadBps: sides.ask, spreadBps: Math.round((d.bidHalfSpreadBps + d.askHalfSpreadBps) / 2), postedSpreadBps: Math.round((sides.bid + sides.ask) / 2), skewBps: Math.round((sides.bid - sides.ask) / 2), maxAmountInUsdc: d.maxAmountInUsdc, ttlSeconds: d.ttlSeconds, inferenceId };
     const nonce = (await env.base.readContract({ address: env.board, abi: boardV2Abi, functionName: "lastNonce", args: [env.maker, epoch] })) + 1n;
-    const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0: composed.maxIn0, maxIn1: composed.maxIn1, expiry: BigInt(nowSec + d.ttlSeconds), epoch, nonce, inferenceId };
+    // Advertise no more than the strategy can pay out: W0G in is paid in USDC depth, USDC in in W0G depth. The board refuses 0, so an empty side posts 1.
+    const one = (x: bigint) => (x > 0n ? x : 1n);
+    const maxIn0 = one(depthCap(strategy[1], composed.rate01E18, fenv.feeBps, composed.maxIn0)), maxIn1 = one(depthCap(strategy[0], composed.rate10E18, fenv.feeBps, composed.maxIn1));
+    const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0, maxIn1, expiry: BigInt(nowSec + d.ttlSeconds), epoch, nonce, inferenceId };
     try {
       const sig = await signPair(wallet, env.chain.id, env.board, pair);
       const sent = await postPair(env.base, wallet, env.board, pair, sig);
@@ -180,6 +183,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
       for (const [tokenIn, tokenOut, rate, maxIn] of [[W0G, USDC, pair.rate01E18, pair.maxIn0], [USDC, W0G, pair.rate10E18, pair.maxIn1]] as const)
         s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), maxAmountIn: maxIn.toString(), expiry: pair.expiry.toString(), epoch: epoch.toString(), nonce: nonce.toString(), inferenceId, requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString(), board: env.board, gasCostWei }].slice(-KEEP);
       s.lastValidDecision = { ...d, inferenceId, requestId };
+      detail.maxAmountIn = maxIn1.toString();
       s.lastMid = market.twapMid; s.quotedAt = now;
       return { detail, error: null };
     } catch (e) { return { detail, error: errText(e) }; }

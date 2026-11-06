@@ -1,6 +1,7 @@
 // The JSON routes the pages read, served by the Worker before OpenNext sees the request.
 import { BaseError, ContractFunctionRevertedError, getAddress, parseAbi, type Address } from "viem";
 import { boardV2Abi } from "../../agent/src/poster";
+import { depthCap } from "../../agent/src/policy";
 import { AGENT, AQUA } from "../lib/evidence";
 import { AQUA_ROUTER, USDC, W0G } from "../lib/config";
 import { baseClient, fillsOfOrders, readAllFills, routerQuote, type Kv } from "./chain";
@@ -15,7 +16,6 @@ const readLive = async (kv: Kv | null) => liveOrderOf(kv ? ((await kv.get("cron-
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
 const first = (e: unknown) => (e instanceof BaseError ? e.shortMessage : e instanceof Error ? e.message.split("\n")[0]! : String(e));
 const aquaAbi = parseAbi(["function safeBalances(address maker,address app,bytes32 strategyHash,address token0,address token1) view returns (uint256,uint256)"]);
-const BPS = 10_000n;
 
 export async function handleApi(req: Request, kv: Kv | null): Promise<Response | null> {
   const url = new URL(req.url);
@@ -43,12 +43,7 @@ export async function handleApi(req: Request, kv: Kv | null): Promise<Response |
 }
 
 /** Largest exact input whose output fits the strategy's balance of tokenOut, inverting the extruction's maker-favoring rounding. */
-export function depthCap(depthOut: bigint, rateE18: bigint, feeBps: number, quoteMaxIn: bigint): bigint {
-  if (rateE18 === 0n) return 0n;
-  const grossOutCap = (depthOut * BPS) / (BPS - BigInt(feeBps));
-  const byDepth = (grossOutCap * 10n ** 18n) / rateE18;
-  return byDepth < quoteMaxIn ? byDepth : quoteMaxIn;
-}
+export { depthCap };
 
 /** router.quote() for the live strategy, the same view call a taker's swap runs first. An input above the strategy's depth or the
  *  quote's maxAmountIn comes back depth-limited: the largest fillable input, quoted, never a number the swap would revert on. */
