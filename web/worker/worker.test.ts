@@ -34,9 +34,9 @@ test("v1 posts resolve their request id by post tx, the two pre-cron posts from 
   expect(v1Records(posts as never, [])[0]!.requestId).toBe("5319a0b6-562e-4bbe-a141-dfb94fc20aaa");
 });
 
-test("requotes per day follow the TTL and the 600 s window on a 5 minute cron", () => {
-  expect(requotesPerDay(900)).toBe(288);
-  expect(requotesPerDay(1500)).toBe(96);
+test("requotes per day follow the TTL and the agent's 360 s window on a 5 minute cron", () => {
+  expect(requotesPerDay(900)).toBe(144);
+  expect(requotesPerDay(1500)).toBe(72);
 });
 
 test("economics: run cost in both billing currencies, coverage and break-even", () => {
@@ -47,7 +47,7 @@ test("economics: run cost in both billing currencies, coverage and break-even", 
   expect(e.coverage!).toBeCloseTo(0.0003 / 0.0000408, 1);
   expect(e.breakEvenFillUsdcPerRun!).toBeCloseTo(0.0000408 / 0.003, 4);
   expect(e.gasPerRequoteUsd!).toBeCloseTo(0.00264, 5);
-  expect(e.requotesPerDay).toBe(288);
+  expect(e.requotesPerDay).toBe(144);
   expect(e.runwayDays!).toBeGreaterThan(0);
 });
 

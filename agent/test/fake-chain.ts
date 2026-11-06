@@ -35,7 +35,7 @@ export function fakeChain() {
     block: 1_000_000n,
     ethWei: 2n * 10n ** 18n,
     wallet: { w0g: 2n * 10n ** 18n, usdc: 10_000_000n },
-    slots: new Map<string, { w0g: bigint; usdc: bigint; tokensCount: number }>([[lc(LIVE_HASH), { w0g: 10n ** 18n, usdc: 5_000_000n, tokensCount: 2 }]]),
+    slots: new Map<string, { w0g: bigint; usdc: bigint; tokensCount: number }>([[lc(LIVE_HASH), { w0g: 10n ** 18n, usdc: 146_400n, tokensCount: 2 }]]),
     quotes: new Map<string, Quote>(),
     epoch: 1n, lastNonce: 0n,
     ccipFee: null as bigint | null,
@@ -85,6 +85,7 @@ export function fakeChain() {
   };
   const rpc = (chainId: number) => custom({
     async request({ method, params }: { method: string; params?: any }) {
+      if (process.env.FAKE_TRACE) console.log(Date.now() % 100000, chainId, method);
       const p = (params ?? []) as any[];
       switch (method) {
         case "eth_chainId": return `0x${chainId.toString(16)}`;
@@ -127,10 +128,10 @@ export function fakeChain() {
           return st.logs.filter((l) => l.blockNumber >= from && l.blockNumber <= to && (!addrs || addrs.includes(lc(l.address))) && (f.topics ?? []).every((t, i) => t === null || (Array.isArray(t) ? t.map(lc).includes(lc(l.topics[i] ?? "")) : lc(t) === lc(l.topics[i] ?? ""))))
             .map((l) => ({ address: l.address, topics: l.topics, data: l.data, blockNumber: `0x${l.blockNumber.toString(16)}`, transactionIndex: `0x${l.transactionIndex.toString(16)}`, logIndex: `0x${l.logIndex.toString(16)}`, transactionHash: l.transactionHash, blockHash: `0x${"1".repeat(64)}`, removed: false }));
         }
-        default: throw new Error(`unhandled rpc ${method}`);
+        default: throw Object.assign(new Error(`unhandled rpc ${method}`), { code: -32601 });
       }
     },
-  });
+  }, { retryCount: 0 });
   const baseT = rpc(8453), zgT = rpc(16661);
   const chain = { ...base, fees: { maxPriorityFeePerGas: 1_000_000n } };
   const env = (over: Partial<TickEnv> = {}): TickEnv => ({
@@ -144,7 +145,7 @@ export function fakeChain() {
 }
 
 /** A 0G router stand-in: returns the decision JSON with a verified TEE trace; `decide` can vary it per call. */
-export function router(decide: () => unknown = () => ({ spreadBps: 40, skewBps: 10, bidHalfSpreadBps: 60, askHalfSpreadBps: 40, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "steady tape, W0G heavy: ask tighter than bid" })) {
+export function router(decide: () => unknown = () => ({ spreadBps: 40, skewBps: 0, bidHalfSpreadBps: 40, askHalfSpreadBps: 40, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "steady tape, balanced inventory" })) {
   let n = 0;
   return (async () => Response.json({ choices: [{ message: { content: JSON.stringify(decide()) } }], x_0g_trace: { request_id: `rid-${++n}`, tee_verified: true, provider: "0xprov", billing: { currency: "0g", total_cost: "1000" } } })) as unknown as typeof fetch;
 }

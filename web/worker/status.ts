@@ -1,5 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { CronState, InferenceRecord, PostedQuote } from "../../agent/src/worker-tick";
+import { CRON_PERIOD_SECONDS as CRON_SECONDS, EXPIRY_REQUOTE_WINDOW_SECONDS as REQUOTE_WINDOW_SECONDS } from "../../agent/src/policy";
 import { AGENT, BOARD, EXTRUCTION, FUNDING_EVIDENCE, INFERENCE_EVIDENCE, STRATEGY_HASH } from "../lib/evidence";
 import { USDC, W0G } from "../lib/config";
 import { fillsOfOrders, readAllFills, readChain, readLogIndex, readV1Index, type FillRow, type Kv, type Post } from "./chain";
@@ -10,11 +11,9 @@ const PRE_CRON_REQUEST_BY_TX: Record<string, string> = {
   "0x7b2433ba9b1438cdc23bfd1ff1c8a3cccc4cc309f9ea770e70028a100ca3daec": "5319a0b6-562e-4bbe-a141-dfb94fc20aaa",
   "0x79598fe4e59c56cbf7dfb7099955030ac52fb4da4d5d1695119bcd2f7bf1d97e": "5319a0b6-562e-4bbe-a141-dfb94fc20aaa",
 };
-const CRON_SECONDS = 300;
-const REQUOTE_WINDOW_SECONDS = 600;
 const lc = (a: string) => a.toLowerCase();
 
-/** Requotes a day at a given TTL: a quote is renewed on the first 5-minute tick inside its last 600 s. */
+/** Requotes a day at a given TTL: a quote is renewed on the first 5-minute tick inside the agent's requote window. */
 export function requotesPerDay(ttlSeconds: number) { return 86_400 / Math.max(CRON_SECONDS, Math.ceil((ttlSeconds - REQUOTE_WINDOW_SECONDS) / CRON_SECONDS) * CRON_SECONDS); }
 /** USD cost of one router-billed run: micro-USD as is, 0G wei valued at the W0G mid (W0G is 0G bridged 1:1). */
 export function runCostUsd(r: { currency?: string | null; totalCost?: string | null }, mid: number): number | null {

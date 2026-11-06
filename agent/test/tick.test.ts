@@ -45,3 +45,17 @@ describe("docked balance read", () => {
     expect(await aquaDockedBalances(e.base, AGENT, LIVE_HASH, null)).toBeNull();
   });
 });
+
+describe("requote cadence", () => {
+  test("a steady price across 3 ticks after a post renews the quote once, not on every tick", async () => {
+    const c = fakeChain();
+    const t0 = NOW;
+    let s = (await cronTick(emptyCronState(), c.env({ now: t0 }))).state;
+    const posts = () => c.st.sent.filter((t) => t.fn === "postPair").length;
+    expect(posts()).toBe(1);
+    for (const dt of [300_000, 600_000, 900_000]) s = (await cronTick(s, c.env({ now: t0 + dt }))).state;
+    expect(posts() - 1).toBe(1);
+    const q = [...c.st.quotes.values()][0]!;
+    expect(Number(q.expiry)).toBeGreaterThan((t0 + 900_000) / 1000);
+  });
+});

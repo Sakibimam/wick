@@ -11,8 +11,11 @@ export function tickPolicy(input: BudgetInput) { const decision = decideBudget(i
 
 /** Base ETH the agent never spends below: the operator reserve (0.00009 ETH, a Uniswap v4 hook deploy plus headroom) with margin. */
 export const GAS_FLOOR_WEI = 30_000_000_000_000n; // ~2 postPair txs of headroom; the hook-deploy reserve is spent
-/** A live quote this close to expiry is renewed even when the price has not moved, so the strategy never goes dark between price moves. */
-export const EXPIRY_REQUOTE_WINDOW_SECONDS = 600;
+/** A live quote this close to expiry is renewed even when the price has not moved, so the strategy never goes dark between price moves.
+ *  One 5-minute cron period plus 60 s for the inference and the post to land: a quote skipped at 361 s still has 61 s at the next
+ *  tick, and a steady 900 s quote is renewed every second tick (144 posts a day) instead of every tick (288). */
+export const CRON_PERIOD_SECONDS = 300;
+export const EXPIRY_REQUOTE_WINDOW_SECONDS = CRON_PERIOD_SECONDS + 60;
 
 export type CronDecision = BudgetDecision & { shouldInfer: boolean };
 /** The budget policy plus the two guards a timer-driven tick needs: a Base gas floor and a requote before expiry. */
