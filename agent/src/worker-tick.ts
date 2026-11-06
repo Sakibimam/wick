@@ -151,7 +151,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     return hold(`refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e));
   }
   setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) }));
-  const spread = postedSpreadBps(result.spreadBps, decision.tier);
+  const spread = postedSpreadBps(result.spreadBps, decision.tier, result.skewBps);
   const ttl = result.ttlSeconds;
   const inferenceId = inferenceIdOf(result);
   const composed = composePair({ twapMid: market.twapMid, spreadBps: spread, skewBps: result.skewBps, maxAmountInUsdc: result.maxAmountInUsdc });

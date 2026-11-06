@@ -1,7 +1,7 @@
 import { parseUnits } from "viem";
 
 export type BrainState = { mid: number; recentMids: number[]; inventory: { w0g: number; usdc: number }; budgetTier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED" };
-export type BrainErrorCode = "budget_critical" | "budget_paused" | "missing_api_key" | "request_failed" | "http_error" | "invalid_json" | "invalid_shape" | "spread_out_of_range" | "rate_out_of_range" | "request_id_missing" | "skew_out_of_range" | "ttl_out_of_range" | "max_amount_out_of_range" | "reason_invalid" | "tee_unverified";
+export type BrainErrorCode = "budget_critical" | "budget_paused" | "missing_api_key" | "request_failed" | "http_error" | "invalid_json" | "invalid_shape" | "spread_out_of_range" | "rate_out_of_range" | "request_id_missing" | "skew_out_of_range" | "ttl_out_of_range" | "max_amount_out_of_range" | "reason_invalid" | "tee_unverified" | "skew_against_inventory";
 export type BilledRun = { requestId: string; model: string; billing: { currency: string | null; totalCost: string | null }; teeVerified: boolean | null; provider: string | null };
 export class BrainError extends Error { run?: BilledRun; constructor(public readonly code: BrainErrorCode, message: string = code) { super(message); this.name = "BrainError"; } }
 export const PRIMARY_MODEL = "0gm-1.0-35b-a3b";
@@ -86,12 +86,14 @@ export type DecisionState = {
 export type Decision = { spreadBps: number; skewBps: number; maxAmountInUsdc: number; ttlSeconds: number; reason: string };
 const DECISION_PROMPT = `You run the quotes of a W0G/USDC market maker. Decide this round from the state JSON.
 - spreadBps: integer ${DECISION_BOUNDS.spreadBps[0]}..${DECISION_BOUNDS.spreadBps[1]}. Widen with realizedVolBps and thin inventory; tierSpreadBps is a floor that is applied anyway.
-- skewBps: integer ${DECISION_BOUNDS.skewBps[0]}..${DECISION_BOUNDS.skewBps[1]}. Positive lowers both prices (sheds W0G when inventory.w0gValueShare is above 0.5), negative raises them (buys W0G back).
+- skewBps: integer ${DECISION_BOUNDS.skewBps[0]}..${DECISION_BOUNDS.skewBps[1]}. Sign rule: w0gValueShare above 0.5 means too much W0G, so skewBps must be POSITIVE (lowers both prices, sheds W0G); below 0.5 it must be NEGATIVE (raises them, buys W0G back); near 0.5 keep it near 0.
 - maxAmountInUsdc: number in (0, maxAmountInUsdcCap]. Shrink it when runway.days or runway.runsLeft is short or recent fills are one-sided.
 - ttlSeconds: integer ${DECISION_BOUNDS.ttlSeconds[0]}..${DECISION_BOUNDS.ttlSeconds[1]}. Shorter when volatile, longer when calm (each requote costs gas.gasPerRequoteUsd).
 - reason: one sentence naming the inputs that drove the choice.
 Return only {"spreadBps":<int>,"skewBps":<int>,"maxAmountInUsdc":<number>,"ttlSeconds":<int>,"reason":"<string>"}, no markdown.`;
-export function validateDecision(v: any, cap: number): Decision {
+/** Inventory share past which the skew's sign is fixed: leaning the wrong way would add to the side the maker already holds too much of. */
+export const SKEW_SIGN_SHARE = { above: 0.6, below: 0.4 } as const;
+export function validateDecision(v: any, cap: number, w0gValueShare?: number): Decision {
   for (const k of ["spreadBps", "skewBps", "maxAmountInUsdc", "ttlSeconds", "reason"]) if (!Object.hasOwn(v, k)) throw new BrainError("invalid_shape", `invalid_shape: missing ${k}`);
   for (const k of ["spreadBps", "skewBps", "maxAmountInUsdc", "ttlSeconds"]) if (typeof v[k] !== "number" || !Number.isFinite(v[k])) throw new BrainError("invalid_shape", `invalid_shape: ${k} is not a number`);
   const inRange = (x: number, [a, b]: readonly [number, number]) => Number.isInteger(x) && x >= a && x <= b;
@@ -100,6 +102,7 @@ export function validateDecision(v: any, cap: number): Decision {
   if (!inRange(v.ttlSeconds, DECISION_BOUNDS.ttlSeconds)) throw new BrainError("ttl_out_of_range");
   if (!(cap > 0) || !(v.maxAmountInUsdc > 0) || v.maxAmountInUsdc > cap) throw new BrainError("max_amount_out_of_range");
   if (typeof v.reason !== "string" || !v.reason.trim() || v.reason.length > 280) throw new BrainError("reason_invalid");
+  if (w0gValueShare !== undefined && ((w0gValueShare > SKEW_SIGN_SHARE.above && v.skewBps < 0) || (w0gValueShare < SKEW_SIGN_SHARE.below && v.skewBps > 0))) throw new BrainError("skew_against_inventory", `skew_against_inventory: skewBps ${v.skewBps} with W0G share ${w0gValueShare}`);
   return { spreadBps: v.spreadBps, skewBps: v.skewBps, maxAmountInUsdc: v.maxAmountInUsdc, ttlSeconds: v.ttlSeconds, reason: v.reason.trim() };
 }
 /** A TeeML model's answer is signable only with the router's verified TEE verdict; standard-mode models carry none. */
@@ -122,7 +125,7 @@ export async function askDecision(state: DecisionState, options: RouterOptions =
   // The router has billed this answer: any refusal below carries the run so the caller still records its cost.
   const refuse = (e: BrainError) => { e.run = run; return e; };
   let decision: Decision;
-  try { decision = validateDecision(r.value, state.maxAmountInUsdcCap); } catch (e) { throw e instanceof BrainError ? refuse(e) : e; }
+  try { decision = validateDecision(r.value, state.maxAmountInUsdcCap, state.inventory.w0gValueShare); } catch (e) { throw e instanceof BrainError ? refuse(e) : e; }
   if (!teeGate(model, r.teeVerified)) throw refuse(new BrainError("tee_unverified", `tee_unverified: ${model} answered with tee_verified=${r.teeVerified} from ${r.provider ?? "unknown provider"} (request ${r.requestId})`));
   return { ...decision, requestId: r.requestId, model, fallbackFrom, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, attempts: r.attempts };
 }

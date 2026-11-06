@@ -103,6 +103,22 @@ describe("spread, skew and band", () => {
     for (const spreadBps of [5, 120, 500]) for (const skewBps of [-200, 0, 200]) { const c = composePair({ twapMid: mid, spreadBps, skewBps, maxAmountInUsdc: 0.1 }); expect(Math.max(c.deviation01Bps, c.deviation10Bps)).toBeLessThanOrEqual(BAND_SAFE_BPS); }
     expect(() => composePair({ twapMid: mid, spreadBps: 800, skewBps: 0, maxAmountInUsdc: 0.1 })).toThrow(/band/);
   });
+  test("property: with the skew floor, no allowed decision quotes the maker across the TWAP", () => {
+    const mid = 0.1464;
+    for (const tier of ["NORMAL", "LOW", "CRITICAL"] as const) for (let skewBps = -200; skewBps <= 200; skewBps += 5) for (const model of [5, 30, 65, 200, 500]) {
+      const c = composePair({ twapMid: mid, spreadBps: postedSpreadBps(model, tier, skewBps), skewBps, maxAmountInUsdc: 0.05 });
+      expect(Number(c.rate01E18) < mid * 1e6).toBe(true);
+      expect(Number(c.rate10E18) < 1e30 / mid).toBe(true);
+    }
+    // The live 08:30 decision (skew -150, spread 65) bought W0G 0.96% above the TWAP before this floor.
+    expect(postedSpreadBps(65, "NORMAL", -150)).toBe(155);
+  });
+  test("a skew leaning toward the side the maker already holds too much of is rejected", () => {
+    expect(() => validateDecision({ ...good, skewBps: -150 }, 0.2, 0.967)).toThrow(/skew_against_inventory/);
+    expect(() => validateDecision({ ...good, skewBps: 80 }, 0.2, 0.2)).toThrow(/skew_against_inventory/);
+    expect(() => validateDecision({ ...good, skewBps: 60 }, 0.2, 0.967)).not.toThrow();
+    expect(() => validateDecision({ ...good, skewBps: -20 }, 0.2, 0.5)).not.toThrow();
+  });
   test("TTL band sits wholly above the requote window and at or below the board's MAX_TTL", () => {
     expect(QUOTE_TTL_BAND[0]).toBeGreaterThan(EXPIRY_REQUOTE_WINDOW_SECONDS);
     expect(QUOTE_TTL_BAND[1]).toBe(MAX_TTL_SECONDS);

@@ -29,8 +29,11 @@ export const QUOTE_TTL_BAND = [700, 900] as const;
 export const MAX_TTL_SECONDS = 900;
 export const BAND_SAFE_BPS = 790;
 export function tierSpreadBps(tier: BudgetTier, base = DEFAULT_BUDGET_CONFIG.baseSpreadBps): number { return base * ({ NORMAL: 1, LOW: 2, CRITICAL: 4, PAUSED: 4 } as const)[tier]; }
-/** The model proposes a spread; the budget tier sets a floor. The posted spread is the larger, so a degraded tier always widens. */
-export function postedSpreadBps(modelSpreadBps: number, tier: BudgetTier): number { return Math.max(modelSpreadBps, tierSpreadBps(tier)); }
+/** Edge each side keeps over the TWAP after the skew moves the centre. */
+export const MIN_EDGE_BPS = 5;
+/** The model proposes a spread; the budget tier sets a floor, and the skew sets another: spread >= |skew| + MIN_EDGE_BPS keeps both
+ *  sides on the maker's side of the TWAP, so a lean never turns into buying above or selling below the mid. */
+export function postedSpreadBps(modelSpreadBps: number, tier: BudgetTier, skewBps = 0): number { return Math.max(modelSpreadBps, tierSpreadBps(tier), Math.abs(skewBps) + MIN_EDGE_BPS); }
 export type ComposedPair = { rate01E18: bigint; rate10E18: bigint; maxIn0: bigint; maxIn1: bigint; deviation01Bps: number; deviation10Bps: number };
 /** Both directions around the TWAP mid (USDC per W0G): skew moves the centre, spread widens each side. Raw-unit rates for the v2 board. */
 export function composePair(p: { twapMid: number; spreadBps: number; skewBps: number; maxAmountInUsdc: number }): ComposedPair {
