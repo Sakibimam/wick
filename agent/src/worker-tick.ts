@@ -3,7 +3,7 @@
 import { createWalletClient, defineChain, encodeAbiParameters, formatUnits, http, keccak256, parseAbi, parseAbiItem, parseAbiParameters, type Address, type Chain, type Hex, type PublicClient, type Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { askDecision, BrainError, inventoryGoal, validateDecision, type BilledRun, type Decision } from "./brain.js";
-import { accountSpend, deviationBps, emptySpendLedger, type SpendLedger } from "./budget.js";
+import { accountSpend, deviationBps, emptySpendLedger, seedRouterDeposit, type SpendLedger } from "./budget.js";
 import { MAX_SPOT_TWAP_GAP_BPS, quoterAbi, QUOTER_V2, readTwapMarket, USDC, W0G } from "./price.js";
 import { fundingAbi, quoteCcipFee, W0G_ZERO_G, ZERO_G_PAYMENT_LAYER } from "./funding.js";
 import { decideFunding, emptyFundingState, fundingTick, harvestAbi, AQUA_SWAPVM_ROUTER, WETH_BASE, type FundingState, type HarvestCtx, type LiveOrder } from "./funding-machine.js";
@@ -65,7 +65,9 @@ export const inferenceIdOf = (run: { requestId: string; provider: string | null;
 
 export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: CronState; outcome: string }> {
   const s: CronState = { ...emptyCronState(), ...structuredClone(prev), version: 2 };
-  s.spend ??= { day: s.day, spentTodayWei: "0", lastVaultWei: s.lastComputeBalanceWei, routerDepositWei: "0" };
+  const hadSpend = prev.spend !== undefined;
+  s.spend ??= { ...emptySpendLedger(), day: s.day, lastVaultWei: s.lastComputeBalanceWei };
+  s.spend = hadSpend ? seedRouterDeposit(s.spend) : { ...s.spend, seeded: true };
   s.funding ??= emptyFundingState();
   const now = env.now ?? Date.now();
   const log = env.log ?? (() => {});
@@ -129,7 +131,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
 
   const ledger0 = accountSpend(s.spend, { nowMs: now, vaultWei: vault, billedWei: 0n });
   const decision = cronPolicy({ computeBalanceWei: BigInt(ledger0.fundsWei), spendCapPerDayWei: env.spendCapPerDayWei, spentTodayWei: BigInt(ledger0.spentTodayWei), priceDeviationBps: s.lastMid === null ? 0 : deviationBps(s.lastMid, market.twapMid), lastQuoteAgeMs: s.quotedAt === null ? null : now - s.quotedAt, gasWei, secondsToExpiry });
-  const setBudget = (l: SpendLedger & { fundsWei: string }) => { s.spend = { day: l.day, spentTodayWei: l.spentTodayWei, lastVaultWei: l.lastVaultWei, routerDepositWei: l.routerDepositWei }; s.day = l.day; s.spentTodayWei = l.spentTodayWei; s.lastComputeBalanceWei = vault.toString(); s.budget = { tier: decision.tier, model: decision.model, computeBalanceWei: l.fundsWei, spentTodayWei: l.spentTodayWei, spendCapPerDayWei: env.spendCapPerDayWei.toString(), reason: decision.reason, gasWei: gasWei.toString(), vaultWei: vault.toString(), routerDepositWei: l.routerDepositWei }; };
+  const setBudget = (l: SpendLedger & { fundsWei: string }) => { s.spend = { day: l.day, spentTodayWei: l.spentTodayWei, lastVaultWei: l.lastVaultWei, routerDepositWei: l.routerDepositWei, seeded: l.seeded }; s.day = l.day; s.spentTodayWei = l.spentTodayWei; s.lastComputeBalanceWei = vault.toString(); s.budget = { tier: decision.tier, model: decision.model, computeBalanceWei: l.fundsWei, spentTodayWei: l.spentTodayWei, spendCapPerDayWei: env.spendCapPerDayWei.toString(), reason: decision.reason, gasWei: gasWei.toString(), vaultWei: vault.toString(), routerDepositWei: l.routerDepositWei }; };
   setBudget(ledger0);
   s.recentMids = [...s.recentMids.slice(-19), market.twapMid];
 

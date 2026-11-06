@@ -19,8 +19,14 @@ export function decideBudget(i: BudgetInput, c = DEFAULT_BUDGET_CONFIG): BudgetD
 }
 export function deviationBps(previousMid: number, currentMid: number): number { if (![previousMid, currentMid].every(x => Number.isFinite(x) && x > 0)) throw new RangeError("mids must be positive finite numbers"); return Math.abs(currentMid - previousMid) / previousMid * 10000; }
 
-export type SpendLedger = { day: string; spentTodayWei: string; lastVaultWei: string; routerDepositWei: string };
-export const emptySpendLedger = (): SpendLedger => ({ day: "", spentTodayWei: "0", lastVaultWei: "", routerDepositWei: "0" });
+export const PRE_LEDGER_ROUTER_DEPOSIT_WEI = 500_000_000_000_000_000n; // 0xfad8772126b57f54fc503f643423038097175b67e6de886e019b7a59a32f6958: 0.5 0G after the first run's charge.
+export type SpendLedger = { day: string; spentTodayWei: string; lastVaultWei: string; routerDepositWei: string; seeded?: boolean };
+export const emptySpendLedger = (): SpendLedger => ({ day: "", spentTodayWei: "0", lastVaultWei: "", routerDepositWei: "0", seeded: true });
+export function seedRouterDeposit(l: SpendLedger): SpendLedger {
+  if (l.seeded) return l;
+  const deposit = BigInt(l.routerDepositWei) + PRE_LEDGER_ROUTER_DEPOSIT_WEI - BigInt(l.spentTodayWei);
+  return { ...l, seeded: true, routerDepositWei: (deposit > 0n ? deposit : 0n).toString() };
+}
 /** Spend is what the router billed (x_0g_trace.billing.total_cost in 0G wei), never the vault's movement: the router pulls
  *  working deposits from the Payment Layer vault in 0.5 0G lumps, and a pull moves funds into the router ledger, it does not spend them.
  *  Funds = vault + the router-ledger deposit, estimated as pulls seen minus charges billed. */
@@ -31,5 +37,5 @@ export function accountSpend(prev: SpendLedger, input: { nowMs: number; vaultWei
   const pulled = prev.lastVaultWei && BigInt(prev.lastVaultWei) > input.vaultWei ? BigInt(prev.lastVaultWei) - input.vaultWei : 0n;
   let deposit = BigInt(prev.routerDepositWei) + pulled - input.billedWei;
   if (deposit < 0n) deposit = 0n;
-  return { day, spentTodayWei: spent.toString(), lastVaultWei: input.vaultWei.toString(), routerDepositWei: deposit.toString(), fundsWei: (input.vaultWei + deposit).toString() };
+  return { day, spentTodayWei: spent.toString(), lastVaultWei: input.vaultWei.toString(), routerDepositWei: deposit.toString(), seeded: prev.seeded, fundsWei: (input.vaultWei + deposit).toString() };
 }
