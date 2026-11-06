@@ -23,7 +23,8 @@ const AQUA: Address = "0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a";
 const AQUA_ROUTER: Address = "0x111111338c5091E8440b67B168bAe16a668AC0De";
 const MAKER: Address = "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953";
 const EXTRUCTION: Address = "0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4";
-const ORDER_HASH: Hex = "0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc035";
+// Taker-gated strategy (WickGate 0x159dd4fc..., opcode 0x0e) shipped 2026-11-06 by scripts/live-gate-cutover.ts; the hook holds the gate.
+const ORDER_HASH: Hex = "0x888f4e9134623a949a0a2d62998fd8869a5749dadda509aa63ade7928ca8217e";
 // The pool was initialised with fee 0, tickSpacing 1 (Initialize event of tx 0xee9b8414...); PoolId = keccak256(abi.encode(PoolKey)).
 const POOL_KEY = { currency0: W0G, currency1: USDC, fee: 0, tickSpacing: 1, hooks: HOOK } as const;
 const POOL_ID = keccak256(encodeAbiParameters(parseAbiParameters("address,address,uint24,int24,address"), [W0G, USDC, 0, 1, HOOK]));
