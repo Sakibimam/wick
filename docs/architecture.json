@@ -5,12 +5,12 @@
     "title": "Wick: a market maker that pays for its own brain",
     "quality_profile": "showcase",
     "viewBox": [
-      1360,
-      680
+      1380,
+      700
     ],
     "repository": {
       "url": "https://github.com/Sakibimam/wick",
-      "revision": "fb309b843a60c587e2e57799a7b2a86919ef5dc7"
+      "revision": "6f550314a79f097e4cd1224904a3fde147d1de1b"
     }
   },
   "components": [
@@ -18,27 +18,27 @@
       "id": "taker",
       "type": "external",
       "label": "Taker",
-      "sublabel": "Any EOA",
+      "sublabel": "Any wallet",
       "pos": [
         30,
-        100
+        195
       ],
       "size": [
-        120,
+        130,
         68
       ]
     },
     {
       "id": "web",
       "type": "frontend",
-      "label": "Web app",
-      "sublabel": "Swap ticket, brain ledger",
+      "label": "Wick swap page",
+      "sublabel": "wick Worker, /api/status",
       "pos": [
-        210,
-        100
+        240,
+        90
       ],
       "size": [
-        160,
+        170,
         68
       ],
       "sources": [
@@ -46,26 +46,120 @@
           "path": "web/components/swap-ticket.tsx"
         },
         {
-          "path": "web/components/ledger-page.tsx"
+          "path": "web/worker/status.ts"
         }
       ]
     },
     {
-      "id": "status",
+      "id": "hook",
       "type": "backend",
-      "label": "Status API",
-      "sublabel": "/api/status, /api/quote",
+      "label": "AquaAggregatorHook",
+      "sublabel": "Uniswap v4, Base",
       "pos": [
-        690,
-        100
+        240,
+        300
       ],
       "size": [
-        150,
+        170,
         68
       ],
       "sources": [
         {
-          "path": "agent/src/status.ts"
+          "path": "hook/src/AquaAggregatorHook.sol"
+        }
+      ]
+    },
+    {
+      "id": "payer",
+      "type": "external",
+      "label": "Other agent",
+      "sublabel": "Pays per quote",
+      "pos": [
+        240,
+        540
+      ],
+      "size": [
+        170,
+        68
+      ]
+    },
+    {
+      "id": "x402",
+      "type": "backend",
+      "label": "wick-quotes",
+      "sublabel": "x402, 0.01 USDC",
+      "pos": [
+        490,
+        540
+      ],
+      "size": [
+        170,
+        68
+      ],
+      "sources": [
+        {
+          "path": "quotes/src/index.ts"
+        },
+        {
+          "path": "quotes/src/x402.ts"
+        }
+      ]
+    },
+    {
+      "id": "aqua",
+      "type": "backend",
+      "label": "AquaSwapVMRouter",
+      "sublabel": "Aqua, SwapVM v1.0.2",
+      "pos": [
+        490,
+        300
+      ],
+      "size": [
+        170,
+        68
+      ]
+    },
+    {
+      "id": "board",
+      "type": "security",
+      "label": "AgentQuoteBoardV2",
+      "sublabel": "ExtructionV2, TWAP band",
+      "pos": [
+        740,
+        300
+      ],
+      "size": [
+        180,
+        68
+      ],
+      "sources": [
+        {
+          "path": "contracts/src/AgentQuoteBoardV2.sol"
+        },
+        {
+          "path": "contracts/src/AgentQuoteExtructionV2.sol"
+        }
+      ]
+    },
+    {
+      "id": "cron",
+      "type": "backend",
+      "label": "Worker cron",
+      "sublabel": "Every 5 min, budget tiers",
+      "pos": [
+        990,
+        300
+      ],
+      "size": [
+        170,
+        68
+      ],
+      "sources": [
+        {
+          "path": "web/worker/cron.ts"
+        },
+        {
+          "path": "agent/src/worker-tick.ts"
         }
       ]
     },
@@ -73,10 +167,10 @@
       "id": "router",
       "type": "cloud",
       "label": "0G Private Computer",
-      "sublabel": "Router, request ids",
+      "sublabel": "verify_tee, request ids",
       "pos": [
-        920,
-        100
+        990,
+        90
       ],
       "size": [
         170,
@@ -89,101 +183,24 @@
       ]
     },
     {
-      "id": "aqua",
-      "type": "backend",
-      "label": "AquaSwapVMRouter",
-      "sublabel": "Aqua, SwapVM v1.0.2",
-      "pos": [
-        210,
-        330
-      ],
-      "size": [
-        160,
-        68
-      ]
-    },
-    {
-      "id": "board",
-      "type": "security",
-      "label": "AgentQuoteBoard",
-      "sublabel": "AgentQuoteExtruction",
-      "pos": [
-        450,
-        330
-      ],
-      "size": [
-        160,
-        68
-      ],
-      "sources": [
-        {
-          "path": "contracts/src/AgentQuoteBoard.sol"
-        },
-        {
-          "path": "contracts/src/AgentQuoteExtruction.sol"
-        }
-      ]
-    },
-    {
-      "id": "signer",
-      "type": "security",
-      "label": "Signer and poster",
-      "sublabel": "EIP-712 Quote",
-      "pos": [
-        690,
-        330
-      ],
-      "size": [
-        150,
-        68
-      ],
-      "sources": [
-        {
-          "path": "agent/src/signer.ts"
-        },
-        {
-          "path": "agent/src/poster.ts"
-        }
-      ]
-    },
-    {
-      "id": "runtime",
-      "type": "backend",
-      "label": "Agent runtime",
-      "sublabel": "Brain, budget tiers",
-      "pos": [
-        920,
-        330
-      ],
-      "size": [
-        160,
-        68
-      ],
-      "sources": [
-        {
-          "path": "agent/src/runtime.ts"
-        },
-        {
-          "path": "agent/src/budget.ts"
-        }
-      ]
-    },
-    {
       "id": "uniswap",
       "type": "database",
       "label": "Uniswap v3 pool",
-      "sublabel": "W0G/USDC 0.3%, Base",
+      "sublabel": "W0G/USDC, 600 s TWAP",
       "pos": [
-        920,
-        560
+        990,
+        540
       ],
       "size": [
-        160,
+        170,
         68
       ],
       "sources": [
         {
           "path": "agent/src/price.ts"
+        },
+        {
+          "path": "contracts/src/TwapPrice.sol"
         }
       ]
     },
@@ -193,8 +210,8 @@
       "label": "Chainlink CCIP",
       "sublabel": "Base to 0G chain",
       "pos": [
-        1170,
-        560
+        1210,
+        540
       ],
       "size": [
         160,
@@ -202,7 +219,7 @@
       ],
       "sources": [
         {
-          "path": "agent/src/funding.ts"
+          "path": "agent/src/funding-machine.ts"
         }
       ]
     },
@@ -210,10 +227,10 @@
       "id": "payment",
       "type": "cloud",
       "label": "0G Payment Layer",
-      "sublabel": "W0G.withdraw, depositFor",
+      "sublabel": "withdraw, depositFor",
       "pos": [
-        1170,
-        330
+        1210,
+        300
       ],
       "size": [
         160,
@@ -222,14 +239,6 @@
     }
   ],
   "boundaries": [
-    {
-      "kind": "security-group",
-      "label": "Agent runtime: pricing trust",
-      "wraps": [
-        "signer",
-        "runtime"
-      ]
-    },
     {
       "kind": "region",
       "label": "Base: onchain enforcement",
@@ -247,15 +256,25 @@
       "label": "swap"
     },
     {
+      "id": "taker-hook",
+      "from": "taker",
+      "to": "hook",
+      "label": "v4 swap"
+    },
+    {
       "id": "web-aqua",
       "from": "web",
       "to": "aqua",
       "label": "swap(order)",
       "variant": "emphasis",
-      "labelAt": [
-        290,
-        249
-      ]
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "hook-aqua",
+      "from": "hook",
+      "to": "aqua",
+      "label": "swap(order)"
     },
     {
       "id": "aqua-board",
@@ -265,51 +284,37 @@
       "variant": "security"
     },
     {
-      "id": "signer-board",
-      "from": "signer",
+      "id": "payer-x402",
+      "from": "payer",
+      "to": "x402",
+      "label": "X-PAYMENT"
+    },
+    {
+      "id": "x402-board",
+      "from": "x402",
       "to": "board",
-      "label": "post"
+      "label": "reads quote"
     },
     {
-      "id": "runtime-signer",
-      "from": "runtime",
-      "to": "signer",
-      "label": "rate"
+      "id": "cron-board",
+      "from": "cron",
+      "to": "board",
+      "label": "postPair"
     },
     {
-      "id": "runtime-router",
-      "from": "runtime",
+      "id": "cron-router",
+      "from": "cron",
       "to": "router",
-      "label": "inference",
-      "fromSide": "top",
-      "toSide": "bottom",
-      "labelAt": [
-        1055,
-        249
-      ]
+      "label": "decision"
     },
     {
-      "id": "status-web",
-      "from": "status",
-      "to": "web",
-      "label": "GET /api/status"
-    },
-    {
-      "id": "runtime-status",
-      "from": "runtime",
-      "to": "status",
-      "label": "state",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "runtime-uniswap",
-      "from": "runtime",
+      "id": "cron-uniswap",
+      "from": "cron",
       "to": "uniswap",
-      "label": "mid, fee swap",
+      "label": "TWAP, fee swap",
       "labelAt": [
-        1000,
-        479
+        1075,
+        454
       ]
     },
     {
@@ -329,9 +334,7 @@
       "from": "payment",
       "to": "router",
       "label": "pays inference",
-      "variant": "emphasis",
-      "fromSide": "top",
-      "toSide": "right"
+      "variant": "emphasis"
     }
   ],
   "cards": [
@@ -339,27 +342,27 @@
       "dot": "rose",
       "title": "Trust boundaries",
       "items": [
-        "Signer owns pricing trust",
-        "Board enforces freshness, nonce, pair, maker, agent epoch",
-        "Stale or missing quote reverts StaleQuote"
+        "Model picks spread, skew, maxAmountIn and TTL",
+        "Code centres both rates on the 600 s TWAP",
+        "Chain enforces epoch, nonce, 800 bps band, 900 s TTL"
       ]
     },
     {
       "dot": "amber",
       "title": "Budget tiers",
       "items": [
-        "NORMAL 0gm-1.0-35b-a3b, requote at 25 bps move",
-        "LOW qwen3.7-flash, requote at 100 bps move",
-        "CRITICAL stops inference, PAUSED at the spend cap"
+        "NORMAL 0gm-1.0-35b-a3b with verify_tee, 25 bps move",
+        "LOW qwen3.7-flash, 100 bps move, 60 bps floor",
+        "CRITICAL stops inference, PAUSED stops posting"
       ]
     },
     {
       "dot": "emerald",
       "title": "Fee loop",
       "items": [
-        "Fill fees swap to W0G on Uniswap",
-        "CCIP to 0G, unwrap, depositFor",
-        "Payment Layer funds the next inference"
+        "Fill fees swap to W0G on Uniswap v3",
+        "CCIP to 0G, withdraw, depositFor",
+        "x402 quotes add 0.01 USDC each"
       ]
     }
   ]
