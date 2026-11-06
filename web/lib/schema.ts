@@ -58,6 +58,7 @@ export const statusSchema = z.object({
   inferences: z.array(inferenceSchema),
   order: z.object({ maker: address, traits: hex, data: hex }),
   fundingThresholdUsdc: z.string().regex(/^\d+(\.\d+)?$/, "decimal").nullable().optional(),
+  quoteTtlSeconds: z.number().int().positive().optional(),
   // Served by the Worker status route; the fork-dev status server omits them.
   strategy: z.object({ hash: hex, w0g: digits, usdc: digits, feeBps: z.number().int().nonnegative() }).optional(),
   gasWei: digits.optional(),

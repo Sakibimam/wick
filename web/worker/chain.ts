@@ -43,10 +43,17 @@ export async function readLogIndex(kv: Kv | null): Promise<LogIndex> {
   const ranges: Array<[bigint, bigint]> = [];
   for (let from = BigInt(saved.cursor) + 1n; from <= latest && ranges.length < MAX_CHUNKS; from += CHUNK) ranges.push([from, from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n]);
   if (ranges.length === 0) return saved;
-  const pages = await Promise.all(ranges.map(([fromBlock, toBlock]) => Promise.all([
-    logsClient.getLogs({ address: BOARD, event: postedEvent, args: { maker: AGENT }, fromBlock, toBlock }),
-    logsClient.getLogs({ address: AQUA_ROUTER, event: swappedEvent, fromBlock, toBlock }),
-  ])));
+  let pages;
+  try {
+    pages = await Promise.all(ranges.map(([fromBlock, toBlock]) => Promise.all([
+      logsClient.getLogs({ address: BOARD, event: postedEvent, args: { maker: AGENT }, fromBlock, toBlock }),
+      logsClient.getLogs({ address: AQUA_ROUTER, event: swappedEvent, fromBlock, toBlock }),
+    ])));
+  } catch (e) {
+    // publicnode throttles bursts of range scans; the saved index is exact up to its cursor, which the route reports as toBlock.
+    if (BigInt(saved.cursor) >= BOARD_DEPLOY_BLOCK) return saved;
+    throw e;
+  }
   const posts: Post[] = pages.flatMap(([p]) => p.map((l) => ({ tokenIn: l.args.tokenIn!, tokenOut: l.args.tokenOut!, rateE18: l.args.rateE18!.toString(), expiry: l.args.expiry!.toString(), inferenceId: l.args.inferenceId!, postedTx: l.transactionHash, block: l.blockNumber.toString() })));
   const swaps = pages.flatMap(([, s]) => s).filter((l) => l.args.maker?.toLowerCase() === AGENT.toLowerCase());
   const times = new Map<bigint, number>();

@@ -1,6 +1,6 @@
 // One agent tick with no filesystem and no long waits, for a Cloudflare Workers cron.
 // State lives in whatever store the caller passes back in; every chain read goes through fetch-based viem clients.
-import { createWalletClient, formatUnits, http, keccak256, parseAbi, toHex, type Address, type Chain, type PublicClient } from "viem";
+import { createWalletClient, formatUnits, http, keccak256, parseAbi, toHex, type Address, type Chain, type PublicClient, type Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { askBrain } from "./brain.js";
 import { deviationBps } from "./budget.js";
@@ -24,7 +24,7 @@ export type CronState = {
   posted: PostedQuote[];
   lastTick: { at: string; outcome: string } | null;
 };
-export type TickEnv = { base: PublicClient<any, any>; zeroG: PublicClient<any, any>; chain: Chain; baseRpcUrl: string; board: Address; maker: Address; agent: Address; spendCapPerDayWei: bigint; ttlSeconds: number; agentPk?: string; zgApiKey?: string; zgApiBase?: string; now?: number; log?: (line: string) => void };
+export type TickEnv = { base: PublicClient<any, any>; zeroG: PublicClient<any, any>; chain: Chain; baseRpcUrl: string; baseTransport?: Transport; board: Address; maker: Address; agent: Address; spendCapPerDayWei: bigint; ttlSeconds: number; agentPk?: string; zgApiKey?: string; zgApiBase?: string; now?: number; log?: (line: string) => void };
 
 const KEEP = 50;
 const boardRead = [...boardAbi, ...parseAbi(["function getAgent(address) view returns (address)", "function lastNonce(address) view returns (uint64)"])];
@@ -78,7 +78,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const result = await askBrain({ mid: market.mid, recentMids: s.recentMids, inventory: { w0g: Number(formatUnits(wbal, 18)), usdc: Number(formatUnits(ubal, 6)) }, budgetTier: decision.tier }, { apiKey: env.zgApiKey, baseUrl: env.zgApiBase, fetchImpl: fetch });
   s.inferences = [...s.inferences, { requestId: result.requestId, model: result.model, tokens: result.tokens, costMicroUsd: result.costMicroUsd, currency: result.billing.currency, totalCost: result.billing.totalCost, time: new Date().toISOString() }].slice(-KEEP);
 
-  const wallet = createWalletClient({ account, chain: env.chain, transport: http(env.baseRpcUrl) });
+  const wallet = createWalletClient({ account, chain: env.chain, transport: env.baseTransport ?? http(env.baseRpcUrl) });
   const rates = directionalRates(result.rateE18, result.spreadBps);
   let next = BigInt(nonce as bigint);
   for (const [tokenIn, tokenOut, rate] of [[USDC, W0G, rates.usdcToW0g], [W0G, USDC, rates.w0gToUsdc]] as const) {

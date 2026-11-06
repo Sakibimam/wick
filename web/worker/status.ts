@@ -41,6 +41,7 @@ export async function buildStatus(kv: Kv | null) {
     inferences,
     order: order.order,
     fundingThresholdUsdc: process.env.FUNDING_THRESHOLD_USDC || "10",
+    quoteTtlSeconds: Number(process.env.QUOTE_TTL_SECONDS || "3600"),
     strategy: { hash: STRATEGY_HASH, w0g: chain.strategy.w0g.toString(), usdc: chain.strategy.usdc.toString(), feeBps: order.pair.feeBps },
     gasWei: chain.gasWei.toString(),
     readAt: { baseBlock: chain.baseBlock.toString(), zeroGBlock: chain.zeroGBlock.toString(), logsThroughBlock: idx?.cursor ?? null },
