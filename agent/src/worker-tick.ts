@@ -13,7 +13,7 @@ import { composePair, cronPolicy, GAS_FLOOR_WEI, postedSpreadBps, realizedVolBps
 
 export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number; fallbackFrom?: string | null };
 export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address; gasCostWei?: string };
-export type TickRecord = { at: string; outcome: string; error?: string; subrequests?: number };
+export type TickRecord = { at: string; outcome: string; error?: string; subrequests?: number; rpcFailures?: Record<string, number> };
 export type CronState = {
   version?: 2;
   budget: { tier: "NORMAL" | "LOW" | "CRITICAL" | "PAUSED"; model: string | null; computeBalanceWei: string; spentTodayWei: string; spendCapPerDayWei: string; reason: string; gasWei: string; vaultWei?: string; routerDepositWei?: string };

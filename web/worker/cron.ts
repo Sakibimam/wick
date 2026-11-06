@@ -1,11 +1,12 @@
 // Workers cron trigger: one agent tick per run on the v2 board. Reads chain state, applies the agent's budget policy,
 // and signs and posts the quote pair only when policy says so and both secrets are set.
-import { createPublicClient, fallback, http, parseUnits, type Address } from "viem";
+import { createPublicClient, http, parseUnits, type Address } from "viem";
 import { base } from "viem/chains";
 import { cronTick, emptyCronState, DEFAULT_FUNDING_ENV, type CronState, type FillLite } from "../../agent/src/worker-tick";
 import { AQUA_ROUTER } from "../lib/config";
 import { BOARD_V2, FEE_BPS_V2, SHIPPED_LIVE_ORDER, STRATEGY_HASH_V2, V4_HOOK } from "./v2";
 import type { LogIndex } from "./chain";
+import { BASE_RPCS, baseFallback, type RpcFailures } from "./rpc";
 
 type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string): Promise<void> };
 export type CronEnv = { UPKEEP_KV: Kv; AGENT_PK?: string; ZG_API_KEY?: string; ZG_API_BASE?: string; BASE_RPC_URL?: string; ZG_RPC_URL?: string; SPEND_CAP_PER_DAY_WEI?: string; FUNDING_K?: string; GAS_TOPUP_BELOW_WEI?: string; GAS_SHARE_BPS?: string; FUNDING_MAX_SPEND_WEI?: string; QUOTES_STATS_URL?: string };
@@ -28,13 +29,11 @@ export function countingFetch(inner: typeof fetch = fetch) {
 export async function runCron(env: CronEnv): Promise<void> {
   // Two workers can share this KV during a rename; one without the signer secrets must not overwrite the signer's state.
   if (!env.AGENT_PK || !env.ZG_API_KEY) { console.log("secrets not set"); return; }
-  const baseRpcUrl = env.BASE_RPC_URL || "https://mainnet.base.org";
+  const baseRpcUrl = BASE_RPCS[0]!;
   const { fetch: counted, counter } = countingFetch();
-  // mainnet.base.org answers Cloudflare egress with 429 and drpc's free tier 429s too, so reads and sends use publicnode first.
-  // Keyless endpoints that answered eth_call on 2026-11-06; each only costs a subrequest when the one before it fails.
-  const baseUrls = [...new Set(["https://base-rpc.publicnode.com", "https://1rpc.io/base", "https://base-mainnet.public.blastapi.io", "https://base.gateway.tenderly.co", baseRpcUrl])];
-  // Batched JSON-RPC, one attempt per endpoint, one fallback pass: a tick's reads land in a couple of HTTP requests.
-  const baseTransport = fallback(baseUrls.map((u) => http(u, { retryCount: 0, batch: true, fetchFn: counted })), { retryCount: 1 });
+  // Endpoints proven from Cloudflare egress, in order; each costs a subrequest only when the one before it fails.
+  const rpcFailures: RpcFailures = {};
+  const baseTransport = baseFallback({ fetchFn: counted, failures: rpcFailures });
   const zeroGTransport = http(env.ZG_RPC_URL || "https://evmrpc.0g.ai", { retryCount: 1, batch: true, fetchFn: counted });
   const prev = ((await env.UPKEEP_KV.get("cron-state", "json")) as CronState | null) ?? emptyCronState();
   const [v1, v2] = await Promise.all([env.UPKEEP_KV.get("log-index", "json") as Promise<LogIndex | null>, env.UPKEEP_KV.get("log-index-v2", "json") as Promise<LogIndex | null>]);
@@ -78,8 +77,9 @@ export async function runCron(env: CronEnv): Promise<void> {
     const rec = { at: new Date().toISOString(), outcome: "error", error: msg };
     next = { ...prev, lastTick: rec, lastTicks: [...(prev.lastTicks ?? []), rec].slice(-12) };
   }
-  if (next.lastTick) next.lastTick.subrequests = counter.n;
-  if (next.lastTicks?.length) next.lastTicks[next.lastTicks.length - 1]!.subrequests = counter.n;
+  const rpc = Object.keys(rpcFailures).length ? { rpcFailures } : {};
+  if (next.lastTick) Object.assign(next.lastTick, { subrequests: counter.n }, rpc);
+  if (next.lastTicks?.length) Object.assign(next.lastTicks[next.lastTicks.length - 1]!, { subrequests: counter.n }, rpc);
   // KV allows 1,000 writes a day on the free plan; a 5-minute cron writes only when something changed.
   if (fingerprint(next) !== fingerprint(prev)) await env.UPKEEP_KV.put("cron-state", JSON.stringify(next));
 }
