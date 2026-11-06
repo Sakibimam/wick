@@ -121,7 +121,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   if (account.address.toLowerCase() !== env.agent.toLowerCase()) throw new Error("AGENT_PK does not match AGENT_ADDRESS");
   if ((onBoard as Address).toLowerCase() !== env.agent.toLowerCase()) throw new Error("AGENT_ADDRESS is not the registered v2 board agent");
   const wallet = createWalletClient({ account, chain: env.chain, transport: env.baseTransport ?? http(env.baseRpcUrl) });
-  const hold = async (why: string) => { let f = ""; try { f = await fundingStep(wallet); } catch (e) { f = `funding error: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`; } return done(`${why}; ${f}`); };
+  const hold = async (why: string, error?: string) => { let f = ""; try { f = await fundingStep(wallet); } catch (e) { f = `funding error: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`; } return done(`${why}; ${f}`, error); };
 
   if (market.gapBps > MAX_SPOT_TWAP_GAP_BPS) return hold(`hold spot_twap_gap ${market.gapBps.toFixed(0)}bps`);
   if (!decision.shouldInfer) return hold("hold");
@@ -145,7 +145,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     const run = e instanceof BrainError ? e.run : undefined;
     if (run) record(s, run, now, { outcome: `refused ${(e as BrainError).code}` });
     setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(run) }));
-    return hold(`refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`);
+    return hold(`refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e));
   }
   setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) }));
   const spread = postedSpreadBps(result.spreadBps, decision.tier);
