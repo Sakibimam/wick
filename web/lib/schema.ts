@@ -91,6 +91,7 @@ export const statusSchema = z.object({
   }).partial()),
   seedVsEarned: soft(z.object({ seedUsdc: num, earnedUsdc: num }).partial().nullable()),
   distinctTakers: soft(z.number().int().nonnegative()),
+  contracts: soft(z.object({ board: address, extruction: address, v1: z.object({ board: address, extruction: address }).partial().optional() })),
 });
 export type AgentStatus = z.infer<typeof statusSchema>;
 

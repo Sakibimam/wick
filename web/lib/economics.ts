@@ -39,6 +39,12 @@ export function decisionsFor(feeUsd: number, status: AgentStatus): number | null
   return c ? feeUsd / c : null;
 }
 
+/** The demo fill: 0.10 USDC, or the live buy cap when the signed price allows less. Every "one swap" figure uses this size. */
+export function presetUsdcUnits(status: AgentStatus, buy: Priced | null): bigint {
+  const cap = maxFillIn("buy-w0g", status, buy);
+  return cap !== null && cap > 0n && cap < 100_000n ? cap : 100_000n;
+}
+
 /** The latest run billed in 0G: the price of the agent's next decision. */
 export const lastPaidRun = (status: AgentStatus): Run | null => runsOf(status).find((r) => r.billedIn === "0g" && r.costUsd !== null) ?? null;
 

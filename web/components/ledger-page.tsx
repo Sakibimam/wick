@@ -9,14 +9,15 @@ import { EvidenceRow } from "@/components/evidence-row";
 import { Chronogram } from "@/components/chronogram";
 import { CountBadge, MarkTips } from "@/components/mark-tips";
 import { SourceNote } from "@/components/source-note";
-import { Amount, ChainChip, Tk } from "@/components/token-mark";
+import { Amount, ChainChip, ProtocolIcon, Tk } from "@/components/token-mark";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
 import { usePostedAt } from "@/hooks/use-posted-at";
 import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
-import { BASE_CHAIN_ID, FILL_LOOKBACK_BLOCKS, TOKENS, ZERO_G_CHAIN_ID } from "@/lib/config";
+import { BASE_CHAIN_ID, EXPLORERS, FILL_LOOKBACK_BLOCKS, QUOTES_API, TOKENS, V4_HOOK, ZERO_G_CHAIN_ID } from "@/lib/config";
+import { useQuoteStats } from "@/hooks/use-quote-stats";
 import { economicsOf, fillEconomics, fmtDecisions, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsd, fmtUsdc, relativeTime, shortHash, significant, toNumber, utcStamp } from "@/lib/format";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
@@ -59,6 +60,7 @@ export function LedgerPage() {
             </Stage>
             <Stage spine="base" name="Fees" lit={econ.feesEarnedUsdc > 0} title="What the fills earned, against what the AI cost" source={status.data.strategy ? `Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input. AI spend is each run's billed cost from the router's x_0g_trace.billing, priced at the Uniswap mid.` : undefined}>
               <FeesBlock econ={econ} status={status.data} />
+              <PaidQuoteRow nowMs={nowMs} />
             </Stage>
             <Stage spine="cross" name="Gas, bridge, unwrap, deposit" lit={loop.funding.length > 0} title={`${loop.funding.length} transactions carried money from Base to the AI account on 0G`} source="LI.FI gas leg, CCIP send of W0G, W0G withdraw on 0G, depositFor on the Payment Layer, and the router drawing on that balance.">
               <FundingRows loop={loop} threshold={econ.fundingThresholdUsdc} nowMs={nowMs} />
@@ -160,6 +162,16 @@ function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: 
     <div>
       <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{takers.distinct}</span> distinct {takers.distinct === 1 ? "taker" : "takers"}, <span className="num text-ink">{takers.outside}</span> outside the agent</p>
       <Rows>
+        <EvidenceRow
+          title={<span className="inline-flex items-center gap-2"><ProtocolIcon protocol="uniswap" size={16} />Uniswap v4 pool routes into Wick</span>}
+          plain="A hook on a Uniswap v4 pool sends its swaps to the same signed price, so any Uniswap router can fill against Wick."
+          hash={V4_HOOK.poolInitTx}
+          hashLabel="pool initialisation transaction"
+          href={txUrl(BASE_CHAIN_ID, V4_HOOK.poolInitTx)}
+          extra={{ href: EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address), label: "hook contract" }}
+          chainId={BASE_CHAIN_ID}
+          nowMs={nowMs}
+        />
         {loop.fills.map((f) => {
           const inSym = f.tokenIn.toLowerCase() === TOKENS.W0G.address.toLowerCase() ? "W0G" : "USDC";
           const outSym = inSym === "W0G" ? "USDC" : "W0G";
@@ -412,5 +424,28 @@ function StatStrip({ status, econ, loop, nowMs }: { status: AgentStatus; econ: E
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Revenue from the paid quote feed, the agent's second income besides swap fees. */
+function PaidQuoteRow({ nowMs }: { nowMs: number }) {
+  const q = useQuoteStats();
+  if (q.isPending) return <div aria-hidden className="skeleton mt-3 h-16 w-full" />;
+  if (!q.data) return null;
+  const d = q.data;
+  return (
+    <ul className="mt-3 overflow-hidden rounded-card bg-panel">
+      <EvidenceRow
+        title="Paid quote feed"
+        plain={<>Other agents buy a signed W0G price for 0.01 USDC over x402. {d.paidQuotes} paid so far, from {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</>}
+        amount={<Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} />}
+        hash={d.lastSettlementTx ?? undefined}
+        hashLabel="latest settlement"
+        href={d.lastSettlementTx ? txUrl(BASE_CHAIN_ID, d.lastSettlementTx) : null}
+        extra={d.lastSettlementTx ? null : { href: `${QUOTES_API}/v1/stats`, label: "feed stats" }}
+        chainId={BASE_CHAIN_ID}
+        nowMs={nowMs}
+      />
+    </ul>
   );
 }

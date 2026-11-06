@@ -13,13 +13,14 @@ import { SourceNote } from "@/components/source-note";
 import { Amount, ProtocolIcon, TokenIcon, Tk, WickMark } from "@/components/token-mark";
 import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
-import { BASE_CHAIN_ID, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
-import { decisionCostUsd, decisionsFor, economicsOf, fmtDecisions, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { BASE_CHAIN_ID, EXPLORERS, QUOTES_API, V4_HOOK, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
+import { useQuoteStats } from "@/hooks/use-quote-stats";
+import { decisionCostUsd, decisionsFor, economicsOf, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { clock, countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
 import { FUEL_LINES, fuseLeft, gaugePosition, hopEvidence, HOPS, machineSentence, MODELS, nextTickIn, priceLeg, TIER_TONE, tierForBalance, tierWord, type HopKey, type Tone } from "@/lib/machine";
-import { CLOSING_SECONDS, URGENT_SECONDS, type Priced } from "@/lib/quotes";
+import { CLOSING_SECONDS, latestByDirection, URGENT_SECONDS, type Priced } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
@@ -303,13 +304,14 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
   const fuel = toNumber(status.budget.computeBalanceWei, "0G");
   const takers = fills ? takersOf(status, fills) : null;
   // Coverage only proves the loop once outside wallets pay the fees; until then the figure is what one swap buys.
-  const swapFee = status.strategy ? (0.1 * status.strategy.feeBps) / 10_000 : null;
+  const presetUsdc = toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC");
+  const swapFee = status.strategy ? (presetUsdc * status.strategy.feeBps) / 10_000 : null;
   const perSwap = swapFee !== null ? decisionsFor(swapFee, status) : null;
   const decisionUsd = decisionCostUsd(status);
   const lead = econ.coverage !== null && takers && takers.outside > 0
     ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
     : perSwap !== null
-      ? { value: fmtDecisions(perSwap), label: <>AI decisions paid for by one 0.10 USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd(swapFee!)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
+      ? { value: fmtDecisions(perSwap), label: <>AI decisions paid for by one {fmtUsdc(presetUsdc)} USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd(swapFee!)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
       : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
   return (
     <div>
@@ -487,6 +489,7 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
     <Station k="pool" name="Aqua pool" lit={(fills?.length ?? 0) > 0}>
       <Value>{fee ? `${fee}% fee per fill` : "Fills at the signed price"}</Value>
       <Note>Swaps fill only at the price the AI signed.</Note>
+      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-2"><ProtocolIcon protocol="uniswap" size={14} />A Uniswap v4 pool routes into Wick <CopyLink value={V4_HOOK.address} href={EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address)} label="Uniswap v4 hook" /></p>
       <div className="mt-2 text-[13px] text-ink-2">
         {fillsError ? <span className="text-warn-ink">Fills unreadable right now</span> : fills === null ? <span aria-hidden className="skeleton inline-block h-4 w-44 align-middle" /> : fills.length === 0 ? <span>No fill yet</span> : (
           <span className="inline-flex flex-wrap items-center gap-x-2">
@@ -512,8 +515,23 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
           <p className="num text-[13px] text-ink-2"><span className="text-ok-ink">{fmtPct(cover * 100)}</span> of the {fmtUsd(econ.aiSpentUsd)} spent on AI</p>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
+        <PaidQuotes />
       </div>
     </Station>
+  );
+}
+
+/** The second revenue line: other agents buying a signed price over x402. */
+function PaidQuotes() {
+  const q = useQuoteStats();
+  if (!q.data) return null;
+  const d = q.data;
+  return (
+    <p className="text-[13px] text-ink-2">
+      {d.paidQuotes > 0
+        ? <><span className="num text-ink">{fmtUsdc(d.revenueUsdc)} USDC</span> from {d.paidQuotes} paid quotes, {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}</>
+        : <>Agents can also buy a signed price for 0.01 USDC over <a href={`${QUOTES_API}/v1/stats`} target="_blank" rel="noreferrer" className="text-ink underline decoration-rule-2 underline-offset-4 hover:decoration-ink">x402</a></>}
+    </p>
   );
 }
 

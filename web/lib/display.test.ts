@@ -132,3 +132,18 @@ describe("clusters and ticks", () => {
     expect(tickSummary({ lastTick: { at: "2026-11-06T07:10:00Z", outcome: "refused http_error; funding hold no_fees" } })!.words).toBe("retrying");
   });
 });
+
+import { BaseError, encodeErrorResult, parseAbi } from "viem";
+import { classifyFailure, classifyQuoteError } from "./revert";
+describe("v2 refusals", () => {
+  const abi = parseAbi(["error QuoteExpired(uint64)", "error PriceOutOfBand(uint256,uint256,uint16)", "error AmountInTooLarge(uint256,uint256)", "error InsufficientDepth(uint256,uint256)"]);
+  const err = (data: string) => new BaseError("The contract function \"swap\" reverted", { cause: Object.assign(new Error("exec reverted"), { data }) });
+  test("each v2 error maps to its own plain case", () => {
+    expect(classifyFailure(err(encodeErrorResult({ abi, errorName: "QuoteExpired", args: [1n] })), false)).toBe("stale-quote");
+    expect(classifyFailure(err(encodeErrorResult({ abi, errorName: "PriceOutOfBand", args: [1n, 2n, 800] })), false)).toBe("out-of-band");
+    expect(classifyFailure(err(encodeErrorResult({ abi, errorName: "AmountInTooLarge", args: [2n, 1n] })), false)).toBe("too-large");
+    expect(classifyFailure(err(encodeErrorResult({ abi, errorName: "InsufficientDepth", args: [2n, 1n] })), false)).toBe("no-depth");
+    expect(classifyQuoteError("router quote reverted: PriceOutOfBand")).toBe("out-of-band");
+    expect(classifyQuoteError("rate limited")).toBe("other");
+  });
+});

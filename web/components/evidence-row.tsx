@@ -26,7 +26,7 @@ export function EvidenceRow({ title, plain, amount, hash, hashLabel, href, extra
       </div>
       {amount ? <div className="min-w-0 text-[15px] text-ink md:text-right">{amount}</div> : <div className="hidden md:block" />}
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:contents">
-        <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} extra={extra} /> : <span className="text-[13px] text-muted">Read from the agent</span>}</div>
+        <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} extra={extra} /> : extra ? <a href={extra.href} target="_blank" rel="noreferrer" className="text-[13px] text-ink underline decoration-rule-2 underline-offset-4 hover:decoration-ink">{extra.label}</a> : <span className="text-[13px] text-muted">Read from the agent</span>}</div>
         <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1">
           {chainId !== undefined ? <ChainChip chainId={chainId} /> : null}
           {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[13px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}

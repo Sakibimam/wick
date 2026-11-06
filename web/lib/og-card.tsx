@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { decisionsFor, economicsOf, fmtDecisions } from "./economics";
-import { fmt0g, fmtPct, toNumber } from "./format";
+import { decisionsFor, economicsOf, fmtDecisions, presetUsdcUnits } from "./economics";
+import { latestByDirection } from "./quotes";
+import { fmt0g, fmtPct, fmtUsdc, toNumber } from "./format";
 import { statusSchema, type AgentStatus } from "./schema";
 
 export const OG_SIZE = { width: 1200, height: 630 };
@@ -76,7 +77,8 @@ export async function renderCard(): Promise<ImageResponse> {
   const [status, display] = await Promise.all([readStatus(), font()]);
   const econ = status ? economicsOf(status) : null;
   const fuel = status ? fmt0g(toNumber(status.budget.computeBalanceWei, "0G")) : null;
-  const perSwap = status?.strategy ? decisionsFor((0.1 * status.strategy.feeBps) / 10_000, status) : null;
+  const preset = status ? toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC") : 0.1;
+  const perSwap = status?.strategy ? decisionsFor((preset * status.strategy.feeBps) / 10_000, status) : null;
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: C.paper, color: C.ink, padding: "56px 64px", fontFamily: display ? "Barlow Condensed" : "sans-serif" }}>
@@ -91,7 +93,7 @@ export async function renderCard(): Promise<ImageResponse> {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", fontSize: 96, lineHeight: 0.95, textTransform: "uppercase" }}>The market maker that pays for its own brain</div>
-          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One 0.10 USDC swap pays for ${fmtDecisions(perSwap)} of its AI decisions`}</div> : null}
+          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One ${fmtUsdc(preset)} USDC swap pays for ${fmtDecisions(perSwap)} of its AI decisions`}</div> : null}
         </div>
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />

@@ -17,7 +17,7 @@ import { erc20Abi } from "@/lib/abis";
 import { parseTyped } from "@/lib/amounts";
 import { AQUA_ROUTER, BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
 import { ctaFor } from "@/lib/cta";
-import { decisionCostUsd, feeFromAmount, fmtDecisions, maxFillIn } from "@/lib/economics";
+import { decisionCostUsd, feeFromAmount, fmtDecisions, maxFillIn, presetUsdcUnits } from "@/lib/economics";
 import { fmtPrice, fmtUnits, fmtUsd, significant, toNumber } from "@/lib/format";
 import { freshness, secondsLeft, type Direction, type Priced } from "@/lib/quotes";
 import { classifyQuoteError } from "@/lib/revert";
@@ -29,7 +29,6 @@ import { cn } from "@/lib/utils";
 type Props = { status: AgentStatus | undefined; priced: Record<Direction, Priced | null>; direction: Direction; setDirection: (d: Direction) => void; now: number; nowReady: boolean };
 
 const PAIR: Record<Direction, { sell: TokenSymbol; buy: TokenSymbol }> = { "sell-w0g": { sell: "W0G", buy: "USDC" }, "buy-w0g": { sell: "USDC", buy: "W0G" } };
-/** The judge preset: a fill small enough to clear on any live depth, large enough to pay a visible fee. */
 const PRESET_USDC = 100_000n;
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -68,7 +67,8 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
     refetchInterval: 8_000,
     queryFn: ({ signal }) => fetchRouterQuote(debouncedAmount!, sellTok.address, signal),
   });
-  const quoteState = !quoteEnabled ? "idle" : amount !== debouncedAmount || quote.isPending ? "loading" : quote.isError ? (quote.error instanceof AgentError && quote.error.kind === "http" && classifyQuoteError(quote.error.message) === "stale-quote" ? "stale" : "error") : "ready";
+  const quoteKind = quote.isError && quote.error instanceof AgentError && quote.error.kind === "http" ? classifyQuoteError(quote.error.message) : null;
+  const quoteState = !quoteEnabled ? "idle" : amount !== debouncedAmount || quote.isPending ? "loading" : quote.isError ? (quoteKind && quoteKind !== "other" ? "stale" : "error") : "ready";
 
   const reportedMax = quote.data?.maxAmountIn != null ? BigInt(quote.data.maxAmountIn) : null;
   const maxIn = reportedMax ?? (status ? maxFillIn(direction, status, price) : null);
@@ -98,13 +98,13 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
     fill(maxIn !== null && part > maxIn ? maxIn : part, sellTok.decimals);
   };
   const pick = (d: Direction) => { if (d !== direction) { setDirection(d); setTyped(""); } };
+  const presetUnits = status ? presetUsdcUnits(status, priced["buy-w0g"]) : PRESET_USDC;
   const preset = () => {
-    const buyMax = status ? maxFillIn("buy-w0g", status, priced["buy-w0g"]) : null;
     if (direction !== "buy-w0g") setDirection("buy-w0g");
-    fill(buyMax !== null && buyMax < PRESET_USDC ? buyMax : PRESET_USDC, 6);
+    fill(presetUnits, 6);
   };
   const failure = flow.problem ? failureCopy(flow.problem.kind, sell, flow.problem.detail) : null;
-  const staleCopy = quoteState === "stale" ? failureCopy("stale-quote", sell) : null;
+  const staleCopy = quoteState === "stale" && quoteKind && quoteKind !== "other" ? failureCopy(quoteKind, sell) : null;
   const sellUsd = amount ? usd(amount, sell) : null;
   const buyUsd = amountOut !== null ? usd(amountOut, buy) : null;
   const fee = status?.strategy ? status.strategy.feeBps / 100 : null;
@@ -178,7 +178,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
           {maxIn !== null ? <span className={cn(overDepth ? "text-danger-ink" : "text-ink")}>{fmtUnits(maxIn, sell)} {sell}</span> : status ? "unknown" : <span aria-hidden className="skeleton inline-block h-3.5 w-20 align-middle" />}
         </span>
         <button type="button" onClick={preset} disabled={expired} className="rounded-control disabled:cursor-not-allowed disabled:opacity-50 border border-rule-2 px-2 py-1 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-ink active:scale-[0.97]">
-          Fill {maxIn !== null && direction === "buy-w0g" && maxIn < PRESET_USDC ? fmtUnits(maxIn, "USDC") : "0.10"} USDC
+          Fill {fmtUnits(presetUnits, "USDC")} USDC
         </button>
       </p>
 

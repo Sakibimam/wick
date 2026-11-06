@@ -45,3 +45,14 @@ export const TOKEN_ICON: Record<TokenSymbol | "0G", string> = { USDC: "/tokens/u
 export const CHAIN_ICON: Record<number, string> = { [BASE_CHAIN_ID]: "/tokens/base.svg", [ZERO_G_CHAIN_ID]: "/tokens/0g.svg" };
 export const PROTOCOL_ICON = { aqua: "/tokens/1inch.svg", uniswap: "/tokens/uniswap.svg", ccip: "/tokens/ccip.svg" } as const;
 export type Protocol = keyof typeof PROTOCOL_ICON;
+
+/** Uniswap v4 pool whose hook routes swaps into the Wick strategy: a second door for takers. Read from hook/broadcast. */
+export const V4_HOOK = {
+  address: getAddress("0x1a35d13ae02a834e9b35a98ca1b9c87b30d72888"),
+  deployTx: "0xa72b0d60b59900f8b89ca96c3c6612a18a04750e16c606fc1a0e68d6bbfb2427",
+  setOrderTx: "0xf062d2d5c839fd03ddddea6ff201cfa246c1e221d48b4335a327d201d2a7ec11",
+  poolInitTx: "0xee9b8414c77c117231f020d604b684d7766076df89fdfbe816c9f97229649696",
+} as const;
+
+/** Paid quote feed: agents buy a signed price over x402. */
+export const QUOTES_API = "https://wick-quotes.earn-shield-alerts.workers.dev";
