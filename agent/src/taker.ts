@@ -5,8 +5,9 @@ const routerAbi = parseAbi(["function quote((address maker,uint256 traits,bytes 
 const erc20Abi = parseAbi(["function approve(address spender,uint256 amount) returns (bool)"]);
 export type ShippedOrder = { maker: Address; traits: bigint; data: Hex };
 export const takerTraitsExactIn = `0x${"0".repeat(40)}0041` as Hex;
+/** Quotes as the maker: the strategy opens with a WickGate taker check, and the maker holds a unit. */
 export async function quote(client: PublicClient<any, any>, order: ShippedOrder, input: { tokenIn: Address; tokenOut: Address; amountIn: bigint }) {
-  const [amountIn, amountOut, orderHash] = await client.readContract({ address: AQUA_ROUTER, abi: routerAbi, functionName: "quote", args: [order, input.tokenIn, input.tokenOut, input.amountIn, takerTraitsExactIn] });
+  const [amountIn, amountOut, orderHash] = await client.readContract({ address: AQUA_ROUTER, abi: routerAbi, functionName: "quote", args: [order, input.tokenIn, input.tokenOut, input.amountIn, takerTraitsExactIn], account: order.maker });
   return { amountIn, amountOut, orderHash };
 }
 export async function swap(client: PublicClient<any, any>, wallet: WalletClient<any, any>, order: ShippedOrder, input: { tokenIn: Address; tokenOut: Address; amountIn: bigint }) {
