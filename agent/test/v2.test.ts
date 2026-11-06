@@ -3,7 +3,8 @@ import { askDecision, BrainError, teeGate, validateDecision, type DecisionState 
 import { accountSpend, decideBudget, DEFAULT_BUDGET_CONFIG, emptySpendLedger } from "../src/budget.js";
 import { BAND_SAFE_BPS, composePair, postedSpreadBps, QUOTE_TTL_BAND, realizedVolBps, tierSpreadBps, EXPIRY_REQUOTE_WINDOW_SECONDS, MAX_TTL_SECONDS } from "../src/policy.js";
 import { meanTick, midFromTick, spotTwapGapBps, MAX_SPOT_TWAP_GAP_BPS } from "../src/price.js";
-import { accruedFees, inferenceIdOf } from "../src/worker-tick.js";
+import { accruedFees, earnedUsdcAndW0g, inferenceIdOf } from "../src/worker-tick.js";
+import { decideFunding } from "../src/funding-machine.js";
 
 const state: DecisionState = { twapMid: 0.1464, spotMid: 0.1464, recentMids: [0.146, 0.1464], realizedVolBps: 12, inventory: { w0g: 1.357, usdc: 0.0068, w0gValueShare: 0.97 }, recentFills: [], gas: { baseEth: 0.0002, gasPerRequoteUsd: 0.0009 }, runway: { vault0g: 2.34, runsLeft: 8600, days: 29.9 }, budgetTier: "NORMAL", tierSpreadBps: 30, maxAmountInUsdcCap: 0.2 };
 const good = { spreadBps: 40, skewBps: 60, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "inventory 97% W0G: lean down 60 bps" };
@@ -53,8 +54,24 @@ describe("v2 decision", () => {
   test("one retry on a 502 or a dropped connection, none on a 4xx", async () => {
     const a = router(good, undefined, [502]); expect((await askDecision(state, { apiKey: "x", fetchImpl: a.f })).attempts).toBe(2); expect(a.seen.length).toBe(2);
     const b = router(good, undefined, [-1]); expect((await askDecision(state, { apiKey: "x", fetchImpl: b.f })).attempts).toBe(2);
-    const c = router(good, undefined, [502, 502]); await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: c.f })); expect(c.seen.length).toBe(2);
+    const c = router(good, undefined, [502, 502]); await fail("http_error", askDecision({ ...state, budgetTier: "LOW" }, { apiKey: "x", fetchImpl: c.f })); expect(c.seen.length).toBe(2);
     const d = router(good, undefined, [400]); await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: d.f })); expect(d.seen.length).toBe(1);
+  });
+  test("a down TeeML provider falls back once to the standard model with tee_verified null, never faked", async () => {
+    let calls = 0;
+    const f = (async (_u: RequestInfo | URL, init?: RequestInit) => {
+      const req = JSON.parse(String(init?.body)); calls++;
+      if (req.model === "0gm-1.0-35b-a3b") return new Response('{"error":{"type":"upstream_error"}}', { status: 502 });
+      return Response.json({ choices: [{ message: { content: JSON.stringify(good) } }], x_0g_trace: { request_id: "rid-q", billing: { currency: "0g", total_cost: "9" } } });
+    }) as unknown as typeof fetch;
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: f });
+    expect(r.model).toBe("qwen3.7-flash");
+    expect(r.teeVerified).toBeNull();
+    expect(r.fallbackFrom).toMatch(/0gm-1.0-35b-a3b: router returned HTTP 502/);
+    expect(calls).toBe(3);
+    // A 4xx is the request's fault, not the provider's: no fallback.
+    const g = (async () => new Response("bad", { status: 400 })) as unknown as typeof fetch;
+    await fail("http_error", askDecision(state, { apiKey: "x", fetchImpl: g }));
   });
   test("CRITICAL and PAUSED never call the router", async () => {
     const r = router(good);
@@ -147,4 +164,22 @@ describe("tick helpers", () => {
 test("the brain's TTL bounds are the policy's TTL band", async () => {
   const { DECISION_BOUNDS } = await import("../src/brain.js");
   expect([...DECISION_BOUNDS.ttlSeconds]).toEqual([...QUOTE_TTL_BAND]);
+});
+
+describe("x402 revenue joins the funding leg, earned-only", () => {
+  const base = { funded: { usdc: 0n, w0g: 0n }, strategy: { usdc: 6_836n, w0g: 1_357_492_788_767_429_240n }, mid: 0.1464, ethUsd: 2200, ccipFeeWei: 110_000_000_000_000n, baseGasPriceWei: 6_000_000n, zeroGGasUsdc: 0.002, k: 3, gasTopUpBelowWei: 100_000_000_000_000n, gasShareBps: 5_000, maxSpendWeiPerRun: 300_000_000_000_000n };
+  const wallet = (usdc: bigint) => ({ usdc, w0g: 1_582_956_025_258_468_432n, ethWei: 500_000_000_000_000n });
+  test("x402 revenue held above the strategy commitment funds a run that swap fees alone could not", () => {
+    const rev = 1_000_000n;
+    const without = decideFunding({ ...base, accrued: earnedUsdcAndW0g([], 30, 0n), wallet: wallet(6_836n + rev) });
+    const withRev = decideFunding({ ...base, accrued: earnedUsdcAndW0g([], 30, rev), wallet: wallet(6_836n + rev) });
+    expect(without.fire).toBe(false);
+    expect(withRev.fire).toBe(true);
+    expect(withRev.kind).toBe("fuel");
+  });
+  test("revenue the stats claim but the wallet does not hold above the commitment is never spent", () => {
+    const d = decideFunding({ ...base, accrued: earnedUsdcAndW0g([], 30, 1_000_000n), wallet: wallet(6_836n) });
+    expect(d.fire).toBe(false);
+    expect(d.spendableUsdc).toBe("0");
+  });
 });

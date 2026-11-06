@@ -108,13 +108,21 @@ export function teeGate(model: string, teeVerified: boolean | null): boolean { r
 export async function askDecision(state: DecisionState, options: RouterOptions = {}) {
   if (state.budgetTier === "CRITICAL") throw new BrainError("budget_critical");
   if (state.budgetTier === "PAUSED") throw new BrainError("budget_paused");
-  const model = MODEL_BY_TIER[state.budgetTier];
-  const r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true });
+  let model: string = MODEL_BY_TIER[state.budgetTier], fallbackFrom: string | null = null, r: RouterResult;
+  try { r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true }); }
+  catch (e) {
+    // The TeeML model's only provider can be down (router 502 upstream_error, no charge). Fall back once to the cheap
+    // standard-mode model: its answer carries no TEE verdict, recorded as null, never as verified.
+    const providerDown = e instanceof BrainError && (e.code === "request_failed" || (e.code === "http_error" && /HTTP 5\d\d/.test(e.message)));
+    if (!providerDown || model === CHEAP_MODEL) throw e;
+    fallbackFrom = `${model}: ${e.message}`; model = CHEAP_MODEL;
+    r = await routerJson(model, DECISION_PROMPT, state, { ...options, verifyTee: true, retries: 0 });
+  }
   const run: BilledRun = { requestId: r.requestId, model, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider };
   // The router has billed this answer: any refusal below carries the run so the caller still records its cost.
   const refuse = (e: BrainError) => { e.run = run; return e; };
   let decision: Decision;
   try { decision = validateDecision(r.value, state.maxAmountInUsdcCap); } catch (e) { throw e instanceof BrainError ? refuse(e) : e; }
   if (!teeGate(model, r.teeVerified)) throw refuse(new BrainError("tee_unverified", `tee_unverified: ${model} answered with tee_verified=${r.teeVerified} from ${r.provider ?? "unknown provider"} (request ${r.requestId})`));
-  return { ...decision, requestId: r.requestId, model, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, attempts: r.attempts };
+  return { ...decision, requestId: r.requestId, model, fallbackFrom, tokens: r.tokens, costMicroUsd: r.costMicroUsd, billing: r.billing, teeVerified: r.teeVerified, provider: r.provider, attempts: r.attempts };
 }

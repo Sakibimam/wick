@@ -11,7 +11,7 @@ import { signPair, type Pair } from "./signer.js";
 import { boardV2Abi, eip1559Fees, postPair } from "./poster.js";
 import { composePair, cronPolicy, postedSpreadBps, realizedVolBps, tierSpreadBps } from "./policy.js";
 
-export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number };
+export type InferenceRecord = { requestId: string; model: string; tokens?: number | null; costMicroUsd?: number | null; currency: string | null; totalCost: string | null; time: string; reason?: string | null; spreadBps?: number | null; postedSpreadBps?: number | null; skewBps?: number | null; maxAmountIn?: string | null; maxAmountInUsdc?: number | null; ttlSeconds?: number | null; teeVerified?: boolean | null; provider?: string | null; inferenceId?: Hex | null; outcome?: string; attempts?: number; fallbackFrom?: string | null };
 export type PostedQuote = { tokenIn: Address; tokenOut: Address; rateE18: string; maxAmountIn?: string; expiry: string; epoch?: string; nonce?: string; inferenceId: Hex; requestId: string; postedTx: Hex; postedBlock: string; board?: Address; gasCostWei?: string };
 export type TickRecord = { at: string; outcome: string; error?: string; subrequests?: number };
 export type CronState = {
@@ -33,7 +33,7 @@ export type CronState = {
 };
 export type FillLite = { taker: Address; tokenIn: Address; tokenOut: Address; amountIn: string; amountOut: string; timeMs: number | null };
 export type FundingEnv = { k: number; gasTopUpBelowWei: bigint; gasShareBps: number; maxSpendWeiPerRun: bigint; zeroGGasReserveWei: bigint; feeBps: number };
-export type TickEnv = { base: PublicClient<any, any>; zeroG: PublicClient<any, any>; chain: Chain; baseRpcUrl: string; baseTransport?: Transport; zeroGTransport?: Transport; board: Address; aquaApp: Address; strategyHash: Hex; maker: Address; agent: Address; spendCapPerDayWei: bigint; agentPk?: string; zgApiKey?: string; zgApiBase?: string; fetchImpl?: typeof fetch; fills?: FillLite[]; funding?: FundingEnv; now?: number; log?: (line: string) => void };
+export type TickEnv = { base: PublicClient<any, any>; zeroG: PublicClient<any, any>; chain: Chain; baseRpcUrl: string; baseTransport?: Transport; zeroGTransport?: Transport; board: Address; aquaApp: Address; strategyHash: Hex; maker: Address; agent: Address; spendCapPerDayWei: bigint; agentPk?: string; zgApiKey?: string; zgApiBase?: string; fetchImpl?: typeof fetch; fills?: FillLite[]; x402RevenueUsdc?: bigint; funding?: FundingEnv; now?: number; log?: (line: string) => void };
 
 const KEEP = 50;
 const TICKS = 12;
@@ -51,6 +51,9 @@ export function emptyCronState(): CronState {
 export const ethUsdFromSqrt = (sqrtPriceX96: bigint) => Number(sqrtPriceX96 * sqrtPriceX96 * 10n ** 12n * 10n ** 6n / (1n << 192n)) / 1e6;
 /** Fees the strategy charged, per token, from fills: feeBps of each fill's input amount. */
 export function accruedFees(fills: FillLite[], feeBps: number) { let usdc = 0n, w0g = 0n; for (const f of fills) { const fee = BigInt(f.amountIn) * BigInt(feeBps) / 10_000n; if (f.tokenIn.toLowerCase() === USDC.toLowerCase()) usdc += fee; else if (f.tokenIn.toLowerCase() === W0G.toLowerCase()) w0g += fee; } return { usdc, w0g }; }
+/** Everything the agent earned: swap fees from fills plus x402 quote revenue settled in USDC to the maker. The funding machine
+ *  still spends only wallet headroom above the strategy's commitment, so revenue claimed but not held is never spent. */
+export function earnedUsdcAndW0g(fills: FillLite[], feeBps: number, x402RevenueUsdc: bigint) { const f = accruedFees(fills, feeBps); if (x402RevenueUsdc < 0n) throw new RangeError("negative x402 revenue"); return { usdc: f.usdc + x402RevenueUsdc, w0g: f.w0g }; }
 /** inferenceId binds the router request id to the provider that answered and the router's TEE verdict. */
 export const inferenceIdOf = (run: { requestId: string; provider: string | null; teeVerified: boolean | null }) => keccak256(encodeAbiParameters(parseAbiParameters("string,string,string"), [run.requestId, run.provider ?? "", String(run.teeVerified)]));
 
@@ -90,7 +93,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const fundingStep = async (wallet: ReturnType<typeof createWalletClient> | null) => {
     if (!wallet || !env.agentPk) return "funding_offline";
     const zg = createWalletClient({ account: privateKeyToAccount(env.agentPk as Hex), chain: ZERO_G_CHAIN, transport: env.zeroGTransport ?? http("https://evmrpc.0g.ai") });
-    const accrued = accruedFees(env.fills ?? [], fenv.feeBps);
+    const accrued = earnedUsdcAndW0g(env.fills ?? [], fenv.feeBps, env.x402RevenueUsdc ?? 0n);
     const ctx = {
       now, agent: env.agent, agentOwner: env.agent, zeroGGasReserveWei: fenv.zeroGGasReserveWei,
       decision: { accrued, wallet: { usdc: wUsdc, w0g: wW0g, ethWei: gasWei }, strategy: { w0g: strategy[0], usdc: strategy[1] }, mid: market.twapMid, ethUsd, ccipFeeWei: ccipFeeWei ?? 10n ** 18n, baseGasPriceWei: gasPrice, zeroGGasUsdc: 0.002, k: fenv.k, gasTopUpBelowWei: fenv.gasTopUpBelowWei, gasShareBps: fenv.gasShareBps, maxSpendWeiPerRun: fenv.maxSpendWeiPerRun },
@@ -154,7 +157,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const composed = composePair({ twapMid: market.twapMid, spreadBps: spread, skewBps: result.skewBps, maxAmountInUsdc: result.maxAmountInUsdc });
   const nonce = (await env.base.readContract({ address: env.board, abi: boardV2Abi, functionName: "lastNonce", args: [env.maker, epoch] })) + 1n;
   const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0: composed.maxIn0, maxIn1: composed.maxIn1, expiry: BigInt(nowSec + ttl), epoch, nonce, inferenceId };
-  const detail = { reason: result.reason, spreadBps: result.spreadBps, postedSpreadBps: spread, skewBps: result.skewBps, maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: result.maxAmountInUsdc, ttlSeconds: ttl, inferenceId, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts };
+  const detail = { reason: result.reason, spreadBps: result.spreadBps, postedSpreadBps: spread, skewBps: result.skewBps, maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: result.maxAmountInUsdc, ttlSeconds: ttl, inferenceId, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
   try {
     const sig = await signPair(wallet, env.chain.id, env.board, pair);
     const sent = await postPair(env.base, wallet, env.board, pair, sig);

@@ -1,6 +1,6 @@
 // Workers cron trigger: one agent tick per run on the v2 board. Reads chain state, applies the agent's budget policy,
 // and signs and posts the quote pair only when policy says so and both secrets are set.
-import { createPublicClient, fallback, http, type Address } from "viem";
+import { createPublicClient, fallback, http, parseUnits, type Address } from "viem";
 import { base } from "viem/chains";
 import { cronTick, emptyCronState, DEFAULT_FUNDING_ENV, type CronState, type FillLite } from "../../agent/src/worker-tick";
 import { AQUA_ROUTER } from "../lib/config";
@@ -8,7 +8,7 @@ import { BOARD_V2, FEE_BPS_V2, STRATEGY_HASH_V2 } from "./v2";
 import type { LogIndex } from "./chain";
 
 type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string): Promise<void> };
-export type CronEnv = { UPKEEP_KV: Kv; AGENT_PK?: string; ZG_API_KEY?: string; ZG_API_BASE?: string; BASE_RPC_URL?: string; ZG_RPC_URL?: string; SPEND_CAP_PER_DAY_WEI?: string; FUNDING_K?: string; GAS_TOPUP_BELOW_WEI?: string; GAS_SHARE_BPS?: string; FUNDING_MAX_SPEND_WEI?: string };
+export type CronEnv = { UPKEEP_KV: Kv; AGENT_PK?: string; ZG_API_KEY?: string; ZG_API_BASE?: string; BASE_RPC_URL?: string; ZG_RPC_URL?: string; SPEND_CAP_PER_DAY_WEI?: string; FUNDING_K?: string; GAS_TOPUP_BELOW_WEI?: string; GAS_SHARE_BPS?: string; FUNDING_MAX_SPEND_WEI?: string; QUOTES_STATS_URL?: string };
 
 const AGENT: Address = "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953";
 // Base priority fees run near 0.001 gwei; viem's 1 gwei default would overpay by three orders of magnitude.
@@ -38,6 +38,9 @@ export async function runCron(env: CronEnv): Promise<void> {
   const prev = ((await env.UPKEEP_KV.get("cron-state", "json")) as CronState | null) ?? emptyCronState();
   const [v1, v2] = await Promise.all([env.UPKEEP_KV.get("log-index", "json") as Promise<LogIndex | null>, env.UPKEEP_KV.get("log-index-v2", "json") as Promise<LogIndex | null>]);
   const fills: FillLite[] = [...(v1?.fills ?? []), ...(v2?.fills ?? [])].filter((f, i, a) => a.findIndex((g) => g.txHash === f.txHash && g.logIndex === f.logIndex) === i);
+  // x402 quote revenue settles in USDC to the maker; the seller's stats name it, the funding machine spends only what the wallet holds above the strategy.
+  const x402RevenueUsdc = await counted(env.QUOTES_STATS_URL || "https://wick-quotes.earn-shield-alerts.workers.dev/v1/stats", { signal: AbortSignal.timeout(4_000) })
+    .then((r) => (r.ok ? r.json() : null)).then((j) => (j && /^\d+(\.\d{1,6})?$/.test(String((j as { revenueUsdc?: unknown }).revenueUsdc)) ? parseUnits(String((j as { revenueUsdc: string }).revenueUsdc), 6) : 0n)).catch(() => 0n);
   let next: CronState;
   try {
     ({ state: next } = await cronTick(prev, {
@@ -59,6 +62,7 @@ export async function runCron(env: CronEnv): Promise<void> {
       zgApiBase: env.ZG_API_BASE,
       fetchImpl: counted,
       fills,
+      x402RevenueUsdc,
       funding: { ...DEFAULT_FUNDING_ENV, feeBps: FEE_BPS_V2, k: Number(env.FUNDING_K || DEFAULT_FUNDING_ENV.k), gasShareBps: Number(env.GAS_SHARE_BPS || DEFAULT_FUNDING_ENV.gasShareBps), gasTopUpBelowWei: BigInt(env.GAS_TOPUP_BELOW_WEI || DEFAULT_FUNDING_ENV.gasTopUpBelowWei), maxSpendWeiPerRun: BigInt(env.FUNDING_MAX_SPEND_WEI || DEFAULT_FUNDING_ENV.maxSpendWeiPerRun) },
       log: (line) => console.log(line),
     }));
