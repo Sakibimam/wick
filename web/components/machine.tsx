@@ -278,8 +278,8 @@ function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowR
               </div>
             ) : status && view && nowReady ? (
               <p className="flex max-w-[60ch] items-start gap-3 text-[16px] leading-[1.5] text-ink">
-                <span aria-hidden className={cn("mt-[7px] size-2.5 shrink-0 rounded-full bg-[var(--tone)]", TONE_CLASS[tone], tone !== "quiet" && "motion-safe:animate-pulse")} />
-                <span><span className="font-semibold">{tierWord(status.budget.tier)}.</span> {machineSentence(status, view.leg, now).replace(/^[^.]+\.\s*/, "")}</span>
+                <span aria-hidden className={cn("mt-[7px] size-2.5 shrink-0 rounded-full bg-[var(--tone)]", view.leg.open ? "tone-danger" : TONE_CLASS[tone], tone !== "quiet" && !view.leg.open && "motion-safe:animate-pulse")} />
+                <span><span className="font-semibold">{view.leg.open ? "Price expired" : tierWord(status.budget.tier)}.</span> {machineSentence(status, view.leg, now).replace(/^[^.]+\.\s*/, "")}</span>
               </p>
             ) : <span aria-hidden className="skeleton block h-5 w-[42ch] max-w-full" />}
           </div>
@@ -406,8 +406,8 @@ function CompactLoop({ status, view, now, nowReady }: { status: AgentStatus | un
         })}
         {status && view ? (
           <g textAnchor="middle">
-            <text x={cx} y={cy - 14} className="fill-ink font-display text-[26px] font-semibold uppercase tracking-[0.02em]">{tierWord(status.budget.tier)}</text>
-            <text x={cx} y={cy + 12} className={cn("num text-[15px]", view.leg.open ? "fill-danger" : "fill-ink")}>{!nowReady ? "" : view.leg.open ? "price expired" : `price ${countdown(secs)}`}</text>
+            <text x={cx} y={cy - 14} className="fill-ink font-display text-[26px] font-semibold uppercase tracking-[0.02em]">{view.leg.open ? "Awaiting price" : tierWord(status.budget.tier)}</text>
+            <text x={cx} y={cy + 12} className={cn("num text-[15px]", view.leg.open ? "fill-danger" : "fill-ink")}>{!nowReady ? "" : view.leg.open ? `expired ${duration((now - (view.leg.buy?.expiry ?? now)) * 1000)} ago` : `price ${countdown(secs)}`}</text>
             <text x={cx} y={cy + 34} className="num fill-muted text-[13px]">{fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} 0G fuel</text>
           </g>
         ) : null}
