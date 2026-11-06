@@ -174,7 +174,7 @@ Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibima
 
 A market maker that signs a bad price loses money to the first arbitrageur, so every guard sits before the signer and every miss means no quote:
 
-- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 300 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:94`); `composePair` (`agent/src/policy.ts:36`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
+- The model never writes a price. It returns spread 5 to 500 bps, skew -200 to 200 bps, `maxAmountInUsdc` up to strategy depth and a TTL of 700 to 900 s (`DECISION_BOUNDS` and `validateDecision`, `agent/src/brain.ts:74`, `:94`); `composePair` (`agent/src/policy.ts:36`) builds both rates from the TWAP and refuses anything past 790 bps (`BAND_SAFE_BPS`, `:30`).
 - A TeeML answer without `tee_verified: true` raises `tee_unverified`, and a router reply without a request id raises `request_id_missing`.
 - The tick holds when spot and TWAP differ by more than 150 bps (`MAX_SPOT_TWAP_GAP_BPS`, `agent/src/price.ts:43`).
 - At fill time the extruction re-checks epoch, expiry, band, size and depth, so the chain itself turns away an outdated or outsized price.

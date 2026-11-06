@@ -37,13 +37,12 @@ A swap of volume V pays `V x 0.0030` in fees.
 
 **What a 0.10 USDC swap funds.** Fee 0.0003 USDC. Divided by 40 micro-USD that is 7.5 decisions, so one 10 cent trade funds about 7 of Wick's next decisions. Against the all-in requote cost it is 0.26 requotes.
 
-**Per day.** Wick requotes on a 25 bps mid move or before its quote expires, never on a fixed clock. Daily cost is `requotes/day x $0.00114`.
+**Per day.** Wick requotes on a 25 bps TWAP move or when its live pair is within 600 s of expiry. v2 pairs live 700 to 900 s, so the renewal lands on every 5 minute cron tick and the v2 cadence is 288 requotes a day. Daily cost is `requotes/day x $0.00114`.
 
 | Cadence | Requotes/day | Cost/day | Swap volume/day to break even |
 | --- | --- | --- | --- |
-| measured on 2026-11-06 (decisions at 05:10, 05:45 and 06:40 UTC in `/api/status`) | about 29 | $0.033 | $11 |
-| one requote per 900 s TTL | 96 | $0.109 | $36 |
-| one requote every 5 minute cron tick, the ceiling | 288 | $0.328 | $109 |
+| v1, measured on 2026-11-06 (decisions at 05:10, 05:45 and 06:40 UTC in `/api/status`) | about 29 | $0.033 | $11 |
+| v2, one pair per 5 minute cron tick | 288 | $0.328 | $109 |
 
 ## Funding threshold
 
@@ -68,7 +67,7 @@ Read at 0G block 49,436,077 and Base block 53,796,598 (`/api/status`):
 | 0G Payment Layer vault | 2.343959530558679712 0G | 0.000272 0G (median of the three 0G-billed requests) | about 8,600 |
 | Base gas wallet, above the 0.00003 ETH gas floor | 0.000194 ETH (0.000224 minus floor) | 0.000000496 ETH | about 391 |
 
-At the measured 29 requotes a day the vault covers about 297 days of decisions and the gas wallet about 13 days, and the 1 0G daily spend cap bounds the vault at 3,676 decisions a day whatever the cadence. Gas is the line the fee-funded gas leg refills first.
+At the v2 cadence of 288 requotes a day the vault covers about 30 days of decisions and the gas wallet about 1.4 days, which is why the funding machine tops gas up from fee USDC whenever the wallet falls under 0.0001 ETH. The 1 0G daily spend cap bounds the vault at 3,676 decisions a day whatever the cadence.
 
 ## Revenue lines
 
@@ -84,11 +83,11 @@ Turnover is the share of a strategy's depth that trades per day, measured over e
 ```
 volume/day  = 100 x 0.11            = $11.00
 fees/day    = 11.00 x 0.0030        = $0.033
-requotes    = 0.033 / 0.00114       = 28.9 per day, gas and inference both paid from fees
-inference   = 28.9 x 0.000040       = $0.0012 per day
+bill/day    = 288 x 0.00114         = $0.328 at the v2 cadence
+covered     = 0.033 / 0.328         = 10% from fees, the rest from the 2.34 0G vault and the gas wallet
 ```
 
-Fees pay for a requote every 50 minutes, so this maker quotes on 25 bps price moves rather than on every tick. The 2.34 0G vault carries the inference side (8,600 decisions) while fees build toward the $0.75 funding run.
+**Break-even depth.** At Base p90 turnover and the v2 cadence the bill is covered once `depth x 0.11 x 0.003 >= 0.328`, at **$994 of depth**. At the Base p75 turnover of 0.05x it is $2,187.
 
 **Realistic maker: $2,000 of depth at Base p90 turnover (0.11x/day), requoting on every 5 minute tick.**
 
