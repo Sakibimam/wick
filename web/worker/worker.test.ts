@@ -57,3 +57,9 @@ test("the subrequest counter refuses calls past the Workers cap", async () => {
   await expect(f("https://x")).rejects.toThrow(/subrequest budget/);
   expect(counter.n).toBe(49);
 });
+
+test("status quotes name the per-swap cap and the per-quote budget, keeping the old maxAmountIn key for one release", () => {
+  const p = { tokenIn: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", tokenOut: "0x23cd099eB438CcA50349EE2BC809196b1ae00861", rateE18: "1", maxAmountIn: "50000", budgetIn: "50000", budgetFromBlock: "7", expiry: "2000000000", inferenceId: "0x01", requestId: "r", postedTx: "0xaa", postedBlock: "7" };
+  const [q] = quotesOf([p] as never, [], 1_900_000_000);
+  expect(q).toMatchObject({ maxAmountIn: "50000", maxAmountInPerSwap: "50000", perQuoteBudgetIn: "50000", budgetFromBlock: "7" });
+});

@@ -118,3 +118,35 @@ describe("advertised size never exceeds depth", () => {
     expect(p.maxIn0 * p.rate01E18 / E18 * 9_970n / 10_000n <= 6_836n).toBe(true);
   });
 });
+
+describe("per-quote budget", () => {
+  const swapped = parseAbi(["event Swapped(bytes32 orderHash,address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut)"]);
+  const fill = (tokenIn: string, tokenOut: string, amountIn: bigint, block: bigint, i: number, taker: string = "0x00000000000000000000000000000000000000f1") => ({ address: ROUTER, topics: encodeEventTopics({ abi: swapped, eventName: "Swapped" }) as Hex[], data: encodeAbiParameters(parseAbiParameters("bytes32,address,address,address,address,uint256,uint256"), [LIVE_HASH, AGENT, taker as Hex, tokenIn as Hex, tokenOut as Hex, amountIn, 1n]), blockNumber: block, transactionIndex: i, logIndex: i, transactionHash: `0x${String(i + 100).padStart(64, "0")}` as Hex });
+  test("two fills totalling more than the quote's budget trigger an immediate requote with a reduced cap, same price and expiry", async () => {
+    const c = fakeChain();
+    let r = await cronTick(emptyCronState(), c.env({ now: NOW }));
+    const first = c.st.sent.find((t) => t.fn === "postPair")!.args[0] as { maxIn0: bigint; maxIn1: bigint; rate01E18: bigint; rate10E18: bigint; expiry: bigint; nonce: bigint; inferenceId: string };
+    expect(first.maxIn1).toBe(50_000n);
+    c.st.logs.push(fill(USDC, W0G, 30_000n, c.st.block + 1n, 1), fill(USDC, W0G, 25_000n, c.st.block + 2n, 2), fill(USDC, W0G, 99_000n, c.st.block + 2n, 3, AGENT));
+    c.st.block += 5n;
+    r = await cronTick(r.state, c.env({ now: NOW + 60_000 }));
+    const posts = c.st.sent.filter((t) => t.fn === "postPair");
+    expect(posts.length).toBe(2);
+    const capped = posts[1]!.args[0] as typeof first;
+    expect(capped.maxIn1).toBe(1n);
+    expect(capped.maxIn0 <= first.maxIn0).toBe(true);
+    expect([capped.rate01E18, capped.rate10E18, capped.expiry, capped.inferenceId, capped.nonce]).toEqual([first.rate01E18, first.rate10E18, first.expiry, first.inferenceId, first.nonce + 1n]);
+    expect(r.outcome).toContain("budget_spent");
+    // a third tick with no new fills does not post again
+    r = await cronTick(r.state, c.env({ now: NOW + 120_000 }));
+    expect(c.st.sent.filter((t) => t.fn === "postPair").length).toBe(2);
+  });
+  test("fills below the budget, and the maker's own fills, never trigger a requote", async () => {
+    const c = fakeChain();
+    let r = await cronTick(emptyCronState(), c.env({ now: NOW }));
+    c.st.logs.push(fill(USDC, W0G, 49_999n, c.st.block + 1n, 1), fill(USDC, W0G, 10n ** 9n, c.st.block + 1n, 2, AGENT));
+    c.st.block += 5n;
+    r = await cronTick(r.state, c.env({ now: NOW + 60_000 }));
+    expect(c.st.sent.filter((t) => t.fn === "postPair").length).toBe(1);
+  });
+});

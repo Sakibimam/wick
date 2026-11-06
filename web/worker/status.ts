@@ -62,12 +62,14 @@ export function v1Records(posts: Post[], posted: PostedQuote[]): PostedQuote[] {
   return posts.map((p) => ({ tokenIn: p.tokenIn, tokenOut: p.tokenOut, rateE18: p.rateE18, expiry: p.expiry, inferenceId: p.inferenceId, requestId: byTx.get(`${lc(p.postedTx)}:${lc(p.tokenIn)}`) ?? PRE_CRON_REQUEST_BY_TX[lc(p.postedTx)] ?? "", postedTx: p.postedTx, postedBlock: p.block, board: BOARD }));
 }
 
-/** Every quote the agent posted, each with the request id from its own stored record (never a reverse lookup). */
+/** Every quote the agent posted, each with the request id from its own stored record (never a reverse lookup). maxAmountInPerSwap
+ *  is what the board caps one swap at; perQuoteBudgetIn is the size the decision intended for the quote's whole life, which the
+ *  agent enforces by cutting the cap once fills reach it. maxAmountIn repeats the per-swap cap for readers of the old key. */
 export function quotesOf(posted: PostedQuote[], current: { tokenIn: Address; tokenOut: Address; inferenceId: Hex; expiry: bigint }[], nowSec: number) {
   const live = new Set(current.map((q) => `${lc(q.tokenIn)}:${lc(q.inferenceId)}:${q.expiry}`));
   const seen = new Set<string>();
   return [...posted].reverse().filter((p) => { const k = `${lc(p.postedTx)}:${lc(p.tokenIn)}`; if (seen.has(k)) return false; seen.add(k); return true; })
-    .map((p) => ({ tokenIn: p.tokenIn, tokenOut: p.tokenOut, rateE18: p.rateE18, expiry: p.expiry, inferenceId: p.inferenceId, requestId: p.requestId || null, postedTx: p.postedTx, maxAmountIn: p.maxAmountIn ?? null, epoch: p.epoch ?? null, nonce: p.nonce ?? null, board: p.board ?? BOARD, current: live.has(`${lc(p.tokenIn)}:${lc(p.inferenceId)}:${p.expiry}`) && Number(p.expiry) > nowSec }));
+    .map((p) => ({ tokenIn: p.tokenIn, tokenOut: p.tokenOut, rateE18: p.rateE18, expiry: p.expiry, inferenceId: p.inferenceId, requestId: p.requestId || null, postedTx: p.postedTx, maxAmountInPerSwap: p.maxAmountIn ?? null, perQuoteBudgetIn: p.budgetIn ?? null, budgetFromBlock: p.budgetFromBlock ?? null, maxAmountIn: p.maxAmountIn ?? null, epoch: p.epoch ?? null, nonce: p.nonce ?? null, board: p.board ?? BOARD, current: live.has(`${lc(p.tokenIn)}:${lc(p.inferenceId)}:${p.expiry}`) && Number(p.expiry) > nowSec }));
 }
 
 /** The status document the swap and ledger pages render: chain reads first, then the cron's KV record for what only the agent knows. */
@@ -139,6 +141,7 @@ export async function buildStatus(kv: Kv | null) {
     },
     fundingThresholdUsdc: decision ? decision.thresholdUsdc.toFixed(6) : null,
     quoteTtlSeconds: ttl,
+    quoteBudget: cron?.quoteBudget ?? null,
     strategy: { hash: live.hash, docked: chain.strategy.docked, w0g: claimed.w0g.toString(), usdc: claimed.usdc.toString(), feeBps: FEE_BPS_V2, maxDeviationBps: MAX_DEVIATION_BPS_V2 },
     strategyBacking: {
       w0g: { claimed: claimed.w0g.toString(), held: chain.wallet.w0g.toString(), backed: chain.wallet.w0g >= claimed.w0g },
