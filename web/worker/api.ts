@@ -5,7 +5,8 @@ import { buildStatus } from "./status";
 import { BOARD_DEPLOY_BLOCK, STRATEGY_HASH } from "../lib/evidence";
 import { USDC, W0G } from "../lib/config";
 
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+// Read-only public chain data: any origin may read it (the local dev server included).
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
 const first = (e: unknown) => (e instanceof BaseError ? e.shortMessage : e instanceof Error ? e.message.split("\n")[0]! : String(e));
 
 export async function handleApi(req: Request, kv: Kv | null): Promise<Response | null> {
