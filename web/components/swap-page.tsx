@@ -9,7 +9,7 @@ import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
 import { BASE_CHAIN_ID, TOKENS } from "@/lib/config";
-import { economicsOf, fillEconomics, maxFillIn, runCost, takersOf } from "@/lib/economics";
+import { economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, takersOf } from "@/lib/economics";
 import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, relativeTime, significant } from "@/lib/format";
 import { txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
@@ -102,7 +102,7 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
                     <Amount value={fmtUnits(f.amountIn, inSym)} symbol={inSym} size={14} />
                     {e.seed ? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">seed fill (agent)</span> : null}
                   </span>
-                  <span className="num text-muted">{e.feeUsdc !== null ? `fee ${fmtUsd(e.feeUsdc)}` : ""}{e.decisionsFunded !== null ? `, funds ${significant(e.decisionsFunded, 2)} decisions` : ""}</span>
+                  <span className="num text-muted">{e.feeUsdc !== null ? `fee ${fmtUsd(e.feeUsdc)}` : ""}{e.decisionsFunded !== null ? `, funds ${fmtDecisions(e.decisionsFunded)} decisions` : ""}</span>
                   <span className="flex items-center gap-2"><CopyLink value={f.txHash} href={txUrl(BASE_CHAIN_ID, f.txHash)} label="fill transaction" />{f.timeMs ? <span className="num text-muted">{relativeTime(f.timeMs, nowMs)}</span> : null}</span>
                 </li>
               );

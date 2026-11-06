@@ -17,7 +17,7 @@ import { erc20Abi } from "@/lib/abis";
 import { parseTyped } from "@/lib/amounts";
 import { AQUA_ROUTER, BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
 import { ctaFor } from "@/lib/cta";
-import { feeFromAmount, lastPaidRun, maxFillIn } from "@/lib/economics";
+import { decisionCostUsd, feeFromAmount, fmtDecisions, maxFillIn } from "@/lib/economics";
 import { fmtPrice, fmtUnits, fmtUsd, significant, toNumber } from "@/lib/format";
 import { freshness, secondsLeft, type Direction, type Priced } from "@/lib/quotes";
 import { classifyQuoteError } from "@/lib/revert";
@@ -212,10 +212,10 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
         {failure ? <Alert tone="danger"><AlertTitle>{failure.title}</AlertTitle><AlertBody>{failure.body}</AlertBody></Alert> : null}
         {flow.result ? (
           <Alert tone="ok">
-            <AlertTitle>{receipt?.decisions != null ? `Your trade funded about ${significant(receipt.decisions, 2)} of Wick's next decisions.` : `Swapped ${fmtUnits(flow.result.amountIn, flow.result.tokenIn)} ${flow.result.tokenIn}.`}</AlertTitle>
+            <AlertTitle>{receipt?.decisions != null ? `Your trade funded ${fmtDecisions(receipt.decisions)} of Wick's next decisions.` : `Swapped ${fmtUnits(flow.result.amountIn, flow.result.tokenIn)} ${flow.result.tokenIn}.`}</AlertTitle>
             <AlertBody>
               You paid {fmtUnits(flow.result.amountIn, flow.result.tokenIn)} {flow.result.tokenIn} for {fmtUnits(flow.result.amountOut, flow.result.tokenOut)} {flow.result.tokenOut}
-              {receipt?.feeUsd != null ? <>, and the {fee?.toFixed(2)}% fee of {fmtUsd(receipt.feeUsd)} goes to the agent{receipt.runUsd ? <>, whose last AI run cost {fmtUsd(receipt.runUsd)}</> : null}</> : null}.{" "}
+              {receipt?.feeUsd != null ? <>, and the {fee?.toFixed(2)}% fee of {fmtUsd(receipt.feeUsd)} goes to the agent{receipt.runUsd ? <>, and one AI decision costs {fmtUsd(receipt.runUsd)}</> : null}</> : null}.{" "}
               <CopyLink value={flow.result.hash} href={txUrl(BASE_CHAIN_ID, flow.result.hash)} label="swap transaction" /> confirmed on {CHAIN_NAMES[BASE_CHAIN_ID]}.
             </AlertBody>
           </Alert>
@@ -232,7 +232,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
 /** The fee a confirmed swap paid, from the amount in its Swapped event, over what the agent's last AI run cost. */
 function swapReceipt(amountIn: bigint, tokenIn: TokenSymbol, status: AgentStatus) {
   const feeUsd = feeFromAmount(amountIn, TOKENS[tokenIn].address, status);
-  const runUsd = lastPaidRun(status)?.costUsd ?? null;
+  const runUsd = decisionCostUsd(status);
   return { feeUsd, runUsd, decisions: feeUsd !== null && runUsd ? feeUsd / runUsd : null };
 }
 

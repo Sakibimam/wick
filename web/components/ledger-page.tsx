@@ -17,7 +17,7 @@ import { usePostedAt } from "@/hooks/use-posted-at";
 import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, FILL_LOOKBACK_BLOCKS, TOKENS, ZERO_G_CHAIN_ID } from "@/lib/config";
-import { economicsOf, fillEconomics, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { economicsOf, fillEconomics, fmtDecisions, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsd, fmtUsdc, relativeTime, shortHash, significant, toNumber, utcStamp } from "@/lib/format";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
 import { buildLoop, type Fill, type Loop } from "@/lib/ledger";
@@ -95,12 +95,13 @@ function GaugeBand({ status, fills, nowMs, loading, error, onRetry }: { status: 
 
 function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[]; nowMs: number }) {
   const meta = TIERS[status.budget.tier];
+  const lastModel = runsOf(status)[0]?.model ?? status.budget.model;
   return (
     <div>
       <Chronogram status={status} fills={fills} nowMs={nowMs} />
       <ul className="mt-8 flex flex-wrap gap-2 text-[13px]" aria-label="Agent budget">
         <li className={cn("inline-flex items-center gap-2 rounded-control bg-paper px-3 py-1.5 font-semibold text-ink", `tone-${meta.tone}`)}><span className="size-2 rounded-full bg-[var(--tone)]" aria-hidden />{meta.label} tier</li>
-        {status.budget.model ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">model {status.budget.model}</li> : null}
+        {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">last run on {lastModel}</li> : null}
         <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
         <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">spent today {fmt0g(toNumber(status.budget.spentTodayWei, "0G"))} of {fmt0g(toNumber(status.budget.spendCapPerDayWei, "0G"))} <Tk>0G</Tk></li>
       </ul>
@@ -167,7 +168,7 @@ function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: 
             <EvidenceRow
               key={`${f.txHash}-${f.amountIn}`}
               title={<>{e.seed ? "Seed fill (agent)" : "Outside fill"} <span className="num ml-1 text-[13px] font-normal text-muted">{shortHash(f.taker)}</span></>}
-              plain={<>Paid {fmtUnits(f.amountIn, inSym)} <Tk>{inSym}</Tk> for {fmtUnits(f.amountOut, outSym)} <Tk>{outSym}</Tk>{e.decisionsFunded !== null ? `, enough fee for ${significant(e.decisionsFunded, 2)} AI decisions` : ""}.</>}
+              plain={<>Paid {fmtUnits(f.amountIn, inSym)} <Tk>{inSym}</Tk> for {fmtUnits(f.amountOut, outSym)} <Tk>{outSym}</Tk>{e.decisionsFunded !== null ? `, enough fee for ${fmtDecisions(e.decisionsFunded)} AI decisions` : ""}.</>}
               amount={e.feeUsdc !== null ? <Amount value={fmtUsdc(e.feeUsdc)} symbol="USDC" size={14} /> : null}
               hash={f.txHash}
               hashLabel="fill transaction"
@@ -185,14 +186,13 @@ function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: 
 
 function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHash: string | null; nowMs: number }) {
   const quotes = [...status.quotes].sort((a, b) => Number(BigInt(b.expiry) - BigInt(a.expiry)));
-  const live = quotes.filter((q) => Number(q.expiry) * 1000 > nowMs);
-  const old = quotes.filter((q) => Number(q.expiry) * 1000 <= nowMs);
-  // With nothing live, the newest pair still leads as the latest price; only the rest fold away as earlier.
-  const latest = live.length ? [] : old.filter((q) => q.expiry === old[0]?.expiry);
-  const earlier = old.filter((q) => !latest.includes(q));
+  // Only the newest pair is the price a fill gets; any older pair still inside its window is superseded, so it folds away with the rest.
+  const latest = quotes.filter((q) => q.expiry === quotes[0]?.expiry);
+  const earlier = quotes.filter((q) => !latest.includes(q));
+  const live = latest.filter((q) => Number(q.expiry) * 1000 > nowMs);
   return (
     <div>
-      <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{quotes.length}</span> signed prices{live.length ? <>, <span className="num text-ink">{live.length}</span> live</> : null}</p>
+      <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{quotes.length}</span> signed prices{live.length ? ", newest pair live" : ", requoting"}</p>
       <Rows>
         <EvidenceRow
           title="Aqua order on the router"
@@ -210,15 +210,15 @@ function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHas
           </li>
         ) : (
           <>
-            {(live.length ? live : latest).map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+            {latest.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
             {earlier.length > 0 ? (
               <li>
                 <details className="group">
                   <summary className="cursor-pointer list-none px-4 py-3.5 text-[15px] text-ink-2 transition-colors duration-150 hover:bg-sunken">
-                    <span className="num text-ink">{earlier.length}</span> earlier prices, each expired and replaced <span className="text-muted group-open:hidden">(show)</span>
+                    <span className="num text-ink">{earlier.length}</span> earlier prices, each replaced by a newer one <span className="text-muted group-open:hidden">(show)</span>
                   </summary>
                   <ul className="divide-y divide-rule border-t border-rule">
-                    {earlier.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} />)}
+                    {earlier.map((q) => <PriceRow key={`${q.inferenceId}-${q.expiry}`} q={q} nowMs={nowMs} superseded />)}
                   </ul>
                 </details>
               </li>
@@ -230,7 +230,7 @@ function PriceRows({ status, orderHash, nowMs }: { status: AgentStatus; orderHas
   );
 }
 
-function PriceRow({ q, nowMs }: { q: AgentStatus["quotes"][number]; nowMs: number }) {
+function PriceRow({ q, nowMs, superseded }: { q: AgentStatus["quotes"][number]; nowMs: number; superseded?: boolean }) {
   const postedAt = usePostedAt(q.postedTx);
   const direction = directionOf(q);
   const price = direction ? impliedPrice(direction, BigInt(q.rateE18)) : Number.NaN;
@@ -239,7 +239,7 @@ function PriceRow({ q, nowMs }: { q: AgentStatus["quotes"][number]; nowMs: numbe
   const source = q.requestId === "price-only" ? "Signed from the Uniswap pool mid, with no AI run behind it." : q.requestId ? <>Signed after AI run <span className="num text-[13px]">{shortHash(q.requestId)}</span>.</> : "Signed by the agent from the pool mid.";
   return (
     <EvidenceRow
-      title={side ? <span className={side.cls}><span className="text-[var(--tone)]">{side.name}</span> <span className="font-normal text-ink-2"><Tk>{side.who}</Tk></span> <span className={cn("num ml-1 text-[13px] font-normal", left > 0 ? "text-ok-ink" : "text-muted")}>{countdown(left)}</span></span> : "Price for another pair"}
+      title={side ? <span className={side.cls}><span className="text-[var(--tone)]">{side.name}</span> <span className="font-normal text-ink-2"><Tk>{side.who}</Tk></span> <span className={cn("num ml-1 text-[13px] font-normal", left > 0 && !superseded ? "text-ok-ink" : "text-muted")}>{superseded ? "superseded" : left > 0 ? countdown(left) : "requoting"}</span></span> : "Price for another pair"}
       plain={source}
       amount={Number.isFinite(price) ? <span className="num">{fmtPrice(price)} <span className="text-[13px] text-muted">USDC</span></span> : null}
       hash={q.postedTx}
@@ -270,7 +270,6 @@ function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
         <div className="tone-ok">
           <dt className="label">Coverage</dt>
           <dd className="num mt-1 text-[22px] text-ink">{econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a"}</dd>
-          {econ.coverage !== null ? <dd className="mt-1.5 h-1 overflow-hidden rounded-[2px] bg-sunken"><span className="block h-full origin-left bg-[var(--tone)]" style={{ transform: `scaleX(${Math.min(1, econ.coverage)})` }} /></dd> : null}
         </div>
         <div>
           <dt className="label">Next funding run</dt>
@@ -314,7 +313,9 @@ function FundingRows({ loop, threshold, nowMs }: { loop: Loop; threshold: number
 function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
   const runs = runsOf(status);
   if (runs.length === 0) return <EmptyBlock title="The first billed AI run lands here." next="Each run's request id appears with its cost, so a signed price on the swap page can be matched to the money that paid for it." />;
-  const hasDecision = runs.some((r) => r.raw.reason || r.raw.skewBps != null);
+  const decided = runs.filter((r) => r.raw.reason || r.raw.skewBps != null).length;
+  // A Decision column that is mostly empty reads as broken; the rationale lives in the row's title until most runs carry one.
+  const hasDecision = decided * 2 > runs.length;
   return (
     <div className="overflow-hidden rounded-card bg-panel">
       <CostSpark runs={runs} nowMs={nowMs} />
@@ -325,7 +326,7 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
               <span className="text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</span>
               <span className="num text-ink-2">{r.costUsd !== null ? fmtUsd(r.costUsd) : "n/a"}{r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</span>
             </p>
-            <p className="num text-[13px] text-muted">{r.atMs ? relativeTime(r.atMs, nowMs) : "time n/a"}{r.model ? `, ${r.model}` : ""}{r.raw.reason ? `, ${r.raw.reason}` : ""}</p>
+            <p className="num text-[13px] text-muted">{r.atMs ? relativeTime(r.atMs, nowMs) : "time n/a"}{r.model ? `, ${r.model}` : ""}</p>
             <CopyLink value={r.requestId} label="AI request id" />
           </li>
         ))}
@@ -346,7 +347,7 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
             {runs.map((r) => (
               <tr key={r.requestId} className="transition-colors duration-150 hover:bg-sunken">
                 <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.atMs ? utcStamp(r.atMs) : undefined}>{r.atMs ? relativeTime(r.atMs, nowMs) : "n/a"}</td>
-                <td className="num px-4 py-2.5 text-ink-2">{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}{r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</td>
+                <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.raw.reason ?? undefined}>{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}{r.billedIn === "usd" ? <span className="mt-1 block w-fit rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</td>
                 {hasDecision ? <td className="px-4 py-2.5 text-ink-2">{[r.raw.reason, r.raw.skewBps != null ? `skew ${r.raw.skewBps} bps` : null].filter(Boolean).join(", ") || <span className="text-muted">n/a</span>}</td> : null}
                 <td className="whitespace-nowrap px-4 py-2.5 text-right text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</td>
                 <td className="num whitespace-nowrap px-4 py-2.5 text-right text-ink-2">

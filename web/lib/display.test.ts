@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CHAIN_ICON, CHAIN_NAMES, PROTOCOL_ICON, TOKEN_ICON, TOKENS, USDC, W0G } from "./config";
 import { cluster } from "./cluster";
-import { economicsOf, maxFillIn, runCost, runsOf, takersOf } from "./economics";
+import { decisionsFor, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, runsOf, takersOf } from "./economics";
 import { clock, countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsdc, shortHash } from "./format";
 import { tickSummary } from "./machine";
 import { latestByDirection } from "./quotes";
@@ -102,6 +102,14 @@ describe("economics", () => {
     expect(buy).toBeLessThan(100_000_000n);
     const sell = maxFillIn("sell-w0g", live, p["sell-w0g"])!;
     expect((sell * 145897n * 9970n) / (10n ** 18n * 10_000n)).toBeLessThanOrEqual(600000n);
+  });
+  test("every decisions figure divides by one cost and rounds one way", () => {
+    expect(fmtDecisions(9.74)).toBe("9");
+    expect(fmtDecisions(0.42)).toBe("0.4");
+    const reported = { ...live, economics: { inferenceCostUsd: 0.00003 } };
+    const fill = { txHash: sig("c"), blockNumber: 1n, timeMs: 1, taker: live.agent, tokenIn: USDC, tokenOut: W0G, amountIn: 100000n, amountOut: 1n, decisionsFunded: 99 };
+    expect(fillEconomics(fill, reported).decisionsFunded).toBeCloseTo(decisionsFor(0.0003, reported)!, 9);
+    expect(decisionsFor(0.0003, reported)).toBeCloseTo(10, 9);
   });
   test("the agent's own fill is a seed, not an outside taker", () => {
     const fill = (taker: string) => ({ txHash: sig("c"), blockNumber: 1n, timeMs: 1, taker, tokenIn: USDC, tokenOut: W0G, amountIn: 100000n, amountOut: 1n });

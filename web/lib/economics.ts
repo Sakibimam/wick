@@ -24,6 +24,21 @@ export function runsOf(status: AgentStatus): Run[] {
   return status.inferences.map((r) => normalizeRun(r, status.mid)).sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0));
 }
 
+/** What one AI decision costs in USD: the agent's own figure when it reports one, else the latest 0G-billed run. Every "decisions funded" number on the site divides by this. */
+export function decisionCostUsd(status: AgentStatus): number | null {
+  const reported = status.economics?.inferenceCostUsd;
+  return typeof reported === "number" && reported > 0 ? reported : lastPaidRun(status)?.costUsd ?? null;
+}
+
+/** Whole decisions, since a half decision means nothing; under one it keeps one significant figure. */
+export const fmtDecisions = (n: number) => (n >= 1 ? String(Math.floor(n)) : n.toPrecision(1));
+
+/** Decisions a fee of `feeUsd` pays for. */
+export function decisionsFor(feeUsd: number, status: AgentStatus): number | null {
+  const c = decisionCostUsd(status);
+  return c ? feeUsd / c : null;
+}
+
 /** The latest run billed in 0G: the price of the agent's next decision. */
 export const lastPaidRun = (status: AgentStatus): Run | null => runsOf(status).find((r) => r.billedIn === "0g" && r.costUsd !== null) ?? null;
 
@@ -73,8 +88,7 @@ const isAgent = (status: AgentStatus, taker: string) => [status.agent, status.ma
 /** The fee one fill paid, in USDC, and how many of the agent's decisions it buys at the last run's cost. */
 export function fillEconomics(fill: Fill, status: AgentStatus): { feeUsdc: number | null; decisionsFunded: number | null; seed: boolean } {
   const feeUsdc = fill.feeUsdc ?? feeFromAmount(fill.amountIn, fill.tokenIn, status);
-  const last = lastPaidRun(status);
-  const decisionsFunded = fill.decisionsFunded ?? (feeUsdc !== null && last?.costUsd ? feeUsdc / last.costUsd : null);
+  const decisionsFunded = feeUsdc !== null ? decisionsFor(feeUsdc, status) : null;
   return { feeUsdc, decisionsFunded, seed: isAgent(status, fill.taker) };
 }
 

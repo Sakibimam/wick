@@ -87,6 +87,7 @@ export const statusSchema = z.object({
     fundingThresholdUsdc: num,
     breakEvenFillUsdcPerRun: num,
     runwayDays: num,
+    inferenceCostUsd: num,
   }).partial()),
   seedVsEarned: soft(z.object({ seedUsdc: num, earnedUsdc: num }).partial().nullable()),
   distinctTakers: soft(z.number().int().nonnegative()),

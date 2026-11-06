@@ -14,7 +14,7 @@ import { Amount, ProtocolIcon, TokenIcon, Tk, WickMark } from "@/components/toke
 import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
-import { economicsOf, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { decisionCostUsd, decisionsFor, economicsOf, fmtDecisions, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { clock, countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
@@ -176,9 +176,6 @@ function useNodePoints(ref: React.RefObject<HTMLDivElement | null>) {
 const pathOf = (p: Pt[]) => p.map((q, i) => `${i ? "L" : "M"}${q.x} ${q.y}`).join(" ");
 
 function Circuit({ segs, reduce, view, now, ttl }: { segs: Seg[]; reduce: boolean; view: View; now: number; ttl: number }) {
-  // The draw-in runs on animation frames; a hidden tab gets none, so after 2.6 s the circuit renders complete regardless.
-  const [settled, setSettled] = useState(reduce);
-  useEffect(() => { const t = setTimeout(() => setSettled(true), 2600); return () => clearTimeout(t); }, []);
   const fuse = view.leg.soonest;
   const fusePath = segs.find((s) => s.state === "fuse");
   const left = fuse ? fuseLeft(fuse.expiry, now, ttl) : 0;
@@ -194,14 +191,12 @@ function Circuit({ segs, reduce, view, now, ttl }: { segs: Seg[]; reduce: boolea
   const stroke = (s: Seg) => cn((s.state === "lit" || s.state === "armed") && cn("stroke-[var(--chain)]", CHAIN_CLASS[CHAIN[s.to]]), s.state === "dim" && "stroke-rule-2", s.state === "open" && "stroke-danger", s.state === "fuse" && "stroke-rule");
   return (
     <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-      {segs.map((s, i) => {
+      {segs.map((s) => {
         const common = { d: pathOf(s.points), fill: "none", strokeWidth: s.state === "lit" || s.state === "fuse" ? 2.5 : 2, strokeDasharray: s.state === "open" ? "6 7" : s.state === "armed" ? "3 7" : undefined, strokeLinecap: s.state === "armed" ? ("round" as const) : undefined, className: stroke(s) };
-        return settled ? <path key={s.from} {...common} /> : (
-          <motion.path key={s.from} {...common} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ delay: i * 0.11, duration: 0.55, ease: [0.16, 1, 0.3, 1] }} />
-        );
+        return <path key={s.from} {...common} />;
       })}
-      {settled ? segs.filter((s) => s.state !== "fuse").map((s) => <Chevron key={`c-${s.from}`} seg={s} className={stroke(s)} />) : null}
-      {fusePath && settled ? (
+      {segs.filter((s) => s.state !== "fuse").map((s) => <Chevron key={`c-${s.from}`} seg={s} className={stroke(s)} />)}
+      {fusePath ? (
         <path
           d={pathOf(fusePath.points)}
           fill="none"
@@ -308,11 +303,13 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
   const fuel = toNumber(status.budget.computeBalanceWei, "0G");
   const takers = fills ? takersOf(status, fills) : null;
   // Coverage only proves the loop once outside wallets pay the fees; until then the figure is what one swap buys.
-  const perSwap = econ.lastRun?.costUsd && status.strategy ? (0.1 * status.strategy.feeBps) / 10_000 / econ.lastRun.costUsd : null;
+  const swapFee = status.strategy ? (0.1 * status.strategy.feeBps) / 10_000 : null;
+  const perSwap = swapFee !== null ? decisionsFor(swapFee, status) : null;
+  const decisionUsd = decisionCostUsd(status);
   const lead = econ.coverage !== null && takers && takers.outside > 0
     ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
     : perSwap !== null
-      ? { value: significant(perSwap, 2), label: <>AI decisions paid for by one 0.10 USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd((0.1 * status.strategy!.feeBps) / 10_000)}; the last AI run cost {fmtUsd(econ.lastRun!.costUsd!)}</> }
+      ? { value: fmtDecisions(perSwap), label: <>AI decisions paid for by one 0.10 USDC swap</>, detail: <>its {status.strategy!.feeBps / 100}% fee is {fmtUsd(swapFee!)}; one AI decision costs {fmtUsd(decisionUsd!)}</> }
       : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
   return (
     <div>
@@ -321,14 +318,14 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
       </p>
       <p className="mt-3 max-w-[44ch] text-[17px] text-ink">{lead.label}</p>
       {lead.detail ? <p className="num mt-1 text-[14px] text-muted">{lead.detail}</p> : null}
-      <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 border-t border-rule pt-4">
+      <dl className="mt-5 grid grid-cols-3 gap-x-4 gap-y-3 border-t border-rule pt-4 sm:flex sm:flex-wrap sm:gap-x-8">
         <div>
-          <dt className="label">Fuel in the AI account</dt>
+          <dt className="label">AI fuel</dt>
           <dd className="mt-0.5 text-[20px] text-ink"><Amount value={fmt0g(fuel)} symbol="0G" size={16} /></dd>
         </div>
         {econ.runwayDays !== null ? (
           <div>
-            <dt className="label">{econ.reported.has("runwayDays") ? "Runway at current spend" : "Runway at the daily cap"}</dt>
+            <dt className="label">{econ.reported.has("runwayDays") ? "Runway, today's pace" : "Runway at the cap"}</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runwayDays, 2)} days</dd>
           </div>
         ) : null}
@@ -340,7 +337,7 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
         ) : null}
         {econ.coverage !== null ? (
           <div>
-            <dt className="label">Fees against AI spent</dt>
+            <dt className="label">Fees vs AI spent</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{fmtPct(econ.coverage * 100)}</dd>
           </div>
         ) : null}
@@ -362,7 +359,7 @@ function PriceClock({ status, view, now, nowReady, loading }: { status: AgentSta
   const open = view.leg.open;
   const newest = [view.leg.buy, view.leg.sell].filter((p): p is Priced => p !== null).sort((x, y) => y.expiry - x.expiry)[0];
   return (
-    <section aria-label="Signed prices" className="self-center rounded-card bg-panel p-5">
+    <section aria-label="Signed prices" className="hidden self-center rounded-card bg-panel p-5 lg:block">
       <p className="flex items-center justify-between gap-3 text-[13px] text-muted">
         <span className="inline-flex items-center gap-1.5"><TokenIcon symbol="W0G" size={16} /><Tk>W0G</Tk> in USDC, signed by AI</span>
         <SourceNote>getQuote on the AgentQuoteBoard and the QuotePosted events, read through the Worker status route.</SourceNote>
@@ -512,12 +509,7 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
       <Value><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" /></Value>
       <div className="mt-3 max-w-[240px] space-y-3">
         {cover !== null ? (
-          <div className="tone-ok">
-            <div className="relative h-1.5 overflow-hidden rounded-[2px] bg-sunken" role="meter" aria-label="Fees earned against AI spent" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(1, cover) * 100)}>
-              <div className="h-full origin-left bg-[var(--tone)]" style={{ transform: `scaleX(${Math.min(1, cover)})` }} />
-            </div>
-            <p className="num mt-1.5 text-[13px] text-ink-2">covers {fmtPct(cover * 100)} of {fmtUsd(econ.aiSpentUsd)} AI spent</p>
-          </div>
+          <p className="num text-[13px] text-ink-2"><span className="text-ok-ink">{fmtPct(cover * 100)}</span> of the {fmtUsd(econ.aiSpentUsd)} spent on AI</p>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
       </div>
@@ -530,6 +522,7 @@ function HopStation({ hop, evidence, status, nowMs }: { hop: (typeof HOPS)[numbe
   const right = isRight(hop.key);
   return (
     <Station k={hop.key} name={hop.name} lit={Boolean(evidence) || (hop.key === "swap" && status.mid !== null)}>
+      {hop.key === "swap" && status.mid !== null && !evidence ? <Value className="mb-1">{fmtPrice(status.mid)} <span className="text-[13px] text-muted">USDC mid</span></Value> : null}
       <Note className="mt-0 text-balance text-ink-2"><Tk>{hop.what}</Tk></Note>
       <div className={cn("mt-2 flex flex-wrap items-center gap-x-2 text-[13px]", right && "lg:justify-end")}>
         {evidence ? (
@@ -538,7 +531,7 @@ function HopStation({ hop, evidence, status, nowMs }: { hop: (typeof HOPS)[numbe
             <time className="num text-muted" dateTime={new Date(at ?? 0).toISOString()} title={at ? utcStamp(at) : undefined}>{at ? relativeTime(at, nowMs) : ""}</time>
           </>
         ) : hop.key === "swap" && status.mid !== null ? (
-          <span className="num text-muted">Live mid {fmtPrice(status.mid)} USDC. Fees swap here at {status.fundingThresholdUsdc ? `${fmtUsdc(Number(status.fundingThresholdUsdc))} USDC` : "the threshold"}.</span>
+          <span className="text-muted">Swaps fees to <Tk>W0G</Tk> once they reach {status.fundingThresholdUsdc ? `${fmtUsdc(Number(status.fundingThresholdUsdc))} USDC` : "the threshold"}.</span>
         ) : (
           <span className="text-muted">Runs once fees reach {status.fundingThresholdUsdc ? fmtUsdc(Number(status.fundingThresholdUsdc)) : "the threshold"} USDC.</span>
         )}
@@ -583,19 +576,18 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
         {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</> : <> at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</>}. </> : null}
         Spent today <span className="num text-ink">{fmt0g(toNumber(spent, "0G"))} <Tk>0G</Tk></span>. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
-      <WhatIf balanceWei={bal} capWei={cap} />
+      <WhatIf balanceWei={bal} />
     </Station>
   );
 }
 
 /** Drag a hypothetical fuel level and read what the agent's own budget lines would do with it. */
-function WhatIf({ balanceWei, capWei }: { balanceWei: bigint; capWei: bigint }) {
+function WhatIf({ balanceWei }: { balanceWei: bigint }) {
   const start = Math.round(gaugePosition(balanceWei) * 300);
   const [step, setStep] = useState(start);
   const wei = BigInt(Math.round(10 ** (-2 + (3 * step) / 300) * 1e18));
   const tier = tierForBalance(wei);
   const model = MODELS[tier];
-  const days = capWei > 0n ? Number(wei) / Number(capWei) : null;
   const v = toNumber(wei, "0G");
   return (
     <div className={cn("mt-4 max-w-[560px] rounded-card bg-panel px-4 py-3", `tone-${TIER_TONE[tier]}`)}>
@@ -606,8 +598,8 @@ function WhatIf({ balanceWei, capWei }: { balanceWei: bigint; capWei: bigint }) 
       <input id="fuel-what-if" type="range" min={0} max={300} value={step} onChange={(e) => setStep(Number(e.target.value))} className="mt-2 w-full accent-[var(--tone)]" aria-valuetext={`${fmt0g(v)} 0G, tier ${tier}`} />
       <p className="mt-1 text-[14px] text-ink-2" aria-live="polite">
         <span className="font-semibold text-[var(--tone)]">{tierWord(tier)}</span>
-        {model ? <>, model <span className="num text-ink">{model}</span></> : ", no new AI runs"}
-        {days !== null && tier !== "PAUSED" ? <>, about <span className="num text-ink">{days < 1 ? `${Math.round(days * 24)} h` : `${significant(days, 2)} days`}</span> at the daily cap</> : null}.
+        {model ? <>, its tier model is <span className="num text-ink">{model}</span></> : ", no new AI runs"}
+.
         {step !== start ? <button type="button" onClick={() => setStep(start)} className="ml-2 text-muted underline underline-offset-4 hover:text-ink">Back to the real balance</button> : null}
       </p>
     </div>

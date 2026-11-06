@@ -66,6 +66,8 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
     const posts = status.quotes.filter((q) => q.requestId === r.requestId && q.postedTx && postTimes[q.postedTx]).map((q) => postTimes[q.postedTx!]!);
     if (ra !== null && posts.length) crossings.push({ a: ra, b: Math.min(...posts), from: "zg", key: `run-${r.requestId}` });
   }
+  // Stems closer than the mark merge distance draw once, like the marks they join.
+  const stems = crossings.filter((c, i) => c.key === "ccip" || !crossings.slice(0, i).some((d) => d.key !== "ccip" && Math.abs(x(d.a) - x(c.a)) < 28 && Math.abs(x(d.b) - x(c.b)) < 28));
   // Gridlines every 6 hours of UTC so the long quiet stretches still read as time.
   const SIX = 6 * 3600_000;
   const ticks: number[] = [];
@@ -92,7 +94,7 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
                   <line x1={padL} x2={w - padR} y1={ROW[lane]} y2={ROW[lane]} className="stroke-rule" strokeWidth={2} />
                 </g>
               ))}
-              {crossings.map((c) => {
+              {stems.map((c) => {
                 const ya = ROW[c.from], yb = ROW[c.from === "base" ? "zg" : "base"];
                 const xa = x(c.a), xb = x(c.b);
                 return <path key={c.key} d={`M${xa} ${ya} C${xa} ${(ya + yb) / 2} ${xb} ${(ya + yb) / 2} ${xb} ${yb}`} fill="none" strokeWidth={1.5} strokeDasharray={c.key === "ccip" ? undefined : "3 4"} className={cn("stroke-[var(--chain)]", c.from === "base" ? "chain-base" : "chain-zg")} />;
