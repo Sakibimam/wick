@@ -8,3 +8,6 @@ next-env.d.ts
 design-research/mockups/*.tokens.json
 design-research/refs/*.tokens.json
 AGENTS.md
+.open-next/
+.wrangler/
+.dev.vars

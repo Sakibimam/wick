@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": "worker.ts",
+  "name": "upkeep",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "upkeep"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "UPKEEP_KV",
+      "id": "500f897401a84a8da144f7a44cd90c80"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  // The agent sources under ../agent resolve viem from their own node_modules; bundle one copy.
+  "alias": {
+    "viem": "./node_modules/viem/_esm/index.js",
+    "viem/accounts": "./node_modules/viem/_esm/accounts/index.js",
+    "viem/chains": "./node_modules/viem/_esm/chains/index.js"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "BASE_RPC_URL": "https://mainnet.base.org",
+    "BASE_LOGS_RPC_URL": "https://base-rpc.publicnode.com",
+    "ZG_RPC_URL": "https://evmrpc.0g.ai",
+    "QUOTE_TTL_SECONDS": "3600",
+    "SPEND_CAP_PER_DAY_WEI": "1000000000000000000",
+    "FUNDING_THRESHOLD_USDC": "10"
+  }
+}

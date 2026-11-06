@@ -57,7 +57,11 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   s.budget = { tier: decision.tier, model: decision.model, computeBalanceWei: vault.toString(), spentTodayWei: s.spentTodayWei, spendCapPerDayWei: env.spendCapPerDayWei.toString(), reason: decision.reason, gasWei: gasWei.toString() };
   const done = (outcome: string) => { s.lastTick = { at: new Date(now).toISOString(), outcome }; log(`tick ${outcome} tier=${decision.tier} reason=${decision.reason} mid=${market.mid} expiresIn=${secondsToExpiry}`); return { state: s, outcome }; };
 
-  if (!env.agentPk || !env.zgApiKey) { log("secrets not set"); return done("secrets_not_set"); }
+  if (!env.agentPk || !env.zgApiKey) {
+    log("secrets not set");
+    s.budget = { ...s.budget, tier: "PAUSED", model: null, reason: decision.reason === "gas_low" ? "gas_low" : "signer_offline" };
+    return done("secrets_not_set");
+  }
   if (!decision.shouldInfer) return done("hold");
 
   const account = privateKeyToAccount(env.agentPk as `0x${string}`);
