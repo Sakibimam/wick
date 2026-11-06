@@ -74,8 +74,11 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const liveOrder = s.funding.live ?? env.liveOrder ?? null;
   const liveHash = liveOrder?.hash ?? env.strategyHash;
   // rawBalances, not safeBalances: a docked hash (mid-harvest) reads as tokensCount 0xff instead of reverting the whole tick.
-  const raw = (token: Address) => env.base.readContract({ address: AQUA, abi: harvestAbi, functionName: "rawBalances", args: [env.maker, env.aquaApp, liveHash, token] });
-  const [market, vault, gasWei, quotes, epoch, onBoard, wW0g, wUsdc, rawStrategy, ethPool, ccipFeeWei, gasPrice] = await Promise.all([
+  const rawOf = (hash: Hex, token: Address) => env.base.readContract({ address: AQUA, abi: harvestAbi, functionName: "rawBalances", args: [env.maker, env.aquaApp, hash, token] });
+  const raw = (token: Address) => rawOf(liveHash, token);
+  // The maker wallet backs every strategy it has shipped: each live one's balance is committed, not spare.
+  const otherHashes = [...new Set((env.orderHashes ?? []).map((h) => h.toLowerCase() as Hex))].filter((h) => h !== liveHash.toLowerCase());
+  const [market, vault, gasWei, quotes, epoch, onBoard, wW0g, wUsdc, rawStrategy, ethPool, ccipFeeWei, gasPrice, rawOthers] = await Promise.all([
     readTwapMarket(env.base),
     env.zeroG.readContract({ address: ZERO_G_PAYMENT_LAYER, abi: fundingAbi.payment, functionName: "balanceOf", args: [env.agent] }),
     env.base.getBalance({ address: env.agent }),
@@ -88,7 +91,10 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     env.base.readContract({ address: ETH_USDC_POOL, abi: readAbi, functionName: "slot0" }),
     quoteCcipFee(env.base, { agent: env.agent, w0gAmount: 10n ** 18n }).catch(() => null),
     env.base.getGasPrice(),
+    Promise.all(otherHashes.map((h) => Promise.all([rawOf(h, W0G), rawOf(h, USDC)]))),
   ]);
+  // A docked or never-shipped hash reads balance 0 (Aqua.dock stores zero), so summing every known hash counts live strategies only.
+  const others = rawOthers.reduce((a, [w, u]) => ({ w0g: a.w0g + w[0], usdc: a.usdc + u[0] }), { w0g: 0n, usdc: 0n });
   const docked = rawStrategy[0][1] !== 2 || rawStrategy[1][1] !== 2;
   const hrun = s.funding.run?.harvest;
   // While docked mid-harvest the inventory waiting to be re-shipped is the commitment; a docked hash outside a harvest commits nothing.
@@ -145,7 +151,7 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
     const ctx = {
       harvest,
       now, agent: env.agent, agentOwner: env.agent, zeroGGasReserveWei: fenv.zeroGGasReserveWei,
-      decision: { accrued, wallet: { usdc: wUsdc, w0g: wW0g, ethWei: gasWei }, strategy: { w0g: strategy[0], usdc: strategy[1] }, mid: market.twapMid, ethUsd, ccipFeeWei: ccipFeeWei ?? 0n, baseGasPriceWei: gasPrice, zeroGGasUsdc: 0.002, k: fenv.k, gasTopUpBelowWei: fenv.gasTopUpBelowWei, gasShareBps: fenv.gasShareBps, maxSpendWeiPerRun: fenv.maxSpendWeiPerRun },
+      decision: { accrued, wallet: { usdc: wUsdc, w0g: wW0g, ethWei: gasWei }, strategy: { w0g: strategy[0] + others.w0g, usdc: strategy[1] + others.usdc }, mid: market.twapMid, ethUsd, ccipFeeWei: ccipFeeWei ?? 0n, baseGasPriceWei: gasPrice, zeroGGasUsdc: 0.002, k: fenv.k, gasTopUpBelowWei: fenv.gasTopUpBelowWei, gasShareBps: fenv.gasShareBps, maxSpendWeiPerRun: fenv.maxSpendWeiPerRun },
       io: {
         send: (tx: { chainId: 8453 | 16661; to: Address; data: Hex; value: bigint }) => sendWithNonceRetry(tx.chainId === 8453 ? env.base : env.zeroG, env.agent, (nonce) => tx.chainId === 8453
           ? (async () => wallet.sendTransaction({ account: wallet.account!, chain: env.chain, to: tx.to, data: tx.data, value: tx.value, nonce, ...(await eip1559Fees(env.base)) }))()

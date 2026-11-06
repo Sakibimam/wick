@@ -150,3 +150,15 @@ describe("per-quote budget", () => {
     expect(c.st.sent.filter((t) => t.fn === "postPair").length).toBe(1);
   });
 });
+
+describe("headroom counts every strategy the maker runs", () => {
+  test("wallet headroom subtracts the balances of every known live strategy hash, not just the current one", async () => {
+    const c = fakeChain(); c.st.ccipFee = 10n ** 14n;
+    const other = `0x${"0b".repeat(32)}` as Hex, docked = `0x${"0d".repeat(32)}` as Hex;
+    c.st.slots.set(other, { w0g: 0n, usdc: 5_000_000n, tokensCount: 2 });
+    c.st.slots.set(docked, { w0g: 0n, usdc: 0n, tokensCount: 0xff });
+    const s0 = holding(c, emptyCronState());
+    const r = await cronTick(s0, c.env({ now: NOW, x402RevenueUsdc: 10_000_000n, orderHashes: [other, docked, LIVE_HASH] }));
+    expect(r.state.funding!.lastDecision!.spendableUsdc).toBe((10_000_000n - 146_400n - 5_000_000n).toString());
+  });
+});
