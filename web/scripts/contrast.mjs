@@ -17,11 +17,9 @@ const lum = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const ratio = (fg, bg) => { const x = lum(toRGB(token(fg))), y = lum(toRGB(token(bg))); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
 const PAIRS = [
-  ["ink", "paper", 7], ["ink-2", "paper", 7], ["muted", "paper", 4.5], ["muted", "sunken", 4.5], ["muted", "panel", 4.5],
-  ["ink", "sunken", 7], ["on-accent", "accent", 4.5], ["accent", "paper", 4.5],
-  ["on-graphite", "graphite", 7], ["on-graphite-muted", "graphite", 4.5], ["on-graphite-muted", "graphite-2", 4.5],
-  ["ok", "graphite", 4.5], ["warn", "graphite", 4.5], ["danger", "graphite", 4.5],
-  ["ok-ink", "paper", 4.5], ["warn-ink", "paper", 4.5], ["danger-ink", "paper", 4.5],
+  ["ink", "paper", 7], ["ink-2", "paper", 7], ["ink-2", "panel", 7], ["ink", "lane", 7], ["muted", "paper", 4.5], ["muted", "lane", 4.5], ["muted", "panel", 4.5], ["muted", "sunken", 4.5],
+  ["ink", "sunken", 7], ["on-accent", "accent", 7],
+  ["ok", "paper", 4.5], ["warn", "paper", 4.5], ["danger", "paper", 4.5], ["quiet", "paper", 4.5], ["danger-ink", "paper", 4.5], ["danger-ink", "panel", 4.5],
   ["ok-ink", "ok-tint", 4.5], ["warn-ink", "warn-tint", 4.5], ["danger-ink", "danger-tint", 4.5],
 ];
 const pairs = process.argv.includes("--control") ? [["muted", "sunken", 12]] : PAIRS;

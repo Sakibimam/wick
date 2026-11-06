@@ -35,7 +35,7 @@ Status colour is semantic only and is applied to live data: node fills, the lit 
 
 - Display: Barlow Condensed 600, capitals, tracking +0.02em, leading 0.95. h1 72px desktop, 44px phone. Station names 15px at +0.04em.
 - Body: Barlow 400 and 500, 16px, leading 1.5. Numbers in Barlow with `tabular-nums`.
-- Clocks and hashes: Roboto Mono 500, never for labels.
+- Clocks and hashes: Barlow with tabular figures and a slashed zero. No monospace anywhere: the operator rejected mono labels, and the clock reads as a readout without it.
 - Scale: 13 / 16 / 20 / 28 / 44 / 72, readout 56.
 - Labels are sentence case in Barlow 13px muted. No monospace small caps anywhere.
 
@@ -48,7 +48,7 @@ Status colour is semantic only and is applied to live data: node fills, the lit 
 ## Components
 
 - Circuit: an SVG layer measured from the station nodes in the DOM, straight segments only, 2px track. Lit segments carry the tier colour; segments with no evidence yet stay at `rule`. The price leg is drawn as a fuse whose length is the time left on the signed price.
-- Station: node dot, name in condensed capitals, one value at 20 to 28px, one plain sentence, and the evidence link (mono hash plus explorer icon).
+- Station: node dot, name in condensed capitals, one value at 20 to 28px, one plain sentence, and the evidence link (tabular hash plus explorer icon).
 - Fuel gauge: a log-scale bar from 0.01 to 10 0G with the agent's three lines (pause 0.05, critical 0.1, low 0.5) and the balance needle in the tier colour, with days of runway at the daily cap.
 - Heartbeat: a 48 hour strip; each billed AI run is a spike labelled with its request id; after the last run the line is flat.
 - Ticket: Uniswap anatomy (pay well, flip square straddling the seam, receive well, one full width 56px action), plus a summary block before signing: signed rate, rate after the maker fee, the fuse with T-minus clock, and the AI run behind the price.

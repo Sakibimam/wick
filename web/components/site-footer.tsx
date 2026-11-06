@@ -15,7 +15,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-[1312px] px-4 pb-10 pt-16 sm:px-6 lg:px-12">
         <p className="font-display text-[22vw] font-semibold uppercase leading-[0.8] tracking-[0.02em] text-ink lg:text-[220px]" aria-hidden>Upkeep</p>
         <div className="mt-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <p className="max-w-[40ch] text-[15px] text-ink-2">A market maker that pays for its own AI from the fees it earns. Everything on this page is read from Base and the 0G chain.</p>
+          <p className="max-w-[40ch] text-[16px] text-ink-2">A market maker that pays for its own AI from the fees it earns. Everything on this page is read from Base and the 0G chain.</p>
           <ul className="grid grid-cols-2 gap-x-8 gap-y-3 text-[13px] sm:grid-cols-4">
             {CONTRACTS.map((c) => (
               <li key={c.name}>

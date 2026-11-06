@@ -62,7 +62,7 @@ export function Machine(props: MachineProps) {
           className="relative flex flex-col gap-9 pb-12 pt-8 lg:grid lg:min-h-[calc(100dvh-64px)] lg:grid-cols-4 lg:grid-rows-[auto_minmax(280px,1fr)_auto] lg:gap-x-8 lg:gap-y-0 lg:pb-10 lg:pt-8 lg:[grid-template-areas:'pool_fees_swap_bridge'_'price_infield_infield_withdraw'_'brain_vault_vault_deposit']"
         >
           {segs.length > 0 ? <Circuit segs={segs} reduce={reduce} view={view!} now={now} ttl={status?.quoteTtlSeconds ?? 3600} /> : null}
-          {split !== null && status?.readAt && pts?.withdraw ? <LaneLabels baseBlock={status.readAt.baseBlock} zeroGBlock={status.readAt.zeroGBlock} split={split} right={pts.withdraw.x} /> : null}
+          {split !== null && status?.readAt && pts?.pool ? <LaneLabels baseBlock={status.readAt.baseBlock} zeroGBlock={status.readAt.zeroGBlock} split={split} left={pts.pool.x} /> : null}
 
           <Infield status={status} loading={loading} error={error} onRetry={onRetry} view={view} now={now} nowReady={nowReady} />
 
@@ -243,12 +243,14 @@ function Pulses({ route, count, delay, dwell }: { route: Pt[]; count: number; de
   );
 }
 
-function LaneLabels({ baseBlock, zeroGBlock, split, right }: { baseBlock: string; zeroGBlock: string; split: number; right: number }) {
+/** The two chains, written up and down the left rail where the circuit crosses from one to the other. */
+function LaneLabels({ baseBlock, zeroGBlock, split, left }: { baseBlock: string; zeroGBlock: string; split: number; left: number }) {
   const n = (v: string) => Number(v).toLocaleString("en-US");
+  const cls = "station absolute whitespace-nowrap text-[13px] text-muted [writing-mode:vertical-rl]";
   return (
-    <div aria-label="Chains" className="pointer-events-none absolute left-0 hidden text-right lg:block" style={{ top: split - 44, width: right - 20 }}>
-      <p className="station text-[13px] text-muted">Base <span className="num font-normal normal-case tracking-normal">block {n(baseBlock)}</span></p>
-      <p className="station mt-[46px] text-[13px] text-muted">0G chain <span className="num font-normal normal-case tracking-normal">block {n(zeroGBlock)}</span></p>
+    <div aria-label="Chains" className="pointer-events-none absolute inset-0 hidden lg:block">
+      <p className={cn(cls, "rotate-180")} style={{ left: left + 9, bottom: `calc(100% - ${split - 10}px)` }}>Base <span className="num font-normal normal-case tracking-normal">{n(baseBlock)}</span></p>
+      <p className={cls} style={{ left: left + 9, top: split + 10 }}>0G chain <span className="num font-normal normal-case tracking-normal">{n(zeroGBlock)}</span></p>
     </div>
   );
 }
@@ -256,19 +258,19 @@ function LaneLabels({ baseBlock, zeroGBlock, split, right }: { baseBlock: string
 function Infield({ status, loading, error, onRetry, view, now, nowReady }: { status: AgentStatus | undefined; loading: boolean; error: Error | null; onRetry: () => void; view: View | null; now: number; nowReady: boolean }) {
   const tone = status ? TIER_TONE[status.budget.tier] : "quiet";
   return (
-    <div className="flex flex-col justify-center lg:px-10 lg:py-10 lg:[grid-area:infield]">
+    <div className="relative z-10 flex flex-col justify-center lg:px-10 lg:py-10 lg:[grid-area:infield]">
       <h1 id="machine-title" className="max-w-[15ch] text-[44px] sm:text-[60px] lg:text-[68px]">Upkeep pays for its own brain</h1>
-      <p className="mt-4 max-w-[46ch] text-[17px] leading-[1.5] text-ink-2">
+      <p className="mt-4 max-w-[46ch] text-[18px] leading-[1.5] text-ink-2">
         A market maker on Base. Every swap pays a fee, the fee crosses to the 0G chain, and it buys the AI run that signs the next price. No fresh price, no fill.
       </p>
       <div className="mt-5 min-h-[48px]" aria-live="polite">
         {error && !status ? (
           <div role="alert" className="flex flex-wrap items-center gap-3">
-            <p className="text-[15px] text-danger-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent's status route is not answering, so the machine cannot be read right now." : `The status could not be read: ${error.message}`}</p>
+            <p className="text-[16px] text-danger-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent's status route is not answering, so the machine cannot be read right now." : `The status could not be read: ${error.message}`}</p>
             <Button variant="secondary" size="sm" onClick={onRetry}><RefreshCw className="size-4" aria-hidden />Read again</Button>
           </div>
         ) : status && view && nowReady ? (
-          <p className="flex items-start gap-3 text-[15px] leading-[1.5] text-ink">
+          <p className="flex max-w-[60ch] items-start gap-3 text-[16px] leading-[1.5] text-ink">
             <span aria-hidden className={cn("mt-[5px] size-2.5 shrink-0 rounded-full bg-[var(--tone)]", TONE_CLASS[tone], tone !== "quiet" && "motion-safe:animate-pulse")} />
             <span><span className="font-semibold">{tierWord(status.budget.tier)}.</span> {machineSentence(status, view.leg, now).replace(/^[^.]+\.\s*/, "")}</span>
           </p>
@@ -277,8 +279,8 @@ function Infield({ status, loading, error, onRetry, view, now, nowReady }: { sta
         ) : null}
       </div>
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button asChild><a href="#swap">Swap the signed price <ArrowDown className="size-4" aria-hidden /></a></Button>
-        <Button asChild variant="secondary"><Link href="/ledger">Read the ledger</Link></Button>
+        <Button asChild className="w-full sm:w-auto"><a href="#swap">Swap the signed price <ArrowDown className="size-4" aria-hidden /></a></Button>
+        <Button asChild variant="secondary" className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
       </div>
     </div>
   );
@@ -306,7 +308,7 @@ function Station({ k, name, chain, lit, children, className }: { k: NodeKey; nam
       <span data-node={k} aria-hidden className={cn("absolute left-[5px] top-[3px] size-3.5 rounded-full border-2", lit ? "border-[var(--tone)] bg-[var(--tone)]" : "border-rule-2 bg-paper", spot.node)} />
       <h2 className="station flex items-baseline gap-2 lg:block">
         {name}
-        <span className="text-[12px] font-medium normal-case tracking-normal text-muted lg:hidden">on {chain}</span>
+        <span className="text-[13px] font-medium normal-case tracking-normal text-muted lg:hidden">on {chain}</span>
       </h2>
       <div className="mt-2">{children}</div>
     </article>
@@ -317,7 +319,7 @@ function Value({ children, className }: { children: ReactNode; className?: strin
   return <p className={cn("num text-[22px] font-medium leading-7 text-ink", className)}>{children}</p>;
 }
 function Note({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("mt-1 text-[14px] leading-[1.45] text-muted", className)}>{children}</p>;
+  return <p className={cn("mt-1 text-[16px] leading-[1.4] text-muted", className)}>{children}</p>;
 }
 
 function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus; fills: Fill[] | null; fillsError: boolean; nowMs: number }) {
@@ -326,7 +328,7 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
   return (
     <Station k="pool" name="Aqua pool" chain="Base" lit={(fills?.length ?? 0) > 0}>
       {status.strategy ? (
-        <Value>{formatAmount(BigInt(status.strategy.w0g), 18, 4)} <span className="text-[14px] text-muted">W0G</span> + {formatAmount(BigInt(status.strategy.usdc), 6, 2)} <span className="text-[14px] text-muted">USDC</span></Value>
+        <Value>{formatAmount(BigInt(status.strategy.w0g), 18, 4)} <span className="text-[13px] text-muted">W0G</span> + {formatAmount(BigInt(status.strategy.usdc), 6, 2)} <span className="text-[13px] text-muted">USDC</span></Value>
       ) : <Value>Strategy shipped</Value>}
       <Note>Traders swap here against the signed price{fee ? `, paying ${fee}% per fill` : ""}.</Note>
       <div className="mt-2 text-[13px] text-ink-2">
@@ -347,14 +349,14 @@ function FeesStation({ status }: { status: AgentStatus }) {
   const pct = threshold ? percentOf(usdc, threshold) : 0;
   return (
     <Station k="fees" name="Fees" chain="Base" lit={usdc > 0n}>
-      <Value>{formatAmount(usdc, 6, 6)} <span className="text-[14px] text-muted">USDC</span></Value>
+      <Value>{formatAmount(usdc, 6, 6)} <span className="text-[13px] text-muted">USDC</span></Value>
       <Note>Collected from fills, waiting for the next funding run.</Note>
       {threshold ? (
         <div className="mt-3 max-w-[220px]">
           <div className="h-1 overflow-hidden rounded-[2px] bg-sunken" role="progressbar" aria-label="Fees against the funding threshold" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
             <div className="h-full origin-left bg-[var(--tone)]" style={{ transform: `scaleX(${pct / 100})` }} />
           </div>
-          <p className="num mt-1.5 text-[12px] text-muted">{pct.toFixed(pct < 1 ? 2 : 0)}% of the {status.fundingThresholdUsdc} USDC that starts a run</p>
+          <p className="num mt-1.5 text-[13px] text-muted">{pct.toFixed(pct < 1 ? 2 : 0)}% of the {status.fundingThresholdUsdc} USDC that starts a run</p>
         </div>
       ) : null}
     </Station>
@@ -376,7 +378,7 @@ function HopStation({ hop, evidence, nowMs, thresholdUsdc }: { hop: (typeof HOPS
             <time className="num text-muted" dateTime={new Date(at ?? 0).toISOString()} title={at ? utcStamp(at) : undefined}>{at ? relativeTime(at, nowMs) : ""}</time>
           </>
         ) : (
-          <span className="text-muted">Not run yet. Starts when fees reach {thresholdUsdc ?? "the threshold"} USDC.</span>
+          <span className="text-muted">Runs once fees reach {thresholdUsdc ?? "the threshold"} USDC.</span>
         )}
       </div>
     </Station>
@@ -401,14 +403,14 @@ function VaultStation({ status }: { status: AgentStatus }) {
         <NumberTicker value={Number(formatAmount(bal, 18, 4).replace(/,/g, ""))} decimalPlaces={4} className="text-[44px] font-medium leading-none text-ink lg:text-[56px]" />
         <span className="text-[18px] text-muted">0G</span>
       </p>
-      <div className={cn("relative mt-5 max-w-[560px]", TONE_CLASS[fuelTone])}>
+      <div data-ui className={cn("relative mt-5 max-w-[560px]", TONE_CLASS[fuelTone])}>
         <div className="relative h-2.5 rounded-[2px] bg-sunken" role="meter" aria-label="Fuel against the agent's budget lines, log scale" aria-valuemin={0.01} aria-valuemax={10} aria-valuenow={Number(bal) / 1e18}>
           <div className="absolute inset-y-0 left-0 w-full origin-left rounded-[2px] bg-[var(--tone)] transition-transform duration-700 ease-out motion-reduce:transition-none" style={{ transform: `scaleX(${pos})` }} />
           {marks.map((m) => (
             <span key={m.label} aria-hidden className="absolute -top-1 h-[18px] w-0.5 bg-paper" style={{ left: `${gaugePosition(m.wei) * 100}%` }} />
           ))}
         </div>
-        <div className="relative mt-1.5 h-4 text-[12px] text-muted" aria-hidden>
+        <div className="relative mt-1.5 h-4 text-[13px] text-muted" aria-hidden>
           {marks.map((m) => <span key={m.label} className="num absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${gaugePosition(m.wei) * 100}%` }}>{Number(m.wei) / 1e18}</span>)}
           <span className="num absolute -translate-x-1/2" style={{ left: `${gaugePosition(10n ** 18n) * 100}%` }}>1</span>
           <span className="num absolute right-0">10 0G</span>
@@ -435,13 +437,13 @@ function BrainStation({ status, nowMs }: { status: AgentStatus; nowMs: number })
   const quietMs = last ? nowMs - last.atMs : null;
   return (
     <Station k="brain" name="0G compute" chain="0G" lit={beats.length > 0}>
-      <figure className="max-w-[300px]">
+      <figure data-ui className="max-w-[300px]">
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-14 w-full" role="img" aria-label={`${beats.length} billed AI runs in the last 48 hours`}>
           <line x1={0} x2={W} y1={base} y2={base} className="stroke-rule" strokeWidth={1} vectorEffect="non-scaling-stroke" />
           <path d={d} fill="none" className="stroke-[var(--tone)]" strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           {beats.map((b) => <circle key={b.requestId} cx={b.x * W} cy={6} r={2.5} className="fill-[var(--tone)]"><title>{`${b.requestId} at ${utcStamp(b.atMs)}`}</title></circle>)}
         </svg>
-        <figcaption className="num flex justify-between text-[12px] text-muted"><span>48 h ago</span><span>now</span></figcaption>
+        <figcaption className="num flex justify-between text-[13px] text-muted"><span>48 h ago</span><span>now</span></figcaption>
       </figure>
       {last ? (
         <div className="mt-2 text-[13px]">
@@ -474,12 +476,12 @@ function Fuse({ label, p, now, ready, ttl }: { label: string; p: Priced | null; 
     <div className={TONE_CLASS[tone]}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[13px] text-muted">{label}</span>
-        <span className={cn("num text-[17px] font-medium", left > 0 ? "text-ink" : "text-muted line-through decoration-danger")}>{formatPrice(p.priceUsdcPerW0g)} <span className="text-[12px] font-normal text-muted no-underline">USDC</span></span>
+        <span className={cn("num text-[16px] font-medium", left > 0 ? "text-ink" : "text-muted line-through decoration-danger")}>{formatPrice(p.priceUsdcPerW0g)} <span className="text-[13px] font-normal text-muted no-underline">USDC</span></span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-[2px] bg-sunken">
         <div className="h-full origin-left bg-[var(--tone)] transition-transform duration-1000 ease-linear motion-reduce:transition-none" style={{ transform: `scaleX(${ready ? frac : 0})` }} />
       </div>
-      <p className={cn("mono mt-1 text-[12px]", left > 0 ? "text-ink-2" : "text-danger-ink")}>{!ready ? "reading the chain clock" : left > 0 ? `T-${clock(left)}` : `expired ${durationLabel((now - p.expiry) * 1000)} ago`}</p>
+      <p className={cn("mono mt-1 text-[13px]", left > 0 ? "text-ink-2" : "text-danger-ink")}>{!ready ? "reading the chain clock" : left > 0 ? `T-${clock(left)}` : `expired ${durationLabel((now - p.expiry) * 1000)} ago`}</p>
     </div>
   );
 }

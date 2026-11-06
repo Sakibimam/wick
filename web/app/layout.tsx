@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed, Roboto_Mono } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { NavBar } from "@/components/nav-bar";
@@ -7,7 +7,6 @@ import { SiteFooter } from "@/components/site-footer";
 
 const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600"], variable: "--font-barlow-condensed", display: "swap" });
 const sans = Barlow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-barlow", display: "swap" });
-const mono = Roboto_Mono({ subsets: ["latin"], weight: ["500"], variable: "--font-roboto-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Upkeep: the market maker that pays for its own brain",
@@ -18,7 +17,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body className="flex min-h-dvh flex-col">
         <Providers>
           <NavBar />

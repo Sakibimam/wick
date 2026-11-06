@@ -28,7 +28,6 @@
 
   --font-display: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
   --font-sans: var(--font-barlow), "Arial", sans-serif;
-  --font-mono: var(--font-roboto-mono), ui-monospace, monospace;
 
   --radius-control: 4px;
   --radius-card: 4px;
@@ -55,8 +54,8 @@
 
 @layer components {
   .num { font-variant-numeric: tabular-nums; }
-  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  .station { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink); font-size: 15px; line-height: 1.1; }
+  .mono { font-variant-numeric: tabular-nums slashed-zero; letter-spacing: 0.01em; }
+  .station { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink); font-size: 16px; line-height: 1.1; }
   .label { font-size: 13px; line-height: 18px; color: var(--color-muted); }
   .skeleton { background: var(--color-sunken); border-radius: var(--radius-control); animation: breathe 1.6s ease-in-out infinite; }
   .tone-ok { --tone: var(--color-ok); }

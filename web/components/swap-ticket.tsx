@@ -98,11 +98,11 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
   const fuseTone = left === null ? "quiet" : left <= URGENT_SECONDS ? "danger" : left <= CLOSING_SECONDS ? "warn" : "ok";
 
   return (
-    <section aria-label="Swap" className="rounded-card bg-panel p-3 sm:p-4">
+    <section data-ui aria-label="Swap" className="rounded-card bg-panel p-3 sm:p-4">
       <div className="flex items-center justify-between gap-3 px-1 pb-3">
         <div role="group" aria-label="Direction" className="flex rounded-control bg-paper p-1">
           {(["buy-w0g", "sell-w0g"] as const).map((d) => (
-            <button key={d} type="button" aria-pressed={direction === d} onClick={() => pick(d)} className={cn("h-8 rounded-[3px] px-3 text-[14px] font-semibold transition-colors duration-150", direction === d ? "bg-sunken text-ink" : "text-muted hover:text-ink")}>
+            <button key={d} type="button" aria-pressed={direction === d} onClick={() => pick(d)} className={cn("h-8 rounded-[3px] px-3 text-[13px] font-semibold transition-colors duration-150", direction === d ? "bg-sunken text-ink" : "text-muted hover:text-ink")}>
               {d === "buy-w0g" ? "Buy W0G" : "Sell W0G"}
             </button>
           ))}
@@ -159,7 +159,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
         <p className="num mt-1 text-[13px] text-muted">{buyUsd !== null ? `${buy === "W0G" ? "about " : ""}${formatUsd(buyUsd)}` : "$0.00"}</p>
       </div>
 
-      <dl className="mt-3 space-y-2 px-1 text-[14px]">
+      <dl className="mt-3 space-y-2 px-1 text-[13px]">
         <Row k="Signed price" v={price ? `1 W0G = ${formatPrice(price.priceUsdcPerW0g)} USDC` : "none yet"} strike={expired} />
         <Row k={fee !== null ? `After the ${fee.toFixed(2)}% maker fee` : "After the maker fee"} v={effective !== null ? `1 W0G = ${formatPrice(effective)} USDC` : "shown once you enter an amount"} />
         <div className="flex items-center justify-between gap-4">

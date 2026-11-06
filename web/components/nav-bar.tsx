@@ -24,7 +24,7 @@ export function NavBar() {
           {LINKS.map((l) => {
             const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
             return (
-              <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined} className={cn("text-[15px] font-medium transition-colors duration-150", active ? "text-ink" : "text-muted hover:text-ink")}>
+              <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined} className={cn("text-[16px] font-medium transition-colors duration-150", active ? "text-ink" : "text-muted hover:text-ink")}>
                 {l.label}
               </Link>
             );
