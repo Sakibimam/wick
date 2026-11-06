@@ -18,6 +18,7 @@ const AGENT: Address = "0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953";
 const chain = { ...base, fees: { maxPriorityFeePerGas: 1_000_000n } };
 /** Workers on the free plan allow 50 subrequests per invocation; the tick stops sending when it nears this. */
 export const SUBREQUEST_CAP = 50;
+export const X402_PRICE_ATOMIC = 10_000n;
 
 const fingerprint = (s: CronState) => JSON.stringify({ ...s, lastTick: s.lastTick?.outcome ?? null, lastTicks: (s.lastTicks ?? []).map((t) => t.outcome) });
 
@@ -40,7 +41,7 @@ type AuthLog = { transactionHash: Hex; args: { authorizer?: Address } };
  *  (transferWithAuthorization emits both). A fill's USDC leg, or any plain transfer, carries no such authorization. */
 export function x402Settlements(transfers: TransferLog[], auths: AuthLog[]): { tx: Hex; payer: Address; value: bigint }[] {
   const used = new Set(auths.map((a) => `${a.transactionHash.toLowerCase()}:${a.args.authorizer?.toLowerCase()}`));
-  return transfers.filter((t) => t.args.from && used.has(`${t.transactionHash.toLowerCase()}:${t.args.from.toLowerCase()}`)).map((t) => ({ tx: t.transactionHash, payer: t.args.from!, value: t.args.value ?? 0n }));
+  return transfers.filter((t) => t.args.from && t.args.value === X402_PRICE_ATOMIC && used.has(`${t.transactionHash.toLowerCase()}:${t.args.from.toLowerCase()}`)).map((t) => ({ tx: t.transactionHash, payer: t.args.from!, value: t.args.value ?? 0n }));
 }
 
 type X402Index = { cursor: string; revenueAtomic: string; txs: Hex[] };
