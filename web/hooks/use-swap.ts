@@ -15,6 +15,12 @@ export type SwapResult = { hash: `0x${string}`; amountIn: bigint; amountOut: big
 export type SwapProblem = { kind: SwapFailure; detail: string };
 
 const RECEIPT = { retryCount: 8, retryDelay: 1_000, timeout: 90_000 } as const;
+// Explicit EIP-1559 fees from the latest Base block: wallets that fall back to a 1 gwei tip overpay on Base by orders of magnitude.
+const PRIORITY_WEI = 1_000_000n;
+async function fees(client: NonNullable<ReturnType<typeof usePublicClient>>) {
+  const baseFee = (await client.getBlock({ blockTag: "latest" })).baseFeePerGas ?? 0n;
+  return { type: "eip1559" as const, maxPriorityFeePerGas: PRIORITY_WEI, maxFeePerGas: baseFee * 2n + PRIORITY_WEI };
+}
 const firstLine = (e: unknown) => (e instanceof Error ? (("shortMessage" in e && typeof e.shortMessage === "string" ? e.shortMessage : e.message).split("\n")[0] ?? "") : String(e));
 
 export function useSwapFlow(opts: { account: `0x${string}` | undefined; order: AgentStatus["order"] | undefined; tokenIn: TokenSymbol; tokenOut: TokenSymbol; amount: bigint | null; quoteExpired: () => boolean; onSettled: () => void }) {
@@ -36,12 +42,17 @@ export function useSwapFlow(opts: { account: `0x${string}` | undefined; order: A
 
   const approve = useMutation({
     mutationFn: async () => {
-      if (!client || !amount) throw new Error("not ready");
+      if (!client || !account || !amount) throw new Error("not ready");
       setProblem(null);
       setPhase("approving");
-      const hash = await writeContractAsync({ address: TOKENS[tokenIn].address, abi: erc20Abi, functionName: "approve", args: [AQUA_ROUTER, amount], chainId: base.id });
+      const hash = await writeContractAsync({ address: TOKENS[tokenIn].address, abi: erc20Abi, functionName: "approve", args: [AQUA_ROUTER, amount], chainId: base.id, ...(await fees(client)) });
       const receipt = await client.waitForTransactionReceipt({ hash, ...RECEIPT });
       if (receipt.status !== "success") throw new Error("The approval transaction reverted.");
+      // Load-balanced RPCs can answer from a node behind the approval block; the swap simulation would then fail on allowance.
+      for (let i = 0; (await client.readContract({ address: TOKENS[tokenIn].address, abi: erc20Abi, functionName: "allowance", args: [account, AQUA_ROUTER] })) < amount; i++) {
+        if (i >= 15) throw new Error("The approval confirmed but the RPC has not shown it after 30 seconds.");
+        await new Promise((r) => setTimeout(r, 2_000));
+      }
     },
     onError: fail,
     onSuccess: () => { setPhase("idle"); onSettled(); },
@@ -62,7 +73,7 @@ export function useSwapFlow(opts: { account: `0x${string}` | undefined; order: A
       setPhase("simulating");
       await client.simulateContract({ account, address: AQUA_ROUTER, abi: routerAbi, functionName: "swap", args });
       setPhase("swapping");
-      const hash = await writeContractAsync({ address: AQUA_ROUTER, abi: routerAbi, functionName: "swap", args, chainId: base.id });
+      const hash = await writeContractAsync({ address: AQUA_ROUTER, abi: routerAbi, functionName: "swap", args, chainId: base.id, ...(await fees(client)) });
       setPhase("confirming");
       const receipt = await client.waitForTransactionReceipt({ hash, ...RECEIPT });
       if (receipt.status !== "success") throw new Error("The swap transaction reverted on chain.");

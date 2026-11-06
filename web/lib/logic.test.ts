@@ -17,7 +17,8 @@ const status = (over: Record<string, unknown> = {}) =>
   statusSchema.parse({
     agent: W0G, maker: USDC, chainId: 8453, pair: { w0g: W0G, usdc: USDC }, mid: 2,
     quotes: [], budget: { tier: "NORMAL", model: "m", computeBalanceWei: "1000000000000000000", spentTodayWei: "0", spendCapPerDayWei: "1000000000000000000", reason: "normal" },
-    fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: { maker: W0G, traits: sig("1"), data: "0x" }, ...over,
+    fees: { accruedUsdc: "0", accruedW0g: "0" }, funding: [], inferences: [], order: { maker: W0G, traits: sig("1"), data: "0x" },
+    strategy: { hash: sig("f"), w0g: "0", usdc: "0", feeBps: 30 }, gasWei: "0", readAt: { baseBlock: "1", zeroGBlock: "1", logsThroughBlock: null }, lastTick: null, ...over,
   });
 
 describe("quotes", () => {
@@ -99,6 +100,9 @@ describe("funding and ledger", () => {
     expect(describeStep("withdraw-w0g-0g").kind).toBe("withdraw");
     expect(describeStep("deposit-payment-layer").kind).toBe("deposit");
     expect(describeStep("approve-usdc").kind).toBe("approve");
+    expect(describeStep("lifi-gas-to-0g").kind).toBe("gas");
+    expect(describeStep("lifi-approve-usdc").kind).toBe("approve");
+    expect(describeStep("router-pull-vault").kind).toBe("charge");
     expect(txUrl(8453, "0xab")).toBe("https://basescan.org/tx/0xab");
     expect(txUrl(16661, "0xab")).toBe("https://chainscan.0g.ai/tx/0xab");
     expect(txUrl(1, "0xab")).toBeNull();
@@ -115,8 +119,8 @@ describe("funding and ledger", () => {
     const tx = sig("b");
     const funded = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: [{ step: "deposit-payment-layer", txHash: tx, chainId: 16661, time: 1 }] });
     expect(loopSentence(buildLoop(funded, []))).toContain("No AI run has been paid yet");
-    const paying = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: funded.funding, inferences: [{ requestId: "r1", model: "m", costWei: "0", time: 2 }] });
-    expect(loopSentence(buildLoop(paying, []))).toContain("1 AI run followed");
+    const paying = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: funded.funding, inferences: [{ requestId: "r1", model: "m", currency: "0g", totalCost: "1", time: 2 }] });
+    expect(loopSentence(buildLoop(paying, []))).toContain("billed 1 AI run against it");
   });
   test("tier history appends only on change", () => {
     const a = recordTier([], "NORMAL", "normal", 1);

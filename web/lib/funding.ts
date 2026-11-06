@@ -1,7 +1,7 @@
 import { BASE_CHAIN_ID, EXPLORERS, LOCAL_FORK } from "./config";
 import type { FundingStep } from "./schema";
 
-export type StageKind = "approve" | "swap" | "bridge" | "withdraw" | "deposit" | "other";
+export type StageKind = "approve" | "gas" | "swap" | "bridge" | "withdraw" | "deposit" | "charge" | "other";
 
 export type StageInfo = { kind: StageKind; title: string; plain: string; tech: string };
 
@@ -9,6 +9,8 @@ export type StageInfo = { kind: StageKind; title: string; plain: string; tech: s
 export function describeStep(step: string): StageInfo {
   const s = step.toLowerCase();
   if (s.includes("approve")) return { kind: "approve", title: "Spending approval", plain: "Lets the next contract move the tokens for this step.", tech: "approve" };
+  if (s.includes("gas")) return { kind: "gas", title: "Gas sent to the 0G chain", plain: "USDC on Base bought native 0G on the 0G chain through LI.FI, so the agent can pay gas there.", tech: "LI.FI bridge" };
+  if (s.includes("pull")) return { kind: "charge", title: "Router drew on the vault", plain: "The 0G router pulled its working deposit and the AI charge out of the agent's Payment Layer balance.", tech: "Payment Layer pull" };
   if (s.includes("swap")) return { kind: "swap", title: "Fees swapped to 0G", plain: "Dollar fees bought wrapped 0G on Uniswap.", tech: "Uniswap swap" };
   if (s.includes("ccip") || s.includes("bridge") || s.includes("send")) return { kind: "bridge", title: "Sent to the 0G chain", plain: "Wrapped 0G crossed from Base to the 0G chain.", tech: "CCIP send" };
   if (s.includes("withdraw")) return { kind: "withdraw", title: "Unwrapped to native 0G", plain: "Wrapped 0G became the coin that pays for compute.", tech: "withdraw" };

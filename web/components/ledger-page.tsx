@@ -30,7 +30,6 @@ export function LedgerPage() {
   const fills = useFills(status.data?.order);
   const history = useTierHistory(status.data ? { tier: status.data.budget.tier, reason: status.data.budget.reason } : null);
   const loop = useMemo(() => (status.data ? buildLoop(status.data, fills.data?.fills ?? []) : null), [status.data, fills.data?.fills]);
-  const readAt = status.dataUpdatedAt ? utcStamp(status.dataUpdatedAt) : null;
 
   return (
     <>
@@ -48,19 +47,19 @@ export function LedgerPage() {
       <div className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 md:py-12">
         {status.isPending ? <RailSkeleton /> : loop && status.data ? (
           <ol className="relative space-y-10 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-rule-2" aria-label="The money loop in order">
-            <Stage n={1} title="The agent shipped its order and signed prices" caption={readAt ? `Prices read from the agent status API, ${readAt}. Order hash read from the router on Base.` : undefined}>
+            <Stage n={1} title="The agent shipped its order and signed prices" caption={`QuotePosted events and getQuote on the AgentQuoteBoard, Base block ${status.data.readAt.baseBlock}. Order hash read from the router.`}>
               <PriceRows status={status.data} orderHash={fills.data?.orderHash ?? null} nowMs={nowMs} />
             </Stage>
-            <Stage n={2} title="Outside takers filled swaps" caption={fills.data ? `Read from Base blocks ${fills.data.fromBlock} to ${fills.data.toBlock}, Swapped events of the router for this strategy.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
+            <Stage n={2} title="Swaps filled against the strategy" caption={fills.data ? `Swapped events of the router from Base block ${fills.data.fromBlock} to ${fills.data.toBlock}, decoded and matched on maker and order hash.` : `Read from the last ${FILL_LOOKBACK_BLOCKS.toLocaleString("en-US")} Base blocks.`}>
               <FillsRows loop={loop} query={fills} nowMs={nowMs} />
             </Stage>
-            <Stage n={3} title="Fees collected from those fills" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
+            <Stage n={3} title="Fees collected from those fills" caption={`Each fill pays ${(status.data.strategy.feeBps / 100).toFixed(2)}% of its input, computed from the amounts in its Swapped event.`}>
               <FeesRow loop={loop} />
             </Stage>
-            <Stage n={4} title="Fees turned into AI money" caption={readAt ? `Each step is a transaction. Read from the agent status API, ${readAt}.` : undefined}>
+            <Stage n={4} title="Money moved into the AI account" caption="Mainnet transactions on Base and the 0G chain: a LI.FI gas leg, the CCIP bridge, the unwrap, depositFor, and the router drawing on the vault.">
               <FundingRows loop={loop} threshold={status.data.fundingThresholdUsdc ?? null} nowMs={nowMs} />
             </Stage>
-            <Stage n={5} title="AI runs paid from that balance" caption={readAt ? `Read from the agent status API, ${readAt}.` : undefined}>
+            <Stage n={5} title="AI runs billed by the 0G router" caption="Billed cost and currency from each run's x_0g_trace.billing block.">
               <RunRows loop={loop} nowMs={nowMs} />
             </Stage>
           </ol>
@@ -105,7 +104,8 @@ function GaugeLive({ status }: { status: AgentStatus }) {
       <div>
         <p className="label">AI account balance</p>
         <p className="mt-2 flex items-baseline gap-3"><span className="readout text-[40px] leading-none md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="num text-[16px] text-on-graphite-muted md:text-[20px]">0G</span></p>
-        <p className="mt-2 text-[13px] text-on-graphite-muted">Held in the 0G Payment Layer. Every AI run is paid from this number.</p>
+        <p className="mt-2 text-[13px] text-on-graphite-muted">Held in the 0G Payment Layer. The router bills the agent's AI runs from this number.</p>
+        <p className="num mt-1 text-[12px] text-on-graphite-muted">balanceOf(agent) on 0G block {status.readAt.zeroGBlock}</p>
       </div>
       <div>
         <p className="label">Spent today against the daily cap</p>
@@ -212,7 +212,7 @@ function PriceRow({ q, nowMs }: { q: AgentStatus["quotes"][number]; nowMs: numbe
   const expiryMs = Number(q.expiry) * 1000;
   const left = secondsLeft(Number(q.expiry), nowMs / 1000);
   const what = direction === "buy-w0g" ? `Buy price: 1 W0G costs ${formatPrice(price)} USDC` : direction === "sell-w0g" ? `Sell price: 1 W0G pays ${formatPrice(price)} USDC` : "Price for an unknown pair";
-  const source = q.requestId === "price-only" ? "Signed from the Uniswap pool mid, with no AI run behind it." : <>Signed after AI run <span className="num text-[13px]">{truncateHex(q.requestId, 10, 6)}</span>.</>;
+  const source = q.requestId === "price-only" ? "Signed from the Uniswap pool mid, with no AI run behind it." : q.requestId ? <>Signed after AI run <span className="num text-[13px]">{truncateHex(q.requestId, 10, 6)}</span>.</> : <>Signed by the agent under quote id <span className="num text-[13px]">{truncateHex(q.inferenceId, 10, 6)}</span>.</>;
   return (
     <EvidenceRow
       title={<>{what} <span className={cn("num ml-1 text-[12px] font-normal", left > 0 ? "text-ok-ink" : "text-danger-ink")}>{left > 0 ? `expires in ${clock(left)}` : `expired ${relativeTime(expiryMs, nowMs)}`}</span></>}
@@ -293,12 +293,13 @@ function RunRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
   return (
     <Rows>
       {loop.inferences.map((r) => {
-        const cost = r.costWei === null ? null : BigInt(r.costWei);
+        const cost = r.totalCost === null ? null : BigInt(r.totalCost);
+        const billed = cost === null ? "No billing block in the router trace" : r.currency === "0g" ? `Billed ${formatAmount(cost, 18, 8)} 0G from the Payment Layer balance` : r.currency === "usd" ? `Billed $${formatAmount(cost, 6, 6)} on the router's USD ledger` : `Billed ${cost.toString()} (${r.currency ?? "unit not reported"})`;
         return (
           <EvidenceRow
             key={r.requestId}
-            title="AI run paid"
-            plain={<><span className="num text-[13px]">{r.model}</span>, {cost === null || cost === 0n ? "cost not metered by the router" : `cost ${formatAmount(cost, 18, 6)} 0G`}.</>}
+            title={r.currency === "0g" ? "AI run paid in 0G" : "AI run paid"}
+            plain={<>{billed}{r.model ? <>, model <span className="num text-[13px]">{r.model}</span></> : null}.</>}
             hash={r.requestId}
             hashLabel="AI request id"
             chainId={16661}

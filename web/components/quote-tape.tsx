@@ -67,7 +67,7 @@ function TapeError({ error, onRetry }: { error: Error; onRetry: () => void }) {
         <p className="font-display text-[20px] font-medium text-on-graphite">{unreachable ? "The agent is not answering." : "The agent answered with something this page cannot read."}</p>
         <p className="mt-1 max-w-[60ch] text-[14px] text-on-graphite-muted">
           {unreachable
-            ? "Without its status there is no price to trade against. Check that the agent is running and that its WEB_ORIGIN setting allows this site, then retry."
+            ? "Without its status there is no price to trade against. The status route reads Base and the 0G chain live; retry in a moment."
             : error.message}
         </p>
         <p className="num mt-2 text-[12px] text-on-graphite-muted">{error.message}</p>
@@ -177,7 +177,7 @@ function Side({ d, p, status, active, onSelect, now, nowReady, className }: { d:
       <span className="mt-2 block text-[13px] text-on-graphite-muted">
         {state === "expired"
           ? status.budget.tier === "PAUSED" || status.budget.tier === "CRITICAL"
-            ? `The pool refuses fills at this price. The agent is ${TIERS[status.budget.tier].label.toLowerCase()} and signs no new price until its AI account is funded.`
+            ? `The pool refuses fills at this price. The agent is ${TIERS[status.budget.tier].label.toLowerCase()}: ${reasonText(status.budget.reason).replace(/^./, (c) => c.toLowerCase())}`
             : "The pool refuses fills at this price. Waiting for the agent to sign a new one."
           : state === "closing"
             ? "Closing soon. A swap that lands after this fails and costs only gas."

@@ -15,7 +15,7 @@ export const quoteSchema = z.object({
   rateE18: digits,
   expiry: digits,
   inferenceId: hex,
-  requestId: z.string().min(1),
+  requestId: z.string().min(1).nullable(),
   postedTx: txHash.optional(),
 });
 export type AgentQuote = z.infer<typeof quoteSchema>;
@@ -30,8 +30,10 @@ export type FundingStep = z.infer<typeof fundingSchema>;
 
 export const inferenceSchema = z.object({
   requestId: z.string().min(1),
-  model: z.string().min(1),
-  costWei: digits.nullable(),
+  model: z.string().min(1).nullable(),
+  // x_0g_trace.billing.total_cost: wei when currency is "0g", micro-USD when "usd".
+  currency: z.string().nullable(),
+  totalCost: digits.nullable(),
   time: timeLike,
 });
 export type Inference = z.infer<typeof inferenceSchema>;
@@ -56,6 +58,10 @@ export const statusSchema = z.object({
   inferences: z.array(inferenceSchema),
   order: z.object({ maker: address, traits: hex, data: hex }),
   fundingThresholdUsdc: z.string().regex(/^\d+(\.\d+)?$/, "decimal").nullable().optional(),
+  strategy: z.object({ hash: hex, w0g: digits, usdc: digits, feeBps: z.number().int().nonnegative() }),
+  gasWei: digits,
+  readAt: z.object({ baseBlock: digits, zeroGBlock: digits, logsThroughBlock: digits.nullable() }),
+  lastTick: z.object({ at: z.string(), outcome: z.string() }).nullable(),
 });
 export type AgentStatus = z.infer<typeof statusSchema>;
 

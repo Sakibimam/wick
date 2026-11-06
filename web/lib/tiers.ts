@@ -8,7 +8,7 @@ export const TIERS: Record<Tier, TierMeta> = {
   NORMAL: { label: "Normal", tone: "ok", index: 0, consequence: "Full-size AI model, standard spread, requotes when the pool price moves." },
   LOW: { label: "Low", tone: "warn", index: 1, consequence: "Cheaper AI model and a spread twice as wide, to stretch the balance." },
   CRITICAL: { label: "Critical", tone: "danger", index: 2, consequence: "No new AI runs. Only a recent signed price stays up, at a spread four times as wide." },
-  PAUSED: { label: "Paused", tone: "quiet", index: 3, consequence: "The agent signs no new prices. A price already signed fills until it expires, then the pool refuses every swap until the agent is funded or the day resets." },
+  PAUSED: { label: "Paused", tone: "quiet", index: 3, consequence: "The agent signs no new prices. A price already signed fills until it expires, then the pool refuses every swap." },
 };
 
 const REASONS: Record<string, string> = {
@@ -20,6 +20,8 @@ const REASONS: Record<string, string> = {
   balance_below_floor: "The 0G balance is under the floor needed to pay for any AI run.",
   spend_cap_reached: "Today's spend reached the daily cap.",
   not_started: "The agent has not completed its first cycle yet.",
+  gas_low: "The agent's Base gas balance is under the floor needed to post a price.",
+  signer_offline: "The agent's signer is not running, so no new price is signed.",
 };
 
 export function reasonText(reason: string): string {

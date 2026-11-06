@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { CopyLink } from "@/components/copy-link";
 import { TierMeter } from "@/components/tier-meter";
-import { formatAmount, percentOf } from "@/lib/amounts";
+import { formatAmount, percentOf, truncateHex } from "@/lib/amounts";
 import { CHAIN_NAMES, BASE_CHAIN_ID } from "@/lib/config";
 import { describeStep, sortFunding, toMillis, txUrl } from "@/lib/funding";
 import { relativeTime } from "@/lib/format";
@@ -28,7 +28,7 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
     );
   }
   const p = priced[direction];
-  const last = sortFunding(status.funding).at(-1);
+  const last = sortFunding(status.funding).filter((f) => describeStep(f.step).kind !== "charge").at(-1);
   const lastInfo = last ? describeStep(last.step) : null;
   const lastMs = last ? toMillis(last.time) : null;
   const spent = BigInt(status.budget.spentTodayWei);
@@ -47,9 +47,9 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
           <dl className="mt-3 space-y-2.5 text-[14px]">
             {p.quote.requestId === "price-only" ? (
               <Line k="AI run"><span className="text-[13px] text-ink">none, signed from the pool mid</span></Line>
-            ) : (
+            ) : p.quote.requestId ? (
               <Line k="Request id on 0G"><CopyLink value={p.quote.requestId} label="AI request id" head={10} tail={6} /></Line>
-            )}
+            ) : null}
             <Line k="Model now"><span className="num text-[13px] text-ink">{status.budget.model ?? `none while ${status.budget.tier.toLowerCase()}`}</span></Line>
             <Line k="Quote id on Base"><CopyLink value={p.quote.inferenceId} label="quote id" head={10} tail={6} /></Line>
             {p.quote.postedTx ? <Line k="Posted in"><CopyLink value={p.quote.postedTx} href={txUrl(BASE_CHAIN_ID, p.quote.postedTx)} label="posting transaction" head={10} tail={6} /></Line> : null}
@@ -59,13 +59,25 @@ export function BackingPanel({ status, loading, priced, direction, nowMs }: Prop
         )}
       </section>
 
+      <section aria-label="Strategy inventory on Aqua">
+        <p className="label">What the pool can pay out</p>
+        <dl className="mt-3 space-y-2 text-[14px]">
+          <Line k="W0G in the strategy"><span className="num text-ink">{formatAmount(BigInt(status.strategy.w0g), 18, 6)} W0G</span></Line>
+          <Line k="USDC in the strategy"><span className="num text-ink">{formatAmount(BigInt(status.strategy.usdc), 6, 6)} USDC</span></Line>
+          <Line k="Maker fee"><span className="num text-ink">{(status.strategy.feeBps / 100).toFixed(2)}% of what you pay</span></Line>
+        </dl>
+        <p className="num mt-2 text-[12px] text-muted">Aqua safeBalances for strategy {truncateHex(status.strategy.hash, 6, 4)}, Base block {status.readAt.baseBlock}.</p>
+      </section>
+
       <section aria-label="Budget tier">
         <p className="label mb-3">Budget tier</p>
         <TierMeter tier={status.budget.tier} reason={status.budget.reason} />
         <dl className="mt-4 space-y-2 text-[14px]">
           <Line k="AI account balance"><span className="num text-ink">{formatAmount(BigInt(status.budget.computeBalanceWei), 18, 4)} 0G</span></Line>
           <Line k="Spent today"><span className="num text-ink">{formatAmount(spent, 18, 4)} of {cap === 0n ? "no cap set" : `${formatAmount(cap, 18, 4)} 0G`}{cap > 0n ? ` (${pct.toFixed(0)}%)` : ""}</span></Line>
+          <Line k="Gas for posting prices"><span className="num text-ink">{formatAmount(BigInt(status.gasWei), 18, 6)} ETH</span></Line>
         </dl>
+        <p className="num mt-2 text-[12px] text-muted">Payment Layer balanceOf on 0G block {status.readAt.zeroGBlock}.</p>
       </section>
 
       <section aria-label="Latest funding step" className="border-t border-rule pt-4">

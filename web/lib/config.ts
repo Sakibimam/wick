@@ -1,6 +1,7 @@
 import { getAddress, type Address, type Hex } from "viem";
 
-export const AGENT_URL = (process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787").replace(/\/+$/, "");
+// Same origin by default: the Worker serves /api/status and /api/quote next to the pages.
+export const AGENT_URL = (process.env.NEXT_PUBLIC_AGENT_URL ?? "").replace(/\/+$/, "");
 export const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://base-rpc.publicnode.com";
 
 /** A local anvil fork of Base: explorer links are dropped (the hashes exist only on this machine) and the wallet is the fork's unlocked test account. */

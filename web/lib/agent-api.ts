@@ -17,7 +17,7 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
     res = await fetch(`${AGENT_URL}${path}`, { cache: "no-store", signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
-    throw new AgentError("unreachable", `No answer from ${AGENT_URL}`);
+    throw new AgentError("unreachable", `No answer from ${AGENT_URL || "the status route"}`);
   }
   let body: unknown;
   try {

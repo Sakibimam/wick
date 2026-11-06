@@ -1,6 +1,6 @@
 import { TOKENS } from "./config";
 import { formatAmount, toBaseUnits } from "./amounts";
-import { sortFunding, toMillis } from "./funding";
+import { describeStep, sortFunding, toMillis } from "./funding";
 import type { AgentStatus, FundingStep, Inference } from "./schema";
 
 export type Fill = {
@@ -56,7 +56,7 @@ export function loopSentence(loop: Loop): string {
       : "No fill has paid the agent yet, so there is nothing to trace.";
   }
   if (state === "fees-only") return `Takers have paid ${usdc} in fees. It has not been turned into AI money yet.`;
-  const steps = plural(loop.funding.length, "funding step", "funding steps");
+  const steps = plural(loop.funding.filter((f) => describeStep(f.step).kind !== "charge").length, "funding step", "funding steps");
   if (state === "funded") return `Takers paid ${usdc} in fees and the agent recorded ${steps}. No AI run has been paid yet.`;
-  return `Takers paid ${usdc} in fees, the agent recorded ${steps}, and ${plural(loop.inferences.length, "AI run", "AI runs")} followed from that balance.`;
+  return `Takers paid ${usdc} in fees. ${steps} moved money into the agent's AI account, and the 0G router billed ${plural(loop.inferences.length, "AI run", "AI runs")} against it.`;
 }
