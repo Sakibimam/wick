@@ -9,7 +9,7 @@ import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
 import { BASE_CHAIN_ID, TOKENS } from "@/lib/config";
-import { economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, takersOf } from "@/lib/economics";
+import { decisionCostUsd, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, takersOf } from "@/lib/economics";
 import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, relativeTime, significant } from "@/lib/format";
 import { txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
@@ -65,7 +65,7 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
           <p className="label">Swap volume that pays for one AI run</p>
           <p className="mt-2 font-display text-[64px] font-semibold leading-none text-ink"><Amount value={fmtUsdc(econ.breakEvenFillUsdcPerRun)} symbol="USDC" size={28} unitClassName="text-[24px]" /></p>
           <p className="mt-3 max-w-[56ch] text-[16px] leading-[1.6] text-ink-2">
-            The last AI run cost <span className="num text-ink">{runCost(econ.lastRun)}</span>. At the {status.strategy ? `${(status.strategy.feeBps / 100).toFixed(2)}%` : ""} maker fee, that much trading pays for the next one.
+            One AI decision costs <span className="num text-ink">{fmtUsd(decisionCostUsd(status) ?? econ.lastRun.costUsd ?? 0)}</span>, the last one {runCost(econ.lastRun)}. At the {status.strategy ? `${(status.strategy.feeBps / 100).toFixed(2)}%` : ""} maker fee, that much trading pays for the next one.
           </p>
         </div>
       ) : null}

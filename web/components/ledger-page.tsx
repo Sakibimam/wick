@@ -160,7 +160,7 @@ function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: 
   const takers = takersOf(status, loop.fills);
   return (
     <div>
-      <p className="mb-3 text-[14px] text-ink-2"><span className="num text-ink">{takers.distinct}</span> distinct {takers.distinct === 1 ? "taker" : "takers"}, <span className="num text-ink">{takers.outside}</span> outside the agent</p>
+      <p className="mb-3 text-[14px] text-ink-2">{takers.outside > 0 ? <><span className="num text-ink">{takers.outside}</span> outside {takers.outside === 1 ? "taker" : "takers"}{takers.seedFills ? `, after ${takers.seedFills} seed fill (agent)` : ""}</> : "Two doors for takers: the Aqua router and a Uniswap v4 pool. The agent opened the first with a seed fill."}</p>
       <Rows>
         <EvidenceRow
           title={<span className="inline-flex items-center gap-2"><ProtocolIcon protocol="uniswap" size={16} />Uniswap v4 pool routes into Wick</span>}
@@ -437,8 +437,8 @@ function PaidQuoteRow({ nowMs }: { nowMs: number }) {
     <ul className="mt-3 overflow-hidden rounded-card bg-panel">
       <EvidenceRow
         title="Paid quote feed"
-        plain={<>Other agents buy a signed W0G price for 0.01 USDC over x402. {d.paidQuotes} paid so far, from {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</>}
-        amount={<Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} />}
+        plain={<>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402{d.paidQuotes > 0 ? `: ${d.paidQuotes} paid so far, from ${d.distinctPayers} ${d.distinctPayers === 1 ? "agent" : "agents"}` : ""}.</>}
+        amount={d.paidQuotes > 0 ? <Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} /> : null}
         hash={d.lastSettlementTx ?? undefined}
         hashLabel="latest settlement"
         href={d.lastSettlementTx ? txUrl(BASE_CHAIN_ID, d.lastSettlementTx) : null}
