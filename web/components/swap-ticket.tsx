@@ -150,7 +150,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
             {([["25%", 1n, 4n], ["50%", 1n, 2n]] as const).map(([name, n, d]) => (
               <Button key={name} type="button" size="chip" disabled={balance.data === undefined || balance.data === 0n} onClick={() => setFraction(n, d)}>{name}</Button>
             ))}
-            <Button type="button" size="chip" disabled={maxIn === null || (isConnected && balance.data === 0n)} onClick={() => (isConnected && balance.data !== undefined ? setFraction(1n, 1n) : maxIn !== null && fill(maxIn, sellTok.decimals))}>Max</Button>
+            <Button type="button" size="chip" disabled={expired || maxIn === null || (isConnected && balance.data === 0n)} onClick={() => (isConnected && balance.data !== undefined ? setFraction(1n, 1n) : maxIn !== null && fill(maxIn, sellTok.decimals))}>Max</Button>
           </div>
         </div>
       </div>
@@ -177,7 +177,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
           Max fill right now{" "}
           {maxIn !== null ? <span className={cn(overDepth ? "text-danger-ink" : "text-ink")}>{fmtUnits(maxIn, sell)} {sell}</span> : status ? "unknown" : <span aria-hidden className="skeleton inline-block h-3.5 w-20 align-middle" />}
         </span>
-        <button type="button" onClick={preset} className="rounded-control border border-rule-2 px-2 py-1 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-ink active:scale-[0.97]">
+        <button type="button" onClick={preset} disabled={expired} className="rounded-control disabled:cursor-not-allowed disabled:opacity-50 border border-rule-2 px-2 py-1 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-ink active:scale-[0.97]">
           Fill {maxIn !== null && direction === "buy-w0g" && maxIn < PRESET_USDC ? fmtUnits(maxIn, "USDC") : "0.10"} USDC
         </button>
       </p>

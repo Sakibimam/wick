@@ -24,11 +24,13 @@ export function EvidenceRow({ title, plain, amount, hash, hashLabel, href, extra
         <p className="text-[15px] font-semibold text-ink">{title}</p>
         <p className="mt-0.5 text-[14px] text-muted">{plain}</p>
       </div>
-      <div className="min-w-0 text-[15px] text-ink md:text-right">{amount ?? null}</div>
-      <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} extra={extra} /> : <span className="text-[13px] text-muted">Read from the agent</span>}</div>
-      <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1">
-        {chainId !== undefined ? <ChainChip chainId={chainId} /> : null}
-        {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[13px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}
+      {amount ? <div className="min-w-0 text-[15px] text-ink md:text-right">{amount}</div> : <div className="hidden md:block" />}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:contents">
+        <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} extra={extra} /> : <span className="text-[13px] text-muted">Read from the agent</span>}</div>
+        <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1">
+          {chainId !== undefined ? <ChainChip chainId={chainId} /> : null}
+          {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[13px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}
+        </div>
       </div>
     </li>
   );

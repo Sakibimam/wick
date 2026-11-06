@@ -15,10 +15,10 @@ import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
 import { economicsOf, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
-import { countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
+import { clock, countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
-import { FUEL_LINES, fuseLeft, gaugePosition, hopEvidence, HOPS, machineSentence, MODELS, priceLeg, TIER_TONE, tierForBalance, tierWord, type HopKey, type Tone } from "@/lib/machine";
+import { FUEL_LINES, fuseLeft, gaugePosition, hopEvidence, HOPS, machineSentence, MODELS, nextTickIn, priceLeg, TIER_TONE, tierForBalance, tierWord, type HopKey, type Tone } from "@/lib/machine";
 import { CLOSING_SECONDS, URGENT_SECONDS, type Priced } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -276,18 +276,18 @@ function Infield({ status, econ, fills, loading, error, onRetry, view, now, nowR
                 <p className="text-[16px] text-danger-ink">{error instanceof AgentError && error.kind === "unreachable" ? "The agent's status route is not answering, so the machine cannot be read right now." : `The status could not be read: ${error.message}`}</p>
                 <Button variant="secondary" size="sm" onClick={onRetry}><RefreshCw className="size-4" aria-hidden />Read again</Button>
               </div>
-            ) : status && view && nowReady ? (
+            ) : status && view && nowReady && !view.leg.open ? (
               <p className="flex max-w-[60ch] items-start gap-3 text-[16px] leading-[1.5] text-ink">
                 <span aria-hidden className={cn("mt-[7px] size-2.5 shrink-0 rounded-full bg-[var(--tone)]", view.leg.open ? "tone-danger" : TONE_CLASS[tone], tone !== "quiet" && !view.leg.open && "motion-safe:animate-pulse")} />
                 <span><span className="font-semibold">{view.leg.open ? "Price expired" : tierWord(status.budget.tier)}.</span> {machineSentence(status, view.leg, now).replace(/^[^.]+\.\s*/, "")}</span>
               </p>
-            ) : <span aria-hidden className="skeleton block h-5 w-[42ch] max-w-full" />}
+            ) : !status ? <span aria-hidden className="skeleton block h-5 w-[42ch] max-w-full" /> : null}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             {view?.leg.open ? (
               <>
                 <Button asChild className="w-full sm:w-auto"><Link href="/ledger">Read the ledger</Link></Button>
-                <Button asChild variant="secondary" className="w-full sm:w-auto"><a href="#swap">Quote any amount <ArrowDown className="size-4" aria-hidden /></a></Button>
+                <Button asChild variant="secondary" className="w-full sm:w-auto"><a href="#swap">What one swap pays for <ArrowDown className="size-4" aria-hidden /></a></Button>
               </>
             ) : (
               <>
@@ -368,7 +368,7 @@ function PriceClock({ status, view, now, nowReady, loading }: { status: AgentSta
         <SourceNote>getQuote on the AgentQuoteBoard and the QuotePosted events, read through the Worker status route.</SourceNote>
       </p>
       {open && newest ? (
-        <p className="num mt-3 rounded-control bg-sunken px-3 py-2 text-[13px] text-ink-2">{nowReady ? `Last prices ${countdown(Math.floor(newest.expiry - now))}. The agent is requoting.` : "Reading the chain clock"}</p>
+        <p className="num mt-3 rounded-control bg-sunken px-3 py-2 text-[13px] text-ink-2">{nowReady ? `Requoting. These are the last prices it signed; the next tick runs in ${clock(nextTickIn(now))}.` : "Reading the chain clock"}</p>
       ) : null}
       <div className="mt-4 space-y-5">
         {rows.map((r) => (
@@ -424,12 +424,19 @@ function CompactLoop({ status, view, now, nowReady }: { status: AgentStatus | un
         })}
         {status && view ? (
           <g textAnchor="middle">
-            <text x={cx} y={cy - 14} className="fill-ink font-display text-[26px] font-semibold uppercase tracking-[0.02em]">{view.leg.open ? "Awaiting price" : tierWord(status.budget.tier)}</text>
-            <text x={cx} y={cy + 12} className={cn("num text-[15px]", view.leg.open ? "fill-danger" : "fill-ink")}>{!nowReady ? "" : view.leg.open ? `expired ${duration((now - (view.leg.buy?.expiry ?? now)) * 1000)} ago` : `price ${countdown(secs)}`}</text>
+            <text x={cx} y={cy - 14} className="fill-ink font-display text-[26px] font-semibold uppercase tracking-[0.02em]">{view.leg.open ? "Requoting" : tierWord(status.budget.tier)}</text>
+            <text x={cx} y={cy + 12} className="num fill-ink-2 text-[15px]">{!nowReady ? "" : view.leg.open ? `next tick in ${clock(nextTickIn(now))}` : `price ${countdown(secs)}`}</text>
             <text x={cx} y={cy + 34} className="num fill-muted text-[13px]">{fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} 0G fuel</text>
           </g>
         ) : null}
       </svg>
+      {status && view && (view.leg.buy || view.leg.sell) ? (
+        <figcaption className="mt-2 flex items-center justify-center gap-5 text-[13px] text-ink-2">
+          {view.leg.buy ? <span className={view.leg.open ? undefined : "ask"}><span className={cn("font-semibold", !view.leg.open && "text-[var(--tone)]")}>Ask</span> <span className="num text-[16px] text-ink">{fmtPrice(view.leg.buy.priceUsdcPerW0g)}</span></span> : null}
+          {view.leg.sell ? <span className={view.leg.open ? undefined : "bid"}><span className={cn("font-semibold", !view.leg.open && "text-[var(--tone)]")}>Bid</span> <span className="num text-[16px] text-ink">{fmtPrice(view.leg.sell.priceUsdcPerW0g)}</span></span> : null}
+          <a href="#swap" className="text-ink underline decoration-rule-2 underline-offset-4">Trade</a>
+        </figcaption>
+      ) : null}
     </figure>
   );
 }
@@ -481,13 +488,8 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
   const takers = fills ? takersOf(status, fills) : null;
   return (
     <Station k="pool" name="Aqua pool" lit={(fills?.length ?? 0) > 0}>
-      {status.strategy ? (
-        <Value className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <Amount value={fmt0g(toNumber(status.strategy.w0g, "W0G"))} symbol="W0G" />
-          <Amount value={fmtUsdc(toNumber(status.strategy.usdc, "USDC"))} symbol="USDC" />
-        </Value>
-      ) : <Value>Strategy shipped</Value>}
-      <Note>Swaps fill at the signed price{fee ? `, ${fee}% fee` : ""}.</Note>
+      <Value>{fee ? `${fee}% fee per fill` : "Fills at the signed price"}</Value>
+      <Note>Swaps fill only at the price the AI signed.</Note>
       <div className="mt-2 text-[13px] text-ink-2">
         {fillsError ? <span className="text-warn-ink">Fills unreadable right now</span> : fills === null ? <span aria-hidden className="skeleton inline-block h-4 w-44 align-middle" /> : fills.length === 0 ? <span>No fill yet</span> : (
           <span className="inline-flex flex-wrap items-center gap-x-2">
@@ -578,7 +580,7 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
         </div>
       </div>
       <Note className="max-w-[52ch] text-ink-2">
-        {cap > 0n ? <>About <span className="num font-medium text-ink">{significant(Number(bal) / Number(cap), 2)} days</span> of AI if it spent the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap. </> : null}
+        {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</> : <> at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</>}. </> : null}
         Spent today <span className="num text-ink">{fmt0g(toNumber(spent, "0G"))} <Tk>0G</Tk></span>. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
       <WhatIf balanceWei={bal} capWei={cap} />

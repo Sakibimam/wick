@@ -121,5 +121,6 @@ describe("clusters and ticks", () => {
     const two = { lastTicks: [{ at: "2026-11-06T07:10:00Z", outcome: "error: a" }, { at: "2026-11-06T07:05:00Z", outcome: "error: b" }, { at: "2026-11-06T07:00:00Z", outcome: "hold" }] };
     expect(tickSummary(two)!.failStreak).toBe(2);
     expect(tickSummary({ lastTicks: [{ at: "2026-11-06T07:10:00Z", outcome: "posted r" }] })!.failed).toBe(false);
+    expect(tickSummary({ lastTick: { at: "2026-11-06T07:10:00Z", outcome: "refused http_error; funding hold no_fees" } })!.words).toBe("retrying");
   });
 });

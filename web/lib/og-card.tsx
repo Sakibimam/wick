@@ -48,13 +48,26 @@ async function font(): Promise<ArrayBuffer | null> {
   }
 }
 
+/** "0G" with the site's dotted zero, so the share card and the page spell the ticker the same way. */
+function ZeroG({ size, color }: { size: number; color: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", fontSize: size, color }}>
+      <div style={{ display: "flex", position: "relative" }}>
+        0
+        <div style={{ position: "absolute", left: "50%", top: "50%", width: size * 0.16, height: size * 0.16, marginLeft: -size * 0.08, marginTop: -size * 0.06, borderRadius: 9999, background: color }} />
+      </div>
+      G
+    </div>
+  );
+}
+
 function Stat({ label, value, unit, color }: { label: string; value: string; unit?: string; color?: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", fontSize: 24, color: C.muted, fontFamily: "Barlow" }}>{label}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
         <div style={{ display: "flex", fontSize: 64, color: color ?? C.ink, lineHeight: 1 }}>{value}</div>
-        {unit ? <div style={{ display: "flex", fontSize: 28, color: C.muted }}>{unit}</div> : null}
+        {unit === "0G" ? <ZeroG size={28} color={C.muted} /> : unit ? <div style={{ display: "flex", fontSize: 28, color: C.muted }}>{unit}</div> : null}
       </div>
     </div>
   );
@@ -78,15 +91,15 @@ export async function renderCard(): Promise<ImageResponse> {
             <rect fill={C.ink} x="30.6" y="43" width="2.8" height="15" rx="1.4" />
           </svg>
           <div style={{ display: "flex", fontSize: 40, letterSpacing: 6 }}>WICK</div>
-          <div style={{ display: "flex", marginLeft: "auto", fontSize: 24, color: C.muted }}>read from Base and 0G</div>
+          <div style={{ display: "flex", marginLeft: "auto", gap: 7, fontSize: 24, color: C.muted }}>read from Base and <ZeroG size={24} color={C.muted} /></div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", fontSize: 96, lineHeight: 0.95, textTransform: "uppercase" }}>The market maker that pays for its own brain</div>
-          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One 0.10 USDC swap pays for ${significant(perSwap, 2)} of its AI decisions`}</div> : null}
+          {perSwap !== null ? <div style={{ display: "flex", fontSize: 32, color: C.ink2 }}>{`One 0.10 USDC swap pays for ${Math.floor(perSwap)} of its AI decisions`}</div> : null}
         </div>
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />
-          {fresh ? <Stat label="Signed price, ask / bid" value={`${fmtPrice(fresh.ask.priceUsdcPerW0g)} / ${fmtPrice(fresh.bid.priceUsdcPerW0g)}`} unit="USDC" /> : <Stat label="AI runs billed in 0G" value={status ? String(status.inferences.filter((r) => r.currency === "0g").length) : "live"} />}
+          {fresh ? <Stat label="Signed price, ask / bid" value={`${fmtPrice(fresh.ask.priceUsdcPerW0g)} / ${fmtPrice(fresh.bid.priceUsdcPerW0g)}`} unit="USDC" /> : <Stat label="Billed AI runs" value={status ? String(status.inferences.length) : "live"} />}
           <Stat label="Fees against AI spent" value={econ?.coverage != null ? fmtPct(econ.coverage * 100) : "live"} color={C.ok} />
         </div>
       </div>

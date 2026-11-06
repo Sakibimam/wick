@@ -20,7 +20,7 @@ import { BASE_CHAIN_ID, FILL_LOOKBACK_BLOCKS, TOKENS, ZERO_G_CHAIN_ID } from "@/
 import { economicsOf, fillEconomics, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsd, fmtUsdc, relativeTime, shortHash, significant, toNumber, utcStamp } from "@/lib/format";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
-import { buildLoop, loopSentence, type Fill, type Loop } from "@/lib/ledger";
+import { buildLoop, type Fill, type Loop } from "@/lib/ledger";
 import { directionOf, impliedPrice } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { reasonText, TIERS } from "@/lib/tiers";
@@ -40,9 +40,7 @@ export function LedgerPage() {
     <>
       <div className="mx-auto max-w-[1312px] px-4 pt-12 sm:px-6 lg:px-12 lg:pt-16">
         <h1 className="max-w-[18ch] text-[40px] sm:text-[52px]">The loop, unrolled</h1>
-        <p className="mt-3 max-w-[62ch] text-[16px] text-ink-2" aria-live="polite">
-          {loop ? <Tk>{loopSentence(loop)}</Tk> : status.isError ? "The agent is not answering, so the loop cannot be traced right now." : <span aria-hidden className="skeleton block h-5 w-[52ch] max-w-full" />}
-        </p>
+        {status.isError && !status.data ? <p className="mt-3 max-w-[62ch] text-[16px] text-ink-2" role="alert">The agent is not answering, so the loop cannot be traced right now.</p> : <p className="mt-3 max-w-[62ch] text-[16px] text-ink-2">Every transaction and AI run in the loop, in order, each linked to its chain.</p>}
         {status.data && econ && loop ? <StatStrip status={status.data} econ={econ} loop={loop} nowMs={nowMs} /> : status.isPending ? <div aria-hidden className="skeleton mt-8 h-[76px] w-full" /> : null}
       </div>
 
@@ -105,7 +103,6 @@ function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[
         {status.budget.model ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">model {status.budget.model}</li> : null}
         <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
         <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">spent today {fmt0g(toNumber(status.budget.spentTodayWei, "0G"))} of {fmt0g(toNumber(status.budget.spendCapPerDayWei, "0G"))} <Tk>0G</Tk></li>
-        {status.readAt ? <li className="num rounded-control bg-paper px-3 py-1.5 text-muted"><Tk>0G</Tk> block {fmtBlock(status.readAt.zeroGBlock)}</li> : null}
       </ul>
       <p className="mt-3 max-w-[75ch] text-[14px] text-muted">{meta.consequence}</p>
     </div>
@@ -281,11 +278,7 @@ function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
           {toThreshold !== null ? <dd className="num text-[13px] text-muted">{fmtPct(toThreshold * 100)} of the way there</dd> : null}
         </div>
       </dl>
-      {status.seedVsEarned && status.seedVsEarned.seedUsdc != null ? (
-        <p className="num text-[14px] text-ink-2 md:col-span-2">
-          The agent started with {fmtUsd(status.seedVsEarned.seedUsdc)} of seed money; {fmtUsd(status.seedVsEarned.earnedUsdc ?? 0)} of its AI fuel so far was bought with fees from outside wallets.
-        </p>
-      ) : null}
+
     </div>
   );
 }
@@ -353,12 +346,11 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
             {runs.map((r) => (
               <tr key={r.requestId} className="transition-colors duration-150 hover:bg-sunken">
                 <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.atMs ? utcStamp(r.atMs) : undefined}>{r.atMs ? relativeTime(r.atMs, nowMs) : "n/a"}</td>
-                <td className="num px-4 py-2.5 text-ink-2">{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}</td>
+                <td className="num px-4 py-2.5 text-ink-2">{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}{r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</td>
                 {hasDecision ? <td className="px-4 py-2.5 text-ink-2">{[r.raw.reason, r.raw.skewBps != null ? `skew ${r.raw.skewBps} bps` : null].filter(Boolean).join(", ") || <span className="text-muted">n/a</span>}</td> : null}
                 <td className="whitespace-nowrap px-4 py-2.5 text-right text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</td>
                 <td className="num whitespace-nowrap px-4 py-2.5 text-right text-ink-2">
                   {r.costUsd !== null ? fmtUsd(r.costUsd) : "n/a"}
-                  {r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}
                 </td>
                 <td className="px-4 py-2.5"><CopyLink value={r.requestId} label="AI request id" /></td>
               </tr>
@@ -371,42 +363,22 @@ function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
   );
 }
 
-/** Cost per run over time; runs close together draw as one point with a count. */
-function CostSpark({ runs, nowMs }: { runs: Run[]; nowMs: number }) {
-  const pts = runs.filter((r) => r.atMs !== null && r.costUsd !== null);
+/** One bar per billed run, oldest first, height by its cost in USD. */
+function CostSpark({ runs }: { runs: Run[]; nowMs: number }) {
+  const pts = runs.filter((r) => r.costUsd !== null).sort((a, b) => (a.atMs ?? 0) - (b.atMs ?? 0));
   if (pts.length < 2) return null;
-  const t0 = Math.min(...pts.map((r) => r.atMs!)), t1 = Math.max(nowMs, ...pts.map((r) => r.atMs!));
   const max = Math.max(...pts.map((r) => r.costUsd!));
-  const W = 600, H = 72, pad = 10;
-  const fx = (r: Run) => (r.atMs! - t0) / Math.max(1, t1 - t0);
-  const groups = cluster(pts, fx, 0.03);
-  const y = (usd: number) => H - pad - (usd / max) * (H - pad * 2);
-  const ordered = [...pts].sort((a, b) => a.atMs! - b.atMs!);
-  const line = ordered.map((r, i) => `${i ? "L" : "M"}${(fx(r) * W).toFixed(1)} ${y(r.costUsd!).toFixed(1)}`).join(" ");
   return (
-    <figure className="px-4 pb-2 pt-4">
-      <figcaption className="label flex justify-between"><span>Cost per run, USD</span><span className="num">max {fmtUsd(max)}</span></figcaption>
-      <div className="relative mt-2">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[72px] w-full overflow-visible" role="img" aria-label={`Cost of ${pts.length} AI runs over time`}>
-          <path d={line} fill="none" className="chain-zg stroke-[var(--chain)]" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        </svg>
-        <svg viewBox={`0 0 ${W} ${H}`} className="pointer-events-none absolute inset-0 h-[72px] w-full overflow-visible" preserveAspectRatio="none" aria-hidden>
-          {groups.map((g, i) => {
-            const avg = g.items.reduce((a, r) => a + r.costUsd!, 0) / g.items.length;
-            return <circle key={i} cx={g.x * W} cy={y(avg)} r={3.5} className="chain-zg fill-[var(--chain)]" vectorEffect="non-scaling-stroke" />;
-          })}
-        </svg>
-        <svg className="pointer-events-none absolute inset-0 h-[72px] w-full overflow-visible" aria-hidden>
-          {groups.map((g, i) => <CountBadge key={i} x={`${g.x * 100}%`} y={8} n={g.items.length} />)}
-        </svg>
-        <MarkTips clusters={groups} y={36} label={(it) => `${it.length} AI ${it.length === 1 ? "run" : "runs"}, show cost`} render={(r) => (
-          <div className="space-y-0.5">
-            <p className="num text-ink">{runCost(r)}</p>
-            <p className="num text-muted">{r.atMs ? utcStamp(r.atMs) : ""}</p>
-            <CopyLink value={r.requestId} label="AI request id" />
-          </div>
-        )} />
-      </div>
+    <figure className="px-4 pb-3 pt-4">
+      <figcaption className="label flex justify-between"><span>Cost per run, oldest first</span><span className="num">max {fmtUsd(max)}</span></figcaption>
+      <ol className="mt-3 flex h-14 items-end gap-1.5" aria-label={`Cost of ${pts.length} AI runs`}>
+        {pts.map((r) => (
+          <li key={r.requestId} className="group relative flex h-full w-full max-w-[40px] items-end">
+            <span className="chain-zg block w-full rounded-t-[2px] bg-[var(--chain)] opacity-80 transition-opacity duration-150 group-hover:opacity-100" style={{ height: `${Math.max(6, (r.costUsd! / max) * 100)}%` }} />
+            <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-max -translate-x-1/2 rounded-control border border-rule-2 bg-panel px-2.5 py-1.5 text-[12px] text-ink-2 group-hover:block">{runCost(r)}</span>
+          </li>
+        ))}
+      </ol>
     </figure>
   );
 }

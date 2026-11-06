@@ -70,8 +70,16 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
   const SIX = 6 * 3600_000;
   const ticks: number[] = [];
   for (let t = Math.ceil(t0 / SIX) * SIX; t < nowMs - SIX / 3; t += SIX) if (x(t) - padL > 40) ticks.push(t);
+  const gap = ticks.length > 1 ? x(ticks[1]!) - x(ticks[0]!) : 999;
+  const labelEvery = Math.ceil(88 / Math.max(1, gap));
   const counts = (Object.keys(KIND_LABEL) as Kind[]).map((k) => [k, marks.filter((m) => m.kind === k).length] as const);
-  const lanes = (["base", "zg"] as const).map((lane) => ({ lane, groups: cluster(marks.filter((m) => m.lane === lane), (m) => (w > 0 ? x(m.atMs) / w : 0), 18 / Math.max(1, w)) }));
+  // The fill is the event that matters, so it never hides inside a cluster; everything else merges within 28px.
+  const lanes = (["base", "zg"] as const).map((lane) => {
+    const on = marks.filter((m) => m.lane === lane);
+    const pos = (m: Mark) => (w > 0 ? x(m.atMs) / w : 0);
+    const groups = [...on.filter((m) => m.kind === "fill").map((m) => ({ x: pos(m), items: [m] })), ...cluster(on.filter((m) => m.kind !== "fill"), pos, 28 / Math.max(1, w))].sort((a, b) => a.x - b.x);
+    return { lane, groups };
+  });
 
   return (
     <figure data-ui className="w-full">
@@ -92,14 +100,14 @@ export function Chronogram({ status, fills, nowMs }: { status: AgentStatus; fill
               {ticks.map((t) => (
                 <g key={t}>
                   <line x1={x(t)} x2={x(t)} y1={ROW.base - 14} y2={ROW.zg + 14} className="stroke-rule" strokeWidth={1} strokeDasharray="2 4" />
-                  {w > 640 ? <text x={x(t)} y={ROW.zg + 30} textAnchor="middle" className="num fill-muted text-[12px]">{hourLabel(t)}</text> : null}
+                  {labelEvery > 0 && ticks.indexOf(t) % labelEvery === 0 ? <text x={x(t)} y={ROW.zg + 30} textAnchor="middle" className="num fill-muted text-[12px]">{hourLabel(t, w < 640)}</text> : null}
                 </g>
               ))}
               {lanes.map(({ lane, groups }) => groups.map((g, i) => {
                 const cx = g.x * w, cy = ROW[lane];
                 // A fill is the rarest and most important event, so it is the shape a mixed cluster shows.
-                const m = g.items.find((it) => it.kind === "fill") ?? g.items.find((it) => it.kind === "run") ?? g.items[0]!;
-                const crowded = i > 0 && (g.x - groups[i - 1]!.x) * w < 28 && i % 2 === 1;
+                const m = g.items.find((it) => it.kind === "run") ?? g.items[0]!;
+                const crowded = i > 0 && (g.x - groups[i - 1]!.x) * w < 36;
                 return (
                   <g key={`${lane}-${i}`} className={lane === "base" ? "chain-base" : "chain-zg"}>
                     <Shape kind={m.kind} cx={cx} cy={cy} />
@@ -172,7 +180,8 @@ function usePostTimes(hashes: string[]): Record<string, number> {
   return out;
 }
 
-function hourLabel(ms: number): string {
+function hourLabel(ms: number, short = false): string {
   const d = new Date(ms);
-  return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  const hh = `${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  return short ? hh : `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()} ${hh}`;
 }

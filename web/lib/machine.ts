@@ -109,7 +109,7 @@ export function swapPerRun(status: AgentStatus): { usdc: number; cost0g: number;
 }
 
 export type Tick = { at: string; outcome: string };
-const failed = (t: Tick) => !(t.outcome === "hold" || t.outcome.startsWith("posted"));
+const failed = (t: Tick) => !(t.outcome.startsWith("hold") || t.outcome.startsWith("posted"));
 
 /** The agent's last cron tick in plain words, and how many ticks in a row have failed (newest first in lastTicks). */
 export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">): { at: number; words: string; failed: boolean; failStreak: number } | null {
@@ -119,7 +119,8 @@ export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">)
   let failStreak = 0;
   for (const t of ticks) { if (!failed(t)) break; failStreak++; }
   const o = last.outcome;
-  const words = o === "hold" ? "held its price" : o.startsWith("posted") ? "signed a new price" : o.startsWith("error: ") ? "retrying" : o.startsWith("partial") ? "posted one side only" : o === "secrets_not_set" ? "is missing its keys" : o;
+  // Outcomes are machine codes; the page says only what they mean for a taker.
+  const words = o.startsWith("posted") ? "signed a new price" : o.startsWith("hold") ? "held its price" : "retrying";
   return { at: Date.parse(last.at), words, failed: failed(last), failStreak };
 }
 
