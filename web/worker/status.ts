@@ -80,9 +80,11 @@ export async function buildStatus(kv: Kv | null) {
     ...(cron?.inferences ?? []).map((r) => ({ requestId: r.requestId, model: r.model, currency: r.currency, totalCost: r.totalCost, time: r.time, reason: r.reason ?? null, skewBps: r.skewBps ?? null, spreadBps: r.spreadBps ?? null, postedSpreadBps: r.postedSpreadBps ?? null, maxAmountIn: r.maxAmountIn ?? null, maxAmountInUsdc: r.maxAmountInUsdc ?? null, ttlSeconds: r.ttlSeconds ?? null, teeVerified: r.teeVerified ?? null, provider: r.provider ?? null, inferenceId: r.inferenceId ?? null, outcome: r.outcome ?? "posted" })),
   ];
   const v2Posted = (cron?.posted ?? []).filter((p) => p.board && lc(p.board) === lc(BOARD_V2));
-  const quotes = quotesOf([...v1Records(v1?.posts ?? [], cron?.posted ?? []), ...v2Posted], chain.current, nowSec);
+  const v1All = v1Records(v1?.posts ?? [], cron?.posted ?? []);
+  const quotes = quotesOf([...v1All.filter((p) => p.requestId), ...v2Posted], chain.current, nowSec);
+  // A post the agent sent but whose tick never persisted its record has no request id to name: listed by tx, never shown as a quote.
   const recordedTx = new Set(v2Posted.map((p) => lc(p.postedTx)));
-  const unrecordedPosts = (idx?.posts ?? []).filter((p) => !recordedTx.has(lc(p.postedTx))).length;
+  const unrecordedPosts = [...v1All.filter((p) => !p.requestId).map((p) => p.postedTx), ...(idx?.posts ?? []).filter((p) => !recordedTx.has(lc(p.postedTx))).map((p) => p.postedTx)];
   const fills = all?.fills ?? [];
   const fee = (token: string) => fills.filter((f) => lc(f.tokenIn) === lc(token)).reduce((sum, f) => sum + feeOf(f, FEE_BPS_V2), 0n).toString();
   const lastPost = [...(cron?.posted ?? [])].reverse().find((p) => (p as PostedQuote & { gasCostWei?: string }).gasCostWei) as (PostedQuote & { gasCostWei?: string }) | undefined;
