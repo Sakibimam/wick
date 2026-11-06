@@ -19,7 +19,7 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
   try {
     let response: Response;
     try { response = await (options.fetchImpl ?? fetch)(`${(options.baseUrl ?? (process.env.ZG_API_BASE || "https://router-api.0g.ai/v1")).replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify({ model, temperature: 0, max_tokens: 256, chat_template_kwargs: { enable_thinking: false }, stream: false, messages: [{ role: "system", content: 'rateE18 is USDC per W0G scaled by 1e18 and must be within 3% of the supplied mid. spreadBps must be an integer from 5 to 500 inclusive. reason must be non-empty. Return only the JSON object {"rateE18": <integer>, "spreadBps": <integer>, "reason": "<short string>"}, no markdown.' }, { role: "user", content: JSON.stringify(state) }] }), signal: controller.signal }); }
-    catch { throw new BrainError("request_failed"); }
+    catch (e) { throw new BrainError("request_failed", `request_failed: ${controller.signal.aborted ? `no answer within ${options.timeoutMs ?? 20_000} ms` : e instanceof Error ? `${e.name} ${e.message}` : String(e)}`); }
     if (!response.ok) throw new BrainError("http_error", `router returned HTTP ${response.status}`);
     let body: any;
     try { body = await response.json(); } catch { throw new BrainError("invalid_json"); }
