@@ -162,3 +162,12 @@ describe("headroom counts every strategy the maker runs", () => {
     expect(r.state.funding!.lastDecision!.spendableUsdc).toBe((10_000_000n - 146_400n - 5_000_000n).toString());
   });
 });
+
+describe("router verdict persisted", () => {
+  test("teeVerified, provider and providerIdentity land in the inference record", async () => {
+    const c = fakeChain();
+    const f = (async () => Response.json({ choices: [{ message: { content: JSON.stringify({ bidHalfSpreadBps: 40, askHalfSpreadBps: 40, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "r" }) } }], x_0g_trace: { request_id: "rid-t", tee_verified: true, provider: "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", provider_identity: "anonymous1", billing: { currency: "0g", total_cost: "1" } } })) as unknown as typeof fetch;
+    const r = await cronTick(emptyCronState(), c.env({ now: NOW, fetchImpl: f }));
+    expect(r.state.inferences.at(-1)).toMatchObject({ requestId: "rid-t", teeVerified: true, provider: "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", providerIdentity: "anonymous1", attempts: 1 });
+  });
+});

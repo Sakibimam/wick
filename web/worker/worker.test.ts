@@ -63,3 +63,10 @@ test("status quotes name the per-swap cap and the per-quote budget, keeping the 
   const [q] = quotesOf([p] as never, [], 1_900_000_000);
   expect(q).toMatchObject({ maxAmountIn: "50000", maxAmountInPerSwap: "50000", perQuoteBudgetIn: "50000", budgetFromBlock: "7" });
 });
+
+import { inferenceRows } from "./status";
+test("status inference rows carry the router's verdict and both half-spreads exactly as the cron stored them", () => {
+  const rec = { requestId: "rid-t", model: "0gm-1.0-35b-a3b", currency: "0g", totalCost: "1", time: "2026-11-06T10:00:00Z", reason: "calm", teeVerified: true, provider: "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", providerIdentity: "anonymous1", attempts: 2, fallbackFrom: null, bidHalfSpreadBps: 70, askHalfSpreadBps: 40, postedBidHalfSpreadBps: 70, postedAskHalfSpreadBps: 40, outcome: "posted" };
+  const rows = inferenceRows({ inferences: [rec] } as never);
+  expect(rows.at(-1)).toMatchObject({ requestId: "rid-t", teeVerified: true, provider: "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", providerIdentity: "anonymous1", attempts: 2, bidHalfSpreadBps: 70, askHalfSpreadBps: 40, postedBidHalfSpreadBps: 70, postedAskHalfSpreadBps: 40, reason: "calm" });
+});

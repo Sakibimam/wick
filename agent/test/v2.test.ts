@@ -240,3 +240,21 @@ test("quote lifetimes sit near MAX_TTL: every allowed TTL outlives the next requ
   expect(QUOTE_TTL_BAND[0] - EXPIRY_REQUOTE_WINDOW_SECONDS).toBeGreaterThanOrEqual(480);
   expect(() => validateDecision({ ...good, ttlSeconds: 760 }, 0.2)).toThrow(/ttl_out_of_range/);
 });
+
+describe("router trace is persisted per request", () => {
+  test("tee_verified, provider and provider_identity from x_0g_trace reach the decision", async () => {
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: router(good, { request_id: "rid-p", tee_verified: true, provider: "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", provider_identity: "anonymous1", billing: { currency: "0g", total_cost: "1" } }).f, sleep: noSleep });
+    expect([r.teeVerified, r.provider, r.providerIdentity]).toEqual([true, "0xf4FB8d2bD856e672b5f9848b0eD235A20079B250", "anonymous1"]);
+  });
+  test("a provider failure's own x_0g_trace names the provider in the fallback record", async () => {
+    const f = (async (_u: RequestInfo | URL, init?: RequestInit) => {
+      const req = JSON.parse(String(init?.body));
+      if (req.model === "0gm-1.0-35b-a3b") return Response.json({ error: { type: "upstream_error" }, x_0g_trace: { request_id: "rid-bad", provider: "0xdead00000000000000000000000000000000beef" } }, { status: 502 });
+      return Response.json({ choices: [{ message: { content: JSON.stringify(good) } }], x_0g_trace: { request_id: "rid-q", provider: "0xc0ffee0000000000000000000000000000000000", billing: { currency: "0g", total_cost: "9" } } });
+    }) as unknown as typeof fetch;
+    const r = await askDecision(state, { apiKey: "x", fetchImpl: f, sleep: noSleep });
+    expect(r.provider).toBe("0xc0ffee0000000000000000000000000000000000");
+    expect(r.fallbackFrom).toContain("0xdead00000000000000000000000000000000beef");
+    expect(r.fallbackFrom).toContain("rid-bad");
+  });
+});
