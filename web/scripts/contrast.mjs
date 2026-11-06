@@ -20,6 +20,7 @@ const PAIRS = [
   ["ink", "paper", 7], ["ink-2", "paper", 7], ["ink-2", "panel", 7], ["ink", "lane", 7], ["muted", "paper", 4.5], ["muted", "lane", 4.5], ["muted", "panel", 4.5], ["muted", "sunken", 4.5],
   ["ink", "sunken", 7], ["on-accent", "accent", 7],
   ["ok", "paper", 4.5], ["warn", "paper", 4.5], ["danger", "paper", 4.5], ["quiet", "paper", 4.5], ["danger-ink", "paper", 4.5], ["danger-ink", "panel", 4.5],
+  ["chain-base", "paper", 4.5], ["chain-zg", "paper", 4.5], ["chain-base", "lane", 4.5], ["chain-zg", "lane", 4.5], ["chain-base", "panel", 4.5], ["chain-zg", "panel", 4.5],
   ["ok-ink", "ok-tint", 4.5], ["warn-ink", "warn-tint", 4.5], ["danger-ink", "danger-tint", 4.5],
 ];
 const pairs = process.argv.includes("--control") ? [["muted", "sunken", 12]] : PAIRS;
