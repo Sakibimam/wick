@@ -186,6 +186,8 @@ Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibima
 | QuoterV2 `0x3d4e44Eb…B76a` | sizes every funding swap and its slippage floor | `agent/src/price.ts`, `agent/src/worker-tick.ts` |
 | v3 USDC/WETH 0.05% pool `0xd0b53D92…F224` | ETH price for gas and bridge cost in the funding threshold | `ethUsdFromSqrt`, `agent/src/worker-tick.ts:51` |
 
+**Live swap through the hook.** On Base mainnet, a taker wallet `0x39ef83fb…ab37` swapped 0.05 USDC for 0.330737688695358517 W0G through Uniswap's Universal Router into the v4 pool `0xba432fbc…785e`: [`0xb5ec571e…b50a`](https://basescan.org/tx/0xb5ec571ef88870176aa5513674f76a465b2c10a960bee05d6b25c2d231aab50a), block 53,995,832, 336,837 gas. The pool holds nothing; the hook filled the swap from Wick's Aqua strategy (SwapVM `Swapped` names maker `0xeF2E…d953`, order hash `0x05bc438b…c035`, taker the hook), Aqua `safeBalances` moved from 1.357492788767429240 W0G / 0.006836 USDC to 1.026755100072070723 W0G / 0.056836 USDC, and the output equals the hook's `quote` to the wei. Script: `agent/scripts/swap-via-hook.ts`.
+
 ## Guards in front of the signer
 
 A market maker that signs a bad price loses money to the first arbitrageur, so every guard sits before the signer and every miss means no quote:
