@@ -199,3 +199,9 @@ describe("x402 revenue joins the funding leg, earned-only", () => {
     expect(d.spendableUsdc).toBe("0");
   });
 });
+test("the cron never spends Base ETH below the operator's 0.00009 ETH reserve", async () => {
+  const { GAS_FLOOR_WEI } = await import("../src/policy.js");
+  const { DEFAULT_FUNDING_ENV } = await import("../src/worker-tick.js");
+  expect(GAS_FLOOR_WEI >= 90_000_000_000_000n).toBe(true);
+  expect(DEFAULT_FUNDING_ENV.gasTopUpBelowWei >= 90_000_000_000_000n).toBe(true);
+});

@@ -9,8 +9,8 @@ export async function thresholdTriggered(accrued: bigint, threshold: bigint) { i
 export function shouldRunInference(tier: BudgetTier, requote: boolean) { return (tier === "NORMAL" || tier === "LOW") && requote; }
 export function tickPolicy(input: BudgetInput) { const decision = decideBudget(input); return { ...decision, shouldInfer: shouldRunInference(decision.tier, decision.requote) }; }
 
-/** Below this much Base ETH the signer cannot be trusted to land both posts, so the agent stops posting. */
-export const GAS_FLOOR_WEI = 30_000_000_000_000n;
+/** Base ETH the agent never spends below: the operator reserve (0.00009 ETH, a Uniswap v4 hook deploy plus headroom) with margin. */
+export const GAS_FLOOR_WEI = 100_000_000_000_000n;
 /** A live quote this close to expiry is renewed even when the price has not moved, so the strategy never goes dark between price moves. */
 export const EXPIRY_REQUOTE_WINDOW_SECONDS = 600;
 
