@@ -54,7 +54,18 @@ async function main() {
   const servers: ReturnType<typeof Bun.serve>[] = [];
   try {
     await waitForRpc(url);
-    const live = await launch(url);
+    // Before the mainnet cutover this rehearses LaunchV2 itself; after it, v1 is already docked on the fork and the run
+    // drives the deployed v2 board instead, registering the fork-only agent through the impersonated maker.
+    let live: any;
+    try { live = await launch(url); }
+    catch (e) {
+      if (!(e instanceof Error) || !e.message.includes("nothing to ship")) throw e;
+      live = JSON.parse(await Bun.file(new URL("../../web/worker/live-order-v2.json", import.meta.url).pathname).text());
+      const maker = unlockedSigner(url, MAKER).wallet;
+      const h = await maker.writeContract({ address: live.board, abi: parseAbi(["function setAgent(address)"]), functionName: "setAgent", args: [AGENT], account: MAKER, chain: null });
+      if ((await local.waitForTransactionReceipt({ hash: h })).status !== "success") throw new Error("setAgent on the live v2 board failed on the fork");
+    }
+    const epochNow = await local.readContract({ address: live.board, abi: boardV2Abi, functionName: "epochOf", args: [MAKER] });
     const board = live.board as Address, order: ShippedOrder = { maker: live.order.maker, traits: BigInt(live.order.traits), data: live.order.data };
     const v1Docked = await local.readContract({ address: "0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a", abi: parseAbi(["function rawBalances(address,address,bytes32,address) view returns (uint248,uint8)"]), functionName: "rawBalances", args: [MAKER, AQUA_ROUTER, V1_HASH, W0G] });
     if (v1Docked[1] !== 0xff) throw new Error("v1 strategy was not docked");
@@ -62,7 +73,7 @@ async function main() {
     const env = (zgApiBase: string, nowMs: number) => ({ base: local, zeroG, chain: base, baseRpcUrl: url, board, aquaApp: AQUA_ROUTER, strategyHash: live.strategyHash as Hex, maker: MAKER, agent: AGENT, spendCapPerDayWei: 10n ** 18n, agentPk: ANVIL0_PK, zgApiKey: "e2e", zgApiBase, now: nowMs, fills: [] });
     const nowOf = async () => Number((await local.getBlock()).timestamp) * 1000;
 
-    const probe: Pair = { maker: MAKER, token0: W0G, token1: USDC, rate01E18: 147_000n, rate10E18: 6_800_000_000_000_000_000_000_000_000_000n, maxIn0: 1n, maxIn1: 1n, expiry: 1n, epoch: 1n, nonce: 1n, inferenceId: keccak256(toHex("probe")) };
+    const probe: Pair = { maker: MAKER, token0: W0G, token1: USDC, rate01E18: 147_000n, rate10E18: 6_800_000_000_000_000_000_000_000_000_000n, maxIn0: 1n, maxIn1: 1n, expiry: 1n, epoch: epochNow, nonce: 1n, inferenceId: keccak256(toHex("probe")) };
     const digestLocal = hashTypedData(pairTypedData(8453, board, probe)), digestChain = await local.readContract({ address: board, abi: boardV2Abi, functionName: "pairDigest", args: [probe] });
     if (digestLocal !== digestChain) throw new Error(`TypeScript EIP-712 digest ${digestLocal} differs from board.pairDigest ${digestChain} (chainId ${await local.getChainId()})`);
     const good = routerMock(true); servers.push(good);
@@ -87,10 +98,10 @@ async function main() {
     if (got !== q.amountOut || got === 0n) throw new Error(`fill ${got} differs from quote ${q.amountOut}`);
 
     const bad = routerMock(false); servers.push(bad);
-    const nonceBefore = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, 1n] });
+    const nonceBefore = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, epochNow] });
     const expiring = { ...t1.state, quotedAt: null } as CronState;
     const t2 = await cronTick(expiring, env(`http://127.0.0.1:${bad.port}`, await nowOf()));
-    const nonceAfter = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, 1n] });
+    const nonceAfter = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, epochNow] });
     if (!t2.outcome.startsWith("refused tee_unverified") || nonceAfter !== nonceBefore) throw new Error(`TEE-unverified answer was not refused: ${t2.outcome}`);
     if (t2.state.inferences.at(-1)?.outcome !== "refused tee_unverified") throw new Error("refused run not recorded with its cost");
 
@@ -100,7 +111,7 @@ async function main() {
     const word = BigInt(slot), mask = (1n << 160n) - 1n, sqrt = word & mask;
     await rpc(url, "anvil_setStorageAt", [POOL, "0x0", `0x${((word & ~mask) | (sqrt * 102n / 100n)).toString(16).padStart(64, "0")}`]);
     const t3 = await cronTick({ ...t2.state, quotedAt: null } as CronState, env(`http://127.0.0.1:${good.port}`, await nowOf()));
-    const nonceManip = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, 1n] });
+    const nonceManip = await local.readContract({ address: board, abi: boardV2Abi, functionName: "lastNonce", args: [MAKER, epochNow] });
     if (!t3.outcome.startsWith("hold spot_twap_gap") || nonceManip !== nonceBefore) throw new Error(`manipulated spot did not hold: ${t3.outcome}`);
     await rpc(url, "anvil_setStorageAt", [POOL, "0x0", slot]);
 
