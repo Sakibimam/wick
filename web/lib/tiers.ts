@@ -5,7 +5,7 @@ export type TierMeta = { label: string; tone: "ok" | "warn" | "danger" | "quiet"
 export const TIER_ORDER: Tier[] = ["NORMAL", "LOW", "CRITICAL", "PAUSED"];
 
 export const TIERS: Record<Tier, TierMeta> = {
-  NORMAL: { label: "Normal", tone: "ok", index: 0, consequence: "Full-size AI model, standard spread, requotes when the pool price moves." },
+  NORMAL: { label: "Normal", tone: "ok", index: 0, consequence: "Standard spread, requotes when the pool price moves." },
   LOW: { label: "Low", tone: "warn", index: 1, consequence: "Cheaper AI model and a spread twice as wide, to stretch the balance." },
   CRITICAL: { label: "Critical", tone: "danger", index: 2, consequence: "No new AI runs. Only a recent signed price stays up, at a spread four times as wide." },
   PAUSED: { label: "Paused", tone: "quiet", index: 3, consequence: "The agent signs no new prices. A price already signed fills until it expires, then the pool refuses every swap." },

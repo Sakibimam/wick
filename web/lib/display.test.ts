@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { CHAIN_ICON, CHAIN_NAMES, PROTOCOL_ICON, TOKEN_ICON, TOKENS, USDC, W0G } from "./config";
 import { cluster } from "./cluster";
 import { decisionsFor, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, runsOf, takersOf } from "./economics";
-import { clock, countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsdc, shortHash } from "./format";
+import { clock, countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsdc, fmtUsdcAtLeast, shortHash } from "./format";
 import { tickSummary } from "./machine";
 import { latestByDirection } from "./quotes";
 import { statusSchema } from "./schema";
@@ -50,6 +50,9 @@ describe("one formatter", () => {
     expect(countdown(1450)).toBe("expires in 24:10");
     expect(countdown(-120)).toBe("expired 2 min ago");
     expect(fmtPct(197.3)).toBe("197%");
+    expect(fmtUsdcAtLeast(0.01166)).toBe("0.012");
+    expect(fmtUsdcAtLeast(0.013291)).toBe("0.014");
+    expect(fmtUsdcAtLeast(2.341)).toBe("2.35");
   });
 });
 

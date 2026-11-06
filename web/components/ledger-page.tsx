@@ -18,11 +18,11 @@ import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, EXPLORERS, FILL_LOOKBACK_BLOCKS, QUOTES_API, TOKENS, V4_HOOK, ZERO_G_CHAIN_ID } from "@/lib/config";
 import { useQuoteStats } from "@/hooks/use-quote-stats";
-import { economicsOf, fillEconomics, fmtDecisions, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { economicsOf, fillEconomics, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsd, fmtUsdc, relativeTime, shortHash, significant, toNumber, utcStamp } from "@/lib/format";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
 import { buildLoop, type Fill, type Loop } from "@/lib/ledger";
-import { directionOf, impliedPrice } from "@/lib/quotes";
+import { directionOf, impliedPrice, latestByDirection } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { reasonText, TIERS } from "@/lib/tiers";
 import { cn } from "@/lib/utils";
@@ -98,14 +98,15 @@ function GaugeBand({ status, fills, nowMs, loading, error, onRetry }: { status: 
 function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[]; nowMs: number }) {
   const meta = TIERS[status.budget.tier];
   const lastModel = runsOf(status)[0]?.model ?? status.budget.model;
+  const tierModel = status.budget.model;
   return (
     <div>
       <Chronogram status={status} fills={fills} nowMs={nowMs} />
       <ul className="mt-8 flex flex-wrap gap-2 text-[13px]" aria-label="Agent budget">
         <li className={cn("inline-flex items-center gap-2 rounded-control bg-paper px-3 py-1.5 font-semibold text-ink", `tone-${meta.tone}`)}><span className="size-2 rounded-full bg-[var(--tone)]" aria-hidden />{meta.label} tier</li>
-        {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">last run on {lastModel}</li> : null}
+        {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">{tierModel && tierModel !== lastModel ? `tier asks for ${tierModel}, router served ${lastModel}` : `model ${lastModel}`}</li> : null}
         <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
-        <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">spent today {fmt0g(toNumber(status.budget.spentTodayWei, "0G"))} of {fmt0g(toNumber(status.budget.spendCapPerDayWei, "0G"))} <Tk>0G</Tk></li>
+        <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">{fmtPct(BigInt(status.budget.spendCapPerDayWei) > 0n ? (Number(status.budget.spentTodayWei) / Number(status.budget.spendCapPerDayWei)) * 100 : 0)} of the daily cap used</li>
       </ul>
       <p className="mt-3 max-w-[75ch] text-[14px] text-muted">{meta.consequence}</p>
     </div>
@@ -144,6 +145,7 @@ function EmptyBlock({ title, next }: { title: string; next: string }) {
 }
 
 function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: Loop; query: ReturnType<typeof useFills>; nowMs: number }) {
+  const hookAt = usePostedAt(V4_HOOK.poolInitTx);
   if (query.isPending) return <div aria-busy="true" className="space-y-2">{[0, 1].map((i) => <div key={i} className="skeleton h-16 w-full" />)}</div>;
   if (query.isError) {
     return (
@@ -170,6 +172,7 @@ function FillsRows({ status, loop, query, nowMs }: { status: AgentStatus; loop: 
           href={txUrl(BASE_CHAIN_ID, V4_HOOK.poolInitTx)}
           extra={{ href: EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address), label: "hook contract" }}
           chainId={BASE_CHAIN_ID}
+          timeMs={hookAt ? hookAt * 1000 : null}
           nowMs={nowMs}
         />
         {loop.fills.map((f) => {
@@ -266,6 +269,8 @@ function PriceRow({ q, nowMs, superseded }: { q: AgentStatus["quotes"][number]; 
 
 /** Fees as the stage's headline number, then what they cover and how far they are from the next funding run. */
 function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
+  const preset = toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC");
+  const toCover = fillsToCover(econ, status, preset);
   const toThreshold = econ.fundingThresholdUsdc ? Math.min(1, econ.feesEarnedUsdc / econ.fundingThresholdUsdc) : null;
   return (
     <div className="grid grid-cols-1 gap-8 rounded-card bg-panel p-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-end md:gap-12">
@@ -279,9 +284,10 @@ function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
           <dd className="num mt-1 text-[22px] text-ink">{fmtUsd(econ.aiSpentUsd)}</dd>
           <dd className="text-[13px] text-muted">{status.inferences.length} runs</dd>
         </div>
-        <div className="tone-ok">
-          <dt className="label">Coverage</dt>
-          <dd className="num mt-1 text-[22px] text-ink">{econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a"}</dd>
+        <div>
+          <dt className="label">Fees vs AI spent</dt>
+          <dd className={cn("num mt-1 text-[22px]", econ.coverage !== null && econ.coverage >= 1 ? "text-ok-ink" : "text-warn-ink")}>{econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a"}</dd>
+          {toCover ? <dd className="num text-[13px] text-muted">{toCover} more {fmtUsdc(preset)} USDC {toCover === 1 ? "fill covers" : "fills cover"} it all</dd> : null}
         </div>
         <div>
           <dt className="label">Next funding run</dt>
@@ -410,7 +416,7 @@ function StatStrip({ status, econ, loop, nowMs }: { status: AgentStatus; econ: E
   const cells: { k: string; v: ReactNode }[] = [
     { k: "Fees earned", v: <Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" size={16} /> },
     { k: "AI spent", v: fmtUsd(econ.aiSpentUsd) },
-    { k: "Fees against AI", v: econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a" },
+    { k: "Fees vs AI spent", v: econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a" },
     { k: "Funding transactions", v: String(loop.funding.length) },
     { k: "Billed AI runs", v: String(loop.inferences.length) },
     { k: "Last run", v: last?.atMs ? relativeTime(last.atMs, nowMs) : "n/a" },
@@ -437,7 +443,7 @@ function PaidQuoteRow({ nowMs }: { nowMs: number }) {
     <ul className="mt-3 overflow-hidden rounded-card bg-panel">
       <EvidenceRow
         title="Paid quote feed"
-        plain={<>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402{d.paidQuotes > 0 ? `: ${d.paidQuotes} paid so far, from ${d.distinctPayers} ${d.distinctPayers === 1 ? "agent" : "agents"}` : ""}.</>}
+        plain={d.paidQuotes > 0 ? <>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402: {d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</> : <>Any agent can buy the current signed <Tk>W0G</Tk> price for 0.01 USDC over x402 at <code className="text-ink">{QUOTES_API.replace("https://", "")}/v1/quote</code>.</>}
         amount={d.paidQuotes > 0 ? <Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} /> : null}
         hash={d.lastSettlementTx ?? undefined}
         hashLabel="latest settlement"

@@ -26,6 +26,14 @@ export function fmtUsdc(n: number): string {
 
 export const fmtUsd = (n: number) => `$${fmtUsdc(n)}`;
 
+/** A threshold the reader must reach, so it rounds up: 0.0117 reads 0.012, never a 0.01 that falls short. */
+export function fmtUsdcAtLeast(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return fmtUsdc(n);
+  if (n >= 1) return fixed(Math.ceil(n * 100 - 1e-9) / 100, 2);
+  const step = 10 ** (Math.floor(Math.log10(n)) - 1);
+  return significant(Math.ceil(n / step - 1e-9) * step, 2);
+}
+
 /** 0G and W0G: 4 significant figures. */
 export const fmt0g = (n: number) => significant(n, 4);
 

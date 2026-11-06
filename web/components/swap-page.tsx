@@ -8,9 +8,10 @@ import { Amount, ProtocolIcon, Tk } from "@/components/token-mark";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
-import { BASE_CHAIN_ID, TOKENS } from "@/lib/config";
+import { BASE_CHAIN_ID, EXPLORERS, QUOTES_API, TOKENS, USDC, V4_HOOK } from "@/lib/config";
+import { useQuoteStats } from "@/hooks/use-quote-stats";
 import { decisionCostUsd, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, takersOf } from "@/lib/economics";
-import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, relativeTime, significant } from "@/lib/format";
+import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, fmtUsdcAtLeast, relativeTime, significant } from "@/lib/format";
 import { txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
 import { latestByDirection, type Direction, type Priced } from "@/lib/quotes";
@@ -63,7 +64,7 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
       {econ.breakEvenFillUsdcPerRun !== null && econ.lastRun ? (
         <div>
           <p className="label">Swap volume that pays for one AI run</p>
-          <p className="mt-2 font-display text-[64px] font-semibold leading-none text-ink"><Amount value={fmtUsdc(econ.breakEvenFillUsdcPerRun)} symbol="USDC" size={28} unitClassName="text-[24px]" /></p>
+          <p className="mt-2 font-display text-[64px] font-semibold leading-none text-ink"><Amount value={fmtUsdcAtLeast(econ.breakEvenFillUsdcPerRun)} symbol="USDC" size={28} unitClassName="text-[24px]" /></p>
           <p className="mt-3 max-w-[56ch] text-[16px] leading-[1.6] text-ink-2">
             One AI decision costs <span className="num text-ink">{fmtUsd(decisionCostUsd(status) ?? econ.lastRun.costUsd ?? 0)}</span>, the last one {runCost(econ.lastRun)}. At the {status.strategy ? `${(status.strategy.feeBps / 100).toFixed(2)}%` : ""} maker fee, that much trading pays for the next one.
           </p>
@@ -85,6 +86,8 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
           </div>
         </dl>
       </div>
+
+      <WaysIn />
 
       <div className="border-t border-rule pt-6">
         <p className="label">Takers</p>
@@ -110,6 +113,33 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
           </ul>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** The other ways money reaches the agent: a Uniswap v4 pool that routes into the strategy, and signed prices sold to other agents. */
+function WaysIn() {
+  const q = useQuoteStats();
+  const d = q.data;
+  return (
+    <div className="border-t border-rule pt-6">
+      <p className="label">Two more ways in</p>
+      <ul className="mt-3 space-y-4 text-[15px] text-ink-2">
+        <li>
+          <p className="flex items-center gap-2 font-medium text-ink"><ProtocolIcon protocol="uniswap" size={16} />Uniswap v4 pool</p>
+          <p className="mt-1">A hook on a v4 pool routes its swaps to the same signed price, so any Uniswap router can fill against Wick.</p>
+          <CopyLink value={V4_HOOK.address} href={EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address)} label="Uniswap v4 hook" className="mt-1" />
+        </li>
+        <li>
+          <p className="font-medium text-ink">Signed prices for other agents</p>
+          {d && d.paidQuotes > 0 ? (
+            <p className="num mt-1">{d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}, {fmtUsdc(d.revenueUsdc)} USDC earned.</p>
+          ) : (
+            <p className="mt-1">Any agent can buy the current signed price for 0.01 USDC over x402:</p>
+          )}
+          <code className="mt-2 block overflow-x-auto whitespace-nowrap rounded-control bg-panel px-3 py-2 text-[13px] text-ink">curl &quot;{QUOTES_API}/v1/quote?tokenIn={USDC}&amp;amountIn=50000&quot;</code>
+        </li>
+      </ul>
     </div>
   );
 }

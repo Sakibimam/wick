@@ -98,7 +98,7 @@ export async function renderCard(): Promise<ImageResponse> {
         <div style={{ display: "flex", gap: 72, borderTop: `2px solid ${C.rule}`, paddingTop: 28 }}>
           <Stat label="Fuel for AI runs" value={fuel ?? "live"} unit={fuel ? "0G" : undefined} color={C.zg} />
           <Stat label="Billed AI runs" value={status ? String(status.inferences.length) : "live"} />
-          <Stat label="Fees against AI spent" value={econ?.coverage != null ? fmtPct(econ.coverage * 100) : "live"} color={C.ok} />
+          <Stat label="Runway" value={econ?.runwayDays != null ? `${Math.floor(econ.runwayDays)}` : "live"} unit="days" color={C.ok} />
         </div>
       </div>
     ),

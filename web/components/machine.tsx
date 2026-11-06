@@ -327,8 +327,9 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
         </div>
         {econ.runwayDays !== null ? (
           <div>
-            <dt className="label">{econ.reported.has("runwayDays") ? "Runway, today's pace" : "Runway at the cap"}</dt>
+            <dt className="label">Runway</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runwayDays, 2)} days</dd>
+            <dd className="text-[12px] text-muted">{econ.reported.has("runwayDays") ? "at today's pace" : "at the daily cap"}</dd>
           </div>
         ) : null}
         {econ.runsPaidByFees !== null && econ.coverage !== null && takers && takers.outside > 0 ? (
@@ -337,12 +338,10 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runsPaidByFees, 2)}</dd>
           </div>
         ) : null}
-        {econ.coverage !== null ? (
-          <div>
-            <dt className="label">Fees vs AI spent</dt>
-            <dd className="num mt-0.5 text-[20px] text-ink">{fmtPct(econ.coverage * 100)}</dd>
-          </div>
-        ) : null}
+        <div>
+          <dt className="label">AI decisions so far</dt>
+          <dd className="num mt-0.5 text-[20px] text-ink">{status.inferences.length}</dd>
+        </div>
       </dl>
     </div>
   );
@@ -489,7 +488,6 @@ function PoolStation({ status, fills, fillsError, nowMs }: { status: AgentStatus
     <Station k="pool" name="Aqua pool" lit={(fills?.length ?? 0) > 0}>
       <Value>{fee ? `${fee}% fee per fill` : "Fills at the signed price"}</Value>
       <Note>Swaps fill only at the price the AI signed.</Note>
-      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-2"><ProtocolIcon protocol="uniswap" size={14} />A Uniswap v4 pool routes into Wick <CopyLink value={V4_HOOK.address} href={EXPLORERS[BASE_CHAIN_ID]!.address(V4_HOOK.address)} label="Uniswap v4 hook" /></p>
       <div className="mt-2 text-[13px] text-ink-2">
         {fillsError ? <span className="text-warn-ink">Fills unreadable right now</span> : fills === null ? <span aria-hidden className="skeleton inline-block h-4 w-44 align-middle" /> : fills.length === 0 ? <span>No fill yet</span> : (
           <span className="inline-flex flex-wrap items-center gap-x-2">
@@ -512,26 +510,11 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
       <Value><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" /></Value>
       <div className="mt-3 max-w-[240px] space-y-3">
         {cover !== null ? (
-          <p className="num text-[13px] text-ink-2"><span className="text-ok-ink">{fmtPct(cover * 100)}</span> of the {fmtUsd(econ.aiSpentUsd)} spent on AI</p>
+          <p className="num text-[13px] text-ink-2">Fees vs AI spent <span className={cover >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(cover * 100)}</span> of {fmtUsd(econ.aiSpentUsd)}</p>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
-        <PaidQuotes />
       </div>
     </Station>
-  );
-}
-
-/** The second revenue line: other agents buying a signed price over x402. */
-function PaidQuotes() {
-  const q = useQuoteStats();
-  if (!q.data) return null;
-  const d = q.data;
-  return (
-    <p className="text-[13px] text-ink-2">
-      {d.paidQuotes > 0
-        ? <><span className="num text-ink">{fmtUsdc(d.revenueUsdc)} USDC</span> from {d.paidQuotes} paid quotes, {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}</>
-        : <>Agents can also buy a signed price for 0.01 USDC over <a href={`${QUOTES_API}/v1/stats`} target="_blank" rel="noreferrer" className="text-ink underline decoration-rule-2 underline-offset-4 hover:decoration-ink">x402</a></>}
-    </p>
   );
 }
 
@@ -592,7 +575,7 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
       </div>
       <Note className="max-w-[52ch] text-ink-2">
         {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</> : <> at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</>}. </> : null}
-        Spent today <span className="num text-ink">{fmt0g(toNumber(spent, "0G"))} <Tk>0G</Tk></span>. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
+        Today it has used <span className="num text-ink">{fmtPct(cap > 0n ? (Number(spent) / Number(cap)) * 100 : 0)}</span> of that cap. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
       <WhatIf balanceWei={bal} />
     </Station>

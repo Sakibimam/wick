@@ -45,6 +45,13 @@ export function presetUsdcUnits(status: AgentStatus, buy: Priced | null): bigint
   return cap !== null && cap > 0n && cap < 100_000n ? cap : 100_000n;
 }
 
+/** Fills of the demo size still needed for fees to cover everything spent on AI so far; 0 once covered. */
+export function fillsToCover(econ: Economics, status: AgentStatus, presetUsdc: number): number | null {
+  if (!status.strategy || econ.coverage === null) return null;
+  const gap = econ.aiSpentUsd - econ.feesEarnedUsdc;
+  return gap <= 0 ? 0 : Math.ceil(gap / ((presetUsdc * status.strategy.feeBps) / 10_000));
+}
+
 /** The latest run billed in 0G: the price of the agent's next decision. */
 export const lastPaidRun = (status: AgentStatus): Run | null => runsOf(status).find((r) => r.billedIn === "0g" && r.costUsd !== null) ?? null;
 
