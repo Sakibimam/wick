@@ -1,6 +1,6 @@
 # Uniswap developer feedback
 
-Upkeep is a market-making agent on Base that pays for its own AI inference on 0G. Uniswap v3 is load-bearing in three places: the W0G/USDC 0.3% pool is the reference mid every signed price must stay within 3% of, QuoterV2 sizes the fee conversion, and SwapRouter02 converts the agent's USDC fees into W0G before they bridge to 0G chain.
+Wick is a market-making agent on Base that pays for its own AI inference on 0G. Uniswap v3 is load-bearing in three places: the W0G/USDC 0.3% pool is the reference mid every signed price must stay within 3% of, QuoterV2 sizes the fee conversion, and SwapRouter02 converts the agent's USDC fees into W0G before they bridge to 0G chain.
 
 Live on Base: `exactInputSingle` on SwapRouter02, 0.40 USDC to 2.582956 W0G, tx [`0x3aea85c4…1e52`](https://basescan.org/tx/0x3aea85c4ccc887384a64ad74db859029507c214a6a0d1d2fe3e1bb86ea8f1e52).
 
@@ -28,7 +28,7 @@ The one improvement with the greatest impact: flag fee outliers wherever pools a
 
 **Why it matters.** v4 allows any fee, so a token search, a pool list or a naive router that picks "a pool for this token" can land a user or an agent in a pool that takes a quarter of the trade. Autonomous agents are the most exposed: they select pools by token address and liquidity, never by eye.
 
-**What we did.** Upkeep pins the v3 pool address (`agent/src/price.ts:6`) and the 3000 fee tier on every conversion (`agent/src/funding.ts:29`), and never discovers pools at runtime.
+**What we did.** Wick pins the v3 pool address (`agent/src/price.ts:6`) and the 3000 fee tier on every conversion (`agent/src/funding.ts:29`), and never discovers pools at runtime.
 
 **Suggested fix.**
 - Return a fee-outlier flag (for example, fee above 1%) in the Trading API quote response and in any pool discovery endpoint, next to liquidity and 24h volume.
@@ -39,7 +39,7 @@ The one improvement with the greatest impact: flag fee outliers wherever pools a
 
 **What we hit.** Calling the Trading API quote endpoint without an API key returns 401. There is no keyless path to a single quote, so a prototype cannot compare the API's route against an onchain quote before signing up.
 
-**What we did.** Upkeep quotes onchain through QuoterV2 (`agent/src/price.ts:35-38`) and swaps directly on SwapRouter02 (`agent/src/funding.ts:29`), which keeps the agent free of a key it would need to store and rotate.
+**What we did.** Wick quotes onchain through QuoterV2 (`agent/src/price.ts:35-38`) and swaps directly on SwapRouter02 (`agent/src/funding.ts:29`), which keeps the agent free of a key it would need to store and rotate.
 
 **Suggested fix.** Offer a keyless, IP rate-limited quote tier (quote only, no swap calldata), or publish a shared demo key for hackathon use. At minimum, make the 401 body name the dashboard URL where a key is issued, so the error itself is the onboarding step.
 
@@ -55,6 +55,6 @@ The one improvement with the greatest impact: flag fee outliers wherever pools a
 
 ## 5. v4 Aggregator Hooks could route to 1inch Aqua
 
-**The idea.** Upkeep's liquidity lives in a 1inch Aqua strategy whose price is an AI-signed quote, enforced onchain: `AgentQuoteExtruction` fills only at the current signed rate and reverts `StaleQuote` otherwise, in `quote()` and `swap()` alike (`contracts/src/AgentQuoteExtruction.sol:44`). Because quote and fill agree by construction, this liquidity is a clean source for a v4 Aggregator Hook: a W0G/USDC v4 pool whose hook asks AquaSwapVMRouter `quote()` and fills through `swap()` would let Uniswap routing reach agent-quoted Aqua liquidity, and give the strategy outside takers through the Uniswap interface.
+**The idea.** Wick's liquidity lives in a 1inch Aqua strategy whose price is an AI-signed quote, enforced onchain: `AgentQuoteExtruction` fills only at the current signed rate and reverts `StaleQuote` otherwise, in `quote()` and `swap()` alike (`contracts/src/AgentQuoteExtruction.sol:44`). Because quote and fill agree by construction, this liquidity is a clean source for a v4 Aggregator Hook: a W0G/USDC v4 pool whose hook asks AquaSwapVMRouter `quote()` and fills through `swap()` would let Uniswap routing reach agent-quoted Aqua liquidity, and give the strategy outside takers through the Uniswap interface.
 
 **Suggested fix.** Publish a reference Aggregator Hook adapter interface (a quote function and a fill function, exact-in and exact-out) with one external venue wired as the example, so RFQ and Aqua makers can plug in without writing hook accounting from scratch. We would build the Aqua adapter against it.

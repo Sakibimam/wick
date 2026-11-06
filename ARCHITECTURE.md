@@ -1,4 +1,4 @@
-# Upkeep architecture
+# Wick architecture
 
 Interactive diagram with pan, zoom, search and relationship tracing: [docs/ARCHITECTURE.html](docs/ARCHITECTURE.html) (source: [docs/architecture.json](docs/architecture.json)).
 
@@ -55,7 +55,7 @@ Signs the board's EIP-712 `Quote(maker, tokenIn, tokenOut, rateE18, expiry, nonc
 `agent/src/status.ts`: `GET /api/status` serves the persisted state (tier, balance, spend, inferences with request ids, quotes, fees, funding steps). `GET /api/quote` returns the live AquaSwapVMRouter `quote()` for an amount. CORS is pinned to the one `WEB_ORIGIN`.
 
 ### AgentQuoteBoard: `contracts/src/AgentQuoteBoard.sol`
-EIP-712 domain `Upkeep AgentQuoteBoard`, version `1`. A maker registers its agent with `setAgent`; anyone may relay a quote the agent signed. Stores one quote per maker and direction.
+EIP-712 domain `Upkeep AgentQuoteBoard`, version `1` (the signing domain keeps its original name). A maker registers its agent with `setAgent`; anyone may relay a quote the agent signed. Stores one quote per maker and direction.
 
 ### AgentQuoteExtruction: `contracts/src/AgentQuoteExtruction.sol`
 An `IExtruction` called by the shipped Aqua program at opcode `0x20` on the deployed AquaSwapVMRouter v1.0.2, with the router bytecode untouched. It reads the board, prices exact-in and exact-out at the signed rate minus the strategy fee, and reverts `StaleQuote` when no current quote exists. The same check runs inside `quote()` and `swap()`, so the amount a taker is quoted is the amount the fill pays.

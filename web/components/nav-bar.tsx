@@ -19,7 +19,7 @@ export function NavBar() {
   return (
     <header className="relative z-20 bg-paper">
       <div className="mx-auto flex h-16 max-w-[1312px] items-center gap-6 px-4 sm:px-6 lg:px-12">
-        <Link href="/" className="font-display text-[22px] font-semibold uppercase tracking-[0.12em] text-ink">Upkeep</Link>
+        <Link href="/" className="font-display text-[22px] font-semibold uppercase tracking-[0.12em] text-ink">Wick</Link>
         <nav aria-label="Primary" className="flex gap-5">
           {LINKS.map((l) => {
             const active = l.href === "/" ? path === "/" : path.startsWith(l.href);

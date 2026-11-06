@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Loads the agent's two secrets into the deployed Worker so its cron can sign and post quotes.
+# Usage: bash scripts/push-secrets.sh [worker-name]   (default: wick)
 # AGENT_PK comes from DEPLOYER_PK in contracts/.env, ZG_API_KEY from agent/.env.
 # Each value travels only through a pipe into `wrangler secret put`; nothing is printed or written.
 set -euo pipefail
 set +x
 root="$(cd "$(dirname "$0")/.." && pwd)"
+worker="${1:-wick}"
 wrangler="$root/web/node_modules/.bin/wrangler"
 [ -x "$wrangler" ] || { echo "wrangler missing: run bun install in web/ first" >&2; exit 1; }
 
@@ -22,9 +24,9 @@ put() { # secret-name file key
   [ -f "$2" ] || { echo "$2 not found" >&2; exit 1; }
   value="$(read_env "$2" "$3")"
   [ -n "$value" ] || { echo "$3 is empty in $2" >&2; exit 1; }
-  printf '%s' "$value" | (cd "$root/web" && "$wrangler" secret put "$1" >/dev/null)
+  printf '%s' "$value" | (cd "$root/web" && "$wrangler" secret put "$1" --name "$worker" >/dev/null)
   unset value
-  echo "set $1 from $3 in ${2#$root/}"
+  echo "set $1 on $worker from $3 in ${2#$root/}"
 }
 
 put AGENT_PK "$root/contracts/.env" DEPLOYER_PK

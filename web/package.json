@@ -10,7 +10,8 @@
     "test": "bun test",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "bun run cf:build && opennextjs-cloudflare preview",
-    "cf:deploy": "bun run cf:build && opennextjs-cloudflare deploy"
+    "cf:deploy": "bun run cf:build && opennextjs-cloudflare deploy",
+    "cf:redirect": "wrangler deploy -c redirect/wrangler.jsonc"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",

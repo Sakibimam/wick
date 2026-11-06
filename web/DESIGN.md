@@ -1,10 +1,10 @@
-# Upkeep design system: Night circuit
+# Wick design system: Night circuit
 
 Source: the DESIGN.md library slug `spacex` (`~/.config/design-md/designs/spacex.md`), adapted. Hallmark stamp: genre atmospheric, macrostructure 19 Map / Diagram, theme studied-DNA (spacex), nav N9 edge-aligned minimal, footer Ft1 mast-headed.
 
 ## Why this system fits a machine that feeds itself
 
-Upkeep is a closed metabolism: fills pay fees, fees cross from Base to 0G, the 0G balance pays for the AI run that signs the next price, and the price expires. That is a mission, not a dashboard, and the SpaceX language was built for exactly one kind of screen: a vehicle with a countdown over its name and telemetry for each stage. We keep its night canvas, its condensed DIN voice in capitals for names, its clock set directly above the thing it counts down to, and its refusal of decoration. We drop its photography (we have no photograph of an agent) and let the drawn circuit be the picture. Colour is spent only on state: the circuit glows in the agent's budget tier, the price fuse turns amber then red as it burns down, and white is the one action.
+Wick is a closed metabolism: fills pay fees, fees cross from Base to 0G, the 0G balance pays for the AI run that signs the next price, and the price expires. That is a mission, not a dashboard, and the SpaceX language was built for exactly one kind of screen: a vehicle with a countdown over its name and telemetry for each stage. We keep its night canvas, its condensed DIN voice in capitals for names, its clock set directly above the thing it counts down to, and its refusal of decoration. We drop its photography (we have no photograph of an agent) and let the drawn circuit be the picture. Colour is spent only on state: the circuit glows in the agent's budget tier, the price fuse turns amber then red as it burns down, and white is the one action.
 
 The page has one picture: the loop, drawn as a transit circuit across two lanes, Base on top and the 0G chain one tone lighter below. Each station is a real contract, each hop links its real transaction, and the price leg is a fuse. When the fuse is out, the circuit is visibly open, which is the product's whole argument: no fresh price, no fill.
 

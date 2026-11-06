@@ -1,6 +1,6 @@
-# Upkeep contracts
+# Wick contracts
 
-Upkeep's Aqua strategy executes only when the maker's registered agent has posted a signed quote for the same maker and token pair, and the quote has not expired.
+Wick's Aqua strategy executes only when the maker's registered agent has posted a signed quote for the same maker and token pair, and the quote has not expired.
 
 Each accepted quote stores the 0G Compute `inferenceId` used to produce it.
 
@@ -161,7 +161,7 @@ cast code "$ROUTER" --rpc-url https://ethereum-rpc.publicnode.com | grep -oiE 'f
 
 ## Quote and fee behavior
 
-`AgentQuoteBoard` uses EIP-712 domain name `Upkeep AgentQuoteBoard`, version `1`. A maker can register or revoke its agent. Quotes bind the maker, token pair, rate, expiry, nonce, and `inferenceId`; relayers can post valid agent signatures. Posting rejects expired quotes, zero rates, zero or missing `inferenceId`, same-token pairs, and zero tokens. Nonces increase strictly per maker. Every `setAgent` call, including setting the same agent or revoking with zero, advances the maker's agent epoch and invalidates outstanding quotes. Fills check that the quote belongs to the current agent epoch and re-check expiry. Views include `getAgent`, `lastNonce`, and `isQuoteCurrent`.
+`AgentQuoteBoard` uses EIP-712 domain name `Upkeep AgentQuoteBoard`, version `1` (the signing domain keeps its original name). A maker can register or revoke its agent. Quotes bind the maker, token pair, rate, expiry, nonce, and `inferenceId`; relayers can post valid agent signatures. Posting rejects expired quotes, zero rates, zero or missing `inferenceId`, same-token pairs, and zero tokens. Nonces increase strictly per maker. Every `setAgent` call, including setting the same agent or revoking with zero, advances the maker's agent epoch and invalidates outstanding quotes. Fills check that the quote belongs to the current agent epoch and re-check expiry. Views include `getAgent`, `lastNonce`, and `isQuoteCurrent`.
 
 The quote rate is output token wei per `1e18` input token wei. For exact-in, the extruction floors gross output at the signed rate, then floors again after subtracting the output-side fee. For exact-out, it rounds up the gross output required before the fee, then rounds up the required input. `amountNetPulled` is preserved.
 

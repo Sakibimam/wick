@@ -1,4 +1,4 @@
-# Upkeep agent
+# Wick agent
 
 Production Bun and TypeScript service for the Base W0G/USDC market and 0G Payment Layer.
 

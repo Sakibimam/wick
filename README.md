@@ -1,8 +1,8 @@
-# Upkeep
+# Wick
 
-**Live app: [upkeep.earn-shield-alerts.workers.dev](https://upkeep.earn-shield-alerts.workers.dev)**, swap W0G and USDC on Base against the agent's signed quotes, and trace the funding loop on the [brain ledger](https://upkeep.earn-shield-alerts.workers.dev/ledger).
+**Live app: [wick.earn-shield-alerts.workers.dev](https://wick.earn-shield-alerts.workers.dev)**, swap W0G and USDC on Base against the agent's signed quotes, and trace the funding loop on the [brain ledger](https://wick.earn-shield-alerts.workers.dev/ledger).
 
-Upkeep is a market-making agent that pays for its own brain: its 1inch Aqua strategy on Base fills only against quotes the agent signed after a 0G inference, and the fees it earns route through Uniswap and Chainlink CCIP into the 0G Payment Layer that pays for the next inference.
+Wick is a market-making agent that pays for its own brain: its 1inch Aqua strategy on Base fills only against quotes the agent signed after a 0G inference, and the fees it earns route through Uniswap and Chainlink CCIP into the 0G Payment Layer that pays for the next inference.
 
 Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) and the interactive diagram [docs/ARCHITECTURE.html](docs/ARCHITECTURE.html).
 
@@ -32,7 +32,7 @@ The swap ticket connects a browser wallet on Base mainnet, reads `quote()`, appr
 
 ```sh
 cd web && bun run cf:deploy     # build with OpenNext and deploy the Worker
-scripts/push-secrets.sh         # pipe AGENT_PK and ZG_API_KEY into wrangler secret put, nothing printed
+scripts/push-secrets.sh wick    # pipe AGENT_PK and ZG_API_KEY into wrangler secret put --name wick, nothing printed
 ```
 
 ## Live on Base
@@ -172,7 +172,7 @@ Keys are read only from the process environment and are never written or logged.
 
 ## Sponsors
 
-| Sponsor | What Upkeep uses | Where |
+| Sponsor | What Wick uses | Where |
 | --- | --- | --- |
 | 1inch | Aqua holds the two-sided W0G/USDC strategy; SwapVM v1.0.2 Extruction at opcode `0x20` gates every fill on the agent's signed quote, on the deployed, unmodified AquaSwapVMRouter | `contracts/src/AgentQuoteExtruction.sol`, `contracts/script/ShipStrategy.s.sol`, `agent/src/taker.ts` |
 | Uniswap | The v3 W0G/USDC 0.3% pool on Base is the reference mid the brain must stay within 3% of, and the venue that converts USDC fees to W0G through QuoterV2 and SwapRouter02 | `agent/src/price.ts`, `agent/src/funding.ts` |
@@ -182,7 +182,7 @@ Chainlink CCIP carries W0G from Base to 0G chain inside the funding leg (`agent/
 
 ## Built for ETHGlobal Mumbai 2026
 
-Upkeep is entered in the Continuity track. Development started before the ETHGlobal Mumbai 2026 event window, and the git history records every commit with its date.
+Wick is entered in the Continuity track. Development started before the ETHGlobal Mumbai 2026 event window, and the git history records every commit with its date.
 
 ## License
 

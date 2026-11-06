@@ -266,7 +266,7 @@ function Infield({ status, loading, error, onRetry, view, now, nowReady }: { sta
   const tone = status ? TIER_TONE[status.budget.tier] : "quiet";
   return (
     <div className="relative z-10 flex flex-col justify-center lg:px-10 lg:py-10 lg:[grid-area:infield]">
-      <h1 id="machine-title" className="max-w-[15ch] text-[44px] sm:text-[60px] lg:text-[60px]">Upkeep pays for its own brain</h1>
+      <h1 id="machine-title" className="max-w-[15ch] text-[44px] sm:text-[60px] lg:text-[60px]">Wick pays for its own brain</h1>
       <p className="mt-3 max-w-[48ch] text-[17px] leading-[1.5] text-ink-2">
         A market maker on Base. Every swap pays a fee, the fee crosses to the 0G chain, and it buys the AI run that signs the next price. No fresh price, no fill.
       </p>

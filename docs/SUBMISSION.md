@@ -1,16 +1,16 @@
-# Upkeep
+# Wick
 
-**One line.** Upkeep is an AI market maker whose trading fees pay for the inference that sets its prices.
+**One line.** Wick is an AI market maker whose trading fees pay for the inference that sets its prices.
 
-**Description.** Upkeep runs a 1inch Aqua strategy on Base that fills only against prices the agent signed after a 0G Private Computer inference, and every signed quote carries the hash of the 0G request that priced it. A SwapVM Extruction on the deployed, unmodified AquaSwapVMRouter checks freshness, nonce, pair, maker and agent binding on every fill, while the Uniswap v3 W0G/USDC pool anchors every price within 3% of the market. Fees route through Uniswap and Chainlink CCIP into the agent's own 0G Payment Layer vault, and a budget policy reads that vault every tick to choose its model, slow down or pause, so the brain pays for itself.
+**Description.** Wick runs a 1inch Aqua strategy on Base that fills only against prices the agent signed after a 0G Private Computer inference, and every signed quote carries the hash of the 0G request that priced it. A SwapVM Extruction on the deployed, unmodified AquaSwapVMRouter checks freshness, nonce, pair, maker and agent binding on every fill, while the Uniswap v3 W0G/USDC pool anchors every price within 3% of the market. Fees route through Uniswap and Chainlink CCIP into the agent's own 0G Payment Layer vault, and a budget policy reads that vault every tick to choose its model, slow down or pause, so the brain pays for itself.
 
 | Field | Value |
 | --- | --- |
-| Repository | https://github.com/Sakibimam/upkeep (MIT) |
-| Live demo | `https://upkeep.earn-shield-alerts.workers.dev` |
+| Repository | https://github.com/Sakibimam/wick (MIT) |
+| Live demo | `https://wick.earn-shield-alerts.workers.dev` |
 | Demo video script | [docs/DEMO-SCRIPT.md](DEMO-SCRIPT.md) |
 | Architecture | [ARCHITECTURE.md](../ARCHITECTURE.md), interactive [docs/ARCHITECTURE.html](ARCHITECTURE.html) |
-| Uniswap feedback | [FEEDBACK.md](../FEEDBACK.md), form link `https://github.com/Sakibimam/upkeep/blob/main/FEEDBACK.md` |
+| Uniswap feedback | [FEEDBACK.md](../FEEDBACK.md), form link `https://github.com/Sakibimam/wick/blob/main/FEEDBACK.md` |
 | Team | [team] |
 | Track | Continuity |
 
@@ -55,7 +55,7 @@ cast keccak "5319a0b6-562e-4bbe-a141-dfb94fc20aaa0x833589fCD6eDb6E08f4c7C32D4f71
 
 ## 0G: Agents That Pay for Themselves
 
-Upkeep earns the way the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity. Every fill pays the strategy fee, the runtime accrues the agent's share from SwapVM `Swapped` events (`agent/src/runtime.ts:48`), and the funding leg moves value into the agent's 0G compute vault with no human step.
+Wick earns the way the prize text invites: "Other ways of earning count too, such as charging for a service or getting paid by other agents." The service is liquidity. Every fill pays the strategy fee, the runtime accrues the agent's share from SwapVM `Swapped` events (`agent/src/runtime.ts:48`), and the funding leg moves value into the agent's 0G compute vault with no human step.
 
 > The full loop: money in, credit landing in the agent's 0G compute account, and inference paid from that balance, with tx hashes and request IDs
 
@@ -98,7 +98,7 @@ Measured unit economics: `enable_thinking: false` takes one pricing decision fro
 
 > A working app a judge can try, with a clear reason someone comes back tomorrow
 
-- `https://upkeep.earn-shield-alerts.workers.dev`: the swap page fills W0G/USDC through AquaSwapVMRouter from the judge's own wallet at the agent's signed price, with a countdown to the quote's expiry. The ledger page shows whether the agent is still paying its own way: vault balance, spend against the cap, budget tier, fees accrued and the latest funding step.
+- `https://wick.earn-shield-alerts.workers.dev`: the swap page fills W0G/USDC through AquaSwapVMRouter from the judge's own wallet at the agent's signed price, with a countdown to the quote's expiry. The ledger page shows whether the agent is still paying its own way: vault balance, spend against the cap, budget tier, fees accrued and the latest funding step.
 - The reason to return: the price moves, the agent re-prices on 0G, and the ledger shows its compute account rising with fills and falling with inference.
 
 > One sentence on what breaks if 0G is removed
@@ -127,19 +127,19 @@ The position is a two-sided W0G/USDC strategy priced by an AI agent, where SwapV
 
 > Proper Git commit history (no single-commit entries on the final day)
 
-Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibimam/upkeep/commit/ae1859d), through contracts, fork tests, agent runtime, web app, Base mainnet loop and funding leg: https://github.com/Sakibimam/upkeep/commits/main
+Small, dated commits from the first one, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d), through contracts, fork tests, agent runtime, web app, Base mainnet loop and funding leg: https://github.com/Sakibimam/wick/commits/main
 
 ## Uniswap: Build with Uniswap (and the Continuity Track prize)
 
 > A public GitHub repository with open-source code, a FEEDBACK.md file, and a completed submission to the Uniswap Developer Feedback Form (https://developers.uniswap.org/hackathon-feedback) that includes the link to your FEEDBACK.md file.
 
-- Repository https://github.com/Sakibimam/upkeep, MIT licensed.
+- Repository https://github.com/Sakibimam/wick, MIT licensed.
 - [FEEDBACK.md](../FEEDBACK.md): concrete feedback from the live integration, each item with what worked, what broke and a suggested fix.
-- Feedback form link field: `https://github.com/Sakibimam/upkeep/blob/main/FEEDBACK.md`.
+- Feedback form link field: `https://github.com/Sakibimam/wick/blob/main/FEEDBACK.md`.
 
 > Make sure your README clearly points to the relevant contracts and lines of code so we can verify your integration.
 
-| Uniswap piece | Role in Upkeep | Code |
+| Uniswap piece | Role in Wick | Code |
 | --- | --- | --- |
 | v3 W0G/USDC 0.3% pool `0xe03cCe44…0c4e` | reference mid every signed price must sit within 3% of | `agent/src/price.ts:6`, `agent/src/price.ts:28`, band check `agent/src/brain.ts:44` |
 | QuoterV2 `0x3d4e44Eb…B76a` | sizes the USDC fee conversion and its slippage floor | `agent/src/price.ts:36`, `agent/scripts/live-bootstrap.ts:41` |
@@ -156,4 +156,4 @@ A market maker that signs a bad price loses money to the first arbitrageur, so e
 
 ## Continuity disclosure
 
-Upkeep is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window. The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/upkeep/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history.
+Wick is entered in the Continuity track. Development began on 2026-11-05, before the ETHGlobal Mumbai 2026 event window. The starting point is the repository's first commit, [`ae1859d`](https://github.com/Sakibimam/wick/commit/ae1859d) (2026-11-05 02:56 IST), and every later commit carries its date in the history.

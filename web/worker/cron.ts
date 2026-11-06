@@ -15,6 +15,8 @@ const chain = { ...base, fees: { maxPriorityFeePerGas: 1_000_000n } };
 const fingerprint = (s: CronState) => JSON.stringify({ ...s, lastTick: s.lastTick?.outcome ?? null });
 
 export async function runCron(env: CronEnv): Promise<void> {
+  // Two workers share this KV during a rename; one without the signer secrets must not overwrite the signer's state.
+  if (!env.AGENT_PK || !env.ZG_API_KEY) { console.log("secrets not set"); return; }
   const baseRpcUrl = env.BASE_RPC_URL || "https://mainnet.base.org";
   // mainnet.base.org answers Cloudflare egress with 429, so reads, sends and receipts fall through three public Base RPCs.
   const baseUrls = [...new Set(["https://base-rpc.publicnode.com", baseRpcUrl, "https://base.drpc.org"])];

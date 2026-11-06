@@ -2,14 +2,14 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Upkeep: a market maker that pays for its own brain",
+    "title": "Wick: a market maker that pays for its own brain",
     "quality_profile": "showcase",
     "viewBox": [
       1360,
       680
     ],
     "repository": {
-      "url": "https://github.com/Sakibimam/upkeep",
+      "url": "https://github.com/Sakibimam/wick",
       "revision": "fb309b843a60c587e2e57799a7b2a86919ef5dc7"
     }
   },
