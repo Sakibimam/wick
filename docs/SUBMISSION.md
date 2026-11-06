@@ -194,7 +194,7 @@ Wick is entered in the Continuity track. Development began on 2026-11-05, before
 
 ### Changelog
 
-From `git log --format='%h %ad %s'`, times in IST. 29 commits before kickoff, 77 inside the window as of `1cae758`.
+From `git log --format='%h %ad %s'`, times in IST. 29 commits before kickoff, 87 inside the window as of `fd46327`.
 
 **Before the event window (2026-11-05, 02:56 to 20:18 IST)**
 
@@ -223,6 +223,11 @@ From `git log --format='%h %ad %s'`, times in IST. 29 commits before kickoff, 77
 | `37b8894` | 2026-11-06 14:14 | the hook live on Base |
 | `881006e` | 2026-11-06 14:39 | fee harvest inside the funding machine |
 | `4137d08` to `1cae758` | 2026-11-06 15:33 to 15:39 | bid and ask half-spreads, refused answers re-post the last valid decision, depth and per-quote budget caps |
+| `ec68bb4` to `7a1cb04` | 2026-11-06 15:43 to 15:47 | cron revenue read from chain, each x402 settlement bound to the payer's `AuthorizationUsed`, hook revert-path tests |
+| `a9696de` to `dc7f404` | 2026-11-06 15:48 to 15:55 | the router's TEE verdict, provider and provider identity persisted per request |
+| `5debc13` | 2026-11-06 16:13 | `/api/status` serves a 15 s memo and the last good status, marked stale, when chain reads fail |
+| `7d6f4d2` | 2026-11-06 16:25 | the sponsor deck at `/deck` |
+| `fd46327` | 2026-11-06 16:28 | a refused swap names the cap that bound it |
 
 ### What's next
 
