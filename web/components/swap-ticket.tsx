@@ -17,7 +17,7 @@ import { erc20Abi } from "@/lib/abis";
 import { parseTyped } from "@/lib/amounts";
 import { AQUA_ROUTER, BASE_CHAIN_ID, CHAIN_NAMES, TOKENS, type TokenSymbol } from "@/lib/config";
 import { ctaFor } from "@/lib/cta";
-import { decisionCostUsd, feeFromAmount, fmtDecisions, maxFillIn, presetUsdcUnits } from "@/lib/economics";
+import { decisionCostUsd, feeFromAmount, fillCap, fmtDecisions, presetUsdcUnits } from "@/lib/economics";
 import { fmtPrice, fmtUnits, fmtUsd, significant, toNumber } from "@/lib/format";
 import { freshness, secondsLeft, type Direction, type Priced } from "@/lib/quotes";
 import { classifyQuoteError } from "@/lib/revert";
@@ -70,8 +70,9 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
   const quoteKind = quote.isError && quote.error instanceof AgentError && quote.error.kind === "http" ? classifyQuoteError(quote.error.message) : null;
   const quoteState = !quoteEnabled ? "idle" : amount !== debouncedAmount || quote.isPending ? "loading" : quote.isError ? (quoteKind && quoteKind !== "other" ? "stale" : "error") : "ready";
 
-  const reportedMax = quote.data?.maxAmountIn != null ? BigInt(quote.data.maxAmountIn) : null;
-  const maxIn = reportedMax ?? (status ? maxFillIn(direction, status, price) : null);
+  // One cap for the ticket and the depth card beside it: the signed per-fill size or the strategy's depth, whichever binds.
+  const cap = status ? fillCap(direction, status, price) : null;
+  const maxIn = cap?.units ?? null;
   const overDepth = amount !== null && maxIn !== null && amount > maxIn;
 
   const refreshChain = () => { void balance.refetch(); void allowance.refetch(); void queryClient.invalidateQueries({ queryKey: ["fills"] }); void queryClient.invalidateQueries({ queryKey: ["agent-status"] }); };
@@ -79,7 +80,10 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
 
   const cta = ctaFor({ connected: isConnected, chainId, baseChainId: BASE_CHAIN_ID, hasPrice: Boolean(price), priceExpired: expired, amount, balance: balance.data, quote: quoteState, allowance: allowance.data, phase: flow.phase, sellSymbol: sell, maxIn });
   const amountOut = quoteState === "ready" && quote.data ? BigInt(quote.data.amountOut) : null;
-  const effective = amountOut && amount ? (direction === "buy-w0g" ? toNumber(amount, "USDC") / toNumber(amountOut, "W0G") : toNumber(amountOut, "USDC") / toNumber(amount, "W0G")) : null;
+  // The router clamps an oversized amount to what it can fill; its price is that pair, never the typed amount over the clamped output.
+  const quotedIn = quoteState === "ready" && quote.data ? BigInt(quote.data.amountIn) : null;
+  const clamped = quotedIn !== null && amount !== null && quotedIn < amount;
+  const effective = amountOut && quotedIn ? (direction === "buy-w0g" ? toNumber(quotedIn, "USDC") / toNumber(amountOut, "W0G") : toNumber(amountOut, "USDC") / toNumber(quotedIn, "W0G")) : null;
   const mid = status?.mid ?? null;
   const usd = (units: bigint, tok: TokenSymbol) => (tok === "USDC" ? toNumber(units, "USDC") : mid === null ? null : toNumber(units, "W0G") * mid);
 
@@ -162,9 +166,9 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
       </div>
 
       <div className="rounded-control bg-sunken p-4">
-        <p className="label">You receive, from the router quote</p>
+        <p className="label">{clamped && quotedIn !== null ? <>You receive for {fmtUnits(quotedIn, sell)} <Tk>{sell}</Tk>, the most this price fills</> : "You receive, from the router quote"}</p>
         <div className="mt-1 flex items-center gap-3">
-          <p className={cn("num min-w-0 flex-1 truncate text-[40px] font-medium leading-[48px]", amountOut === null ? "text-rule-2" : overDepth ? "text-muted line-through decoration-danger decoration-2" : "text-ink")} aria-live="polite">
+          <p className={cn("num min-w-0 flex-1 truncate text-[40px] font-medium leading-[48px]", amountOut === null ? "text-rule-2" : overDepth && !clamped ? "text-muted line-through decoration-danger decoration-2" : "text-ink")} aria-live="polite">
             {amountOut !== null ? fmtUnits(amountOut, buy) : quoteState === "loading" ? <span className="skeleton inline-block h-9 w-40 align-middle" aria-label="Getting the router quote" /> : "0"}
           </p>
           <TokenChip symbol={buy} />
@@ -177,14 +181,16 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
           Max fill right now{" "}
           {maxIn !== null ? <span className={cn(overDepth ? "text-danger-ink" : "text-ink")}>{fmtUnits(maxIn, sell)} {sell}</span> : status ? "unknown" : <span aria-hidden className="skeleton inline-block h-3.5 w-20 align-middle" />}
         </span>
-        <button type="button" onClick={preset} disabled={expired} className="rounded-control disabled:cursor-not-allowed disabled:opacity-50 border border-rule-2 px-2 py-1 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-ink active:scale-[0.97]">
-          Fill {fmtUnits(presetUnits, "USDC")} USDC
-        </button>
+        {direction === "buy-w0g" ? (
+          <button type="button" onClick={preset} disabled={expired} className="rounded-control disabled:cursor-not-allowed disabled:opacity-50 border border-rule-2 px-2 py-1 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-ink active:scale-[0.97]">
+            Pay {fmtUnits(presetUnits, "USDC")} USDC
+          </button>
+        ) : null}
       </p>
 
       <dl className="mt-3 space-y-2.5 px-1 text-[13px]">
         <Row k="Signed price" v={status ? (price ? `1 W0G = ${fmtPrice(price.priceUsdcPerW0g)} USDC` : "no price signed") : null} strike={expired} />
-        <Row k={fee !== null ? `After the ${fee.toFixed(2)}% maker fee` : "After the maker fee"} v={status ? (effective !== null ? `1 W0G = ${fmtPrice(effective)} USDC` : "shown once you enter an amount") : null} muted={effective === null} />
+        {effective !== null ? <Row k={fee !== null ? `After the ${fee.toFixed(2)}% maker fee` : "After the maker fee"} v={`1 W0G = ${fmtPrice(effective)} USDC`} /> : null}
         <div className="flex items-center justify-between gap-4">
           <dt className="text-muted">Price</dt>
           <dd>{price ? <Countdown expiry={price.expiry} now={now} ttl={ttl} ready={nowReady} className="w-40 text-right" /> : status ? <span className="text-ink">no price signed</span> : <span aria-hidden className="skeleton inline-block h-4 w-32" />}</dd>
@@ -197,7 +203,7 @@ export function SwapTicket({ status, priced, direction, setDirection, now, nowRe
 
       <div className="mt-4 space-y-3">
         {overDepth && maxIn !== null ? (
-          <Alert tone="warn"><AlertTitle>The pool cannot fill that much right now.</AlertTitle><AlertBody>The strategy holds {status?.strategy ? `${fmtUnits(status.strategy.w0g, "W0G")} W0G and ${fmtUnits(status.strategy.usdc, "USDC")} USDC` : "a small balance"}, so the largest {sell} it can take is {fmtUnits(maxIn, sell)}. A bigger swap reverts on chain.</AlertBody></Alert>
+          <Alert tone="warn"><AlertTitle>This price fills up to {fmtUnits(maxIn, sell)} {sell}.</AlertTitle><AlertBody>{cap?.by === "signed" ? <>The agent signed this price for up to {fmtUnits(maxIn, sell)} {sell} per fill, so a bigger swap reverts on chain. Pay that much or less.</> : <>The strategy holds {status?.strategy ? `${fmtUnits(direction === "buy-w0g" ? status.strategy.w0g : status.strategy.usdc, buy)} ${buy}` : "a small balance"} to pay out, so the largest {sell} it can take is {fmtUnits(maxIn, sell)}. A bigger swap reverts on chain.</>}</AlertBody></Alert>
         ) : null}
         {isConnected && onBase && cta.kind === "balance" ? (
           <Alert tone="warn"><AlertTitle>Not enough {sell} in this wallet.</AlertTitle><AlertBody>You hold {balance.data !== undefined ? fmtUnits(balance.data, sell) : "0"} {sell} on Base and tried to pay {amount ? fmtUnits(amount, sell) : "0"}.</AlertBody></Alert>

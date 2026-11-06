@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { decisionsFor, economicsOf, fmtDecisions, presetUsdcUnits } from "./economics";
+import { decisionsFor, decisionsPerUsdc, economicsOf, fmtDecisions, presetUsdcUnits } from "./economics";
 import { latestByDirection } from "./quotes";
 import { fmt0g, fmtPct, fmtUsdc, significant, toNumber } from "./format";
 import { statusSchema, type AgentStatus } from "./schema";
@@ -79,7 +79,7 @@ export async function renderCard(): Promise<ImageResponse> {
   const fuel = status ? fmt0g(toNumber(status.budget.computeBalanceWei, "0G")) : null;
   const preset = status ? toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC") : 0.1;
   const perSwap = status?.strategy ? decisionsFor((preset * status.strategy.feeBps) / 10_000, status) : null;
-  const perUsdc = status?.strategy ? decisionsFor(status.strategy.feeBps / 10_000, status) : null;
+  const perUsdc = status ? decisionsPerUsdc(status) : null;
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: C.paper, color: C.ink, padding: "56px 64px", fontFamily: display ? "Barlow Condensed" : "sans-serif" }}>

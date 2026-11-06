@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CHAIN_ICON, CHAIN_NAMES, PROTOCOL_ICON, TOKEN_ICON, TOKENS, USDC, W0G } from "./config";
 import { cluster } from "./cluster";
-import { decisionsFor, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, runsOf, takersOf } from "./economics";
+import { decisionsFor, decisionsPerUsdc, economicsOf, fillCap, fillEconomics, fmtDecisions, maxFillIn, runCost, runsOf, takersOf } from "./economics";
+import { gist, humaniseReason, outcomeOf } from "./decision";
 import { clock, countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsdc, fmtUsdcAtLeast, shortHash } from "./format";
 import { tickSummary } from "./machine";
 import { latestByDirection } from "./quotes";
@@ -107,12 +108,17 @@ describe("economics", () => {
     expect((sell * 145897n * 9970n) / (10n ** 18n * 10_000n)).toBeLessThanOrEqual(600000n);
   });
   test("every decisions figure divides by one cost and rounds one way", () => {
-    expect(fmtDecisions(9.74)).toBe("9");
+    expect(fmtDecisions(9.74)).toBe("10");
+    expect(fmtDecisions(7.82)).toBe("8");
+    expect(fmtDecisions(78.2)).toBe("78");
     expect(fmtDecisions(0.42)).toBe("0.4");
-    const reported = { ...live, economics: { inferenceCostUsd: 0.00003 } };
     const fill = { txHash: sig("c"), blockNumber: 1n, timeMs: 1, taker: live.agent, tokenIn: USDC, tokenOut: W0G, amountIn: 100000n, amountOut: 1n, decisionsFunded: 99 };
-    expect(fillEconomics(fill, reported).decisionsFunded).toBeCloseTo(decisionsFor(0.0003, reported)!, 9);
-    expect(decisionsFor(0.0003, reported)).toBeCloseTo(10, 9);
+    // The last 0G-billed run is the one cost; a reported figure that disagrees does not move any surface.
+    const lastUsd = runsOf(live).find((r) => r.billedIn === "0g")!.costUsd!;
+    const reported = { ...live, economics: { inferenceCostUsd: lastUsd * 3 } };
+    expect(fillEconomics(fill, reported).decisionsFunded).toBeCloseTo(0.0003 / lastUsd, 9);
+    expect(decisionsPerUsdc(reported)! / 10).toBeCloseTo(fillEconomics(fill, reported).decisionsFunded!, 9);
+    expect(decisionsFor(0.0003, { ...live, inferences: [], economics: { inferenceCostUsd: 0.00003 } })).toBeCloseTo(10, 9);
   });
   test("the agent's own fill is a seed, not an outside taker", () => {
     const fill = (taker: string) => ({ txHash: sig("c"), blockNumber: 1n, timeMs: 1, taker, tokenIn: USDC, tokenOut: W0G, amountIn: 100000n, amountOut: 1n });
@@ -133,6 +139,38 @@ describe("clusters and ticks", () => {
     expect(tickSummary(two)!.failStreak).toBe(2);
     expect(tickSummary({ lastTicks: [{ at: "2026-11-06T07:10:00Z", outcome: "posted r" }] })!.failed).toBe(false);
     expect(tickSummary({ lastTick: { at: "2026-11-06T07:10:00Z", outcome: "refused http_error; funding hold no_fees" } })!.words).toBe("retrying");
+  });
+  test("a guard refusal is a hold, never a retry, and does not extend a failure streak", () => {
+    const refused = { lastTicks: [{ at: "2026-11-06T09:40:51Z", outcome: "refused skew_against_inventory 4089ff32; funding hold no_fees" }, { at: "2026-11-06T09:35:51Z", outcome: "error" }] };
+    expect(tickSummary(refused)!.words).toBe("held: answer refused by guard");
+    expect(tickSummary(refused)!.failed).toBe(false);
+    expect(tickSummary(refused)!.failStreak).toBe(0);
+  });
+});
+
+describe("run outcomes", () => {
+  test("refusals name their guard, transport errors do not pose as decisions", () => {
+    expect(outcomeOf({ outcome: "refused skew_against_inventory" })).toMatchObject({ kind: "refused", label: "Refused: skew against inventory" });
+    expect(outcomeOf({ outcome: "refused reason_invalid" }).kind).toBe("refused");
+    expect(outcomeOf({ outcome: "refused http_error" }).kind).toBe("failed");
+    expect(outcomeOf({ outcome: "posted", postedSpreadBps: 155, skewBps: 150 }).label).toBe("Posted: 155 bps, lean +150");
+    expect(outcomeOf({ outcome: "posted", postedSpreadBps: 155, bidHalfSpreadBps: 60, askHalfSpreadBps: 95 }).label).toBe("Posted: bid 60 / ask 95 bps");
+  });
+  test("reasons lose their variable names and keep their meaning", () => {
+    const raw = "High w0gValueShare of 0.967 requires strong positive skew to shed inventory, realized vol of 22.86 bps widens spread above the 30bps floor, and low USDC balance restricts maxAmountIn.";
+    const h = humaniseReason(raw);
+    expect(h).toContain("W0G share of inventory at 96.7%");
+    expect(h).toContain("30 bps");
+    expect(h).toContain("realized volatility");
+    expect(h).not.toMatch(/[a-z][A-Z]/);
+    expect(gist(h)).toBe("High W0G share of inventory at 96.7% requires strong positive skew to shed inventory");
+  });
+  test("the binding fill constraint is named", () => {
+    const p = latestByDirection(live.quotes);
+    const cap = fillCap("buy-w0g", live, p["buy-w0g"])!;
+    expect(cap.units).toBe(maxFillIn("buy-w0g", live, p["buy-w0g"])!);
+    const signed = { ...p["buy-w0g"]!, quote: { ...p["buy-w0g"]!.quote, maxAmountIn: "1000" } };
+    expect(fillCap("buy-w0g", live, signed)).toEqual({ units: 1000n, by: "signed" });
   });
 });
 

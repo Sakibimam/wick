@@ -6,7 +6,7 @@ const txHash = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "tx hash");
 const digits = z.union([z.string().regex(/^\d+$/, "unsigned integer string"), z.number().int().nonnegative().transform(String)]);
 const timeLike = z.union([z.string().min(1), z.number().nonnegative()]);
 
-const tickSchema = z.object({ at: z.string(), outcome: z.string() });
+const tickSchema = z.object({ at: z.string(), outcome: z.string(), error: z.string().optional().catch(undefined) });
 // Fields another service is still rolling out: a shape this page does not expect is dropped, never fatal.
 const soft = <T extends z.ZodType>(t: T) => t.optional().catch(undefined);
 // A figure the agent may send as a number or a decimal string; null means it could not be computed.
@@ -47,7 +47,18 @@ export const inferenceSchema = z.object({
   reason: soft(z.string().nullable()),
   skewBps: soft(z.number().nullable()),
   maxAmountIn: soft(digits.nullable()),
+  maxAmountInUsdc: soft(z.number().nullable()),
   ttlSeconds: soft(z.number().nullable()),
+  spreadBps: soft(z.number().nullable()),
+  postedSpreadBps: soft(z.number().nullable()),
+  // Per-side distance from the TWAP the agent signed; present once the agent reports both sides.
+  bidHalfSpreadBps: soft(z.number().nullable()),
+  askHalfSpreadBps: soft(z.number().nullable()),
+  teeVerified: soft(z.boolean().nullable()),
+  provider: soft(z.string().nullable()),
+  inferenceId: soft(hex.nullable()),
+  // "posted", or "refused <guard code>" when the agent's guard dropped the answer.
+  outcome: soft(z.string()),
 });
 export type Inference = z.infer<typeof inferenceSchema>;
 
@@ -88,9 +99,13 @@ export const statusSchema = z.object({
     breakEvenFillUsdcPerRun: num,
     runwayDays: num,
     inferenceCostUsd: num,
+    gasPerRequoteUsd: num,
+    requotesPerDay: num,
   }).partial()),
   seedVsEarned: soft(z.object({ seedUsdc: num, earnedUsdc: num }).partial().nullable()),
   distinctTakers: soft(z.number().int().nonnegative()),
+  // The funding machine's last threshold decision: it fires once spendable fees reach k times the live bridge and gas cost.
+  fundingMachine: soft(z.object({ lastDecision: z.object({ k: z.number().positive(), costUsdc: num.optional() }).nullable().optional() })),
   contracts: soft(z.object({ board: address, extruction: address, v1: z.object({ board: address, extruction: address }).partial().optional() })),
 });
 export type AgentStatus = z.infer<typeof statusSchema>;

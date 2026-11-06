@@ -24,14 +24,21 @@ export function runsOf(status: AgentStatus): Run[] {
   return status.inferences.map((r) => normalizeRun(r, status.mid)).sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0));
 }
 
-/** What one AI decision costs in USD: the agent's own figure when it reports one, else the latest 0G-billed run. Every "decisions funded" number on the site divides by this. */
+/** What one AI decision costs in USD: the latest 0G-billed run at the pool mid, else the agent's own figure. Every "decisions funded" number on the site (hero, receipt, ledger, share card) divides by this. */
 export function decisionCostUsd(status: AgentStatus): number | null {
+  const last = lastPaidRun(status)?.costUsd;
+  if (last) return last;
   const reported = status.economics?.inferenceCostUsd;
-  return typeof reported === "number" && reported > 0 ? reported : lastPaidRun(status)?.costUsd ?? null;
+  return typeof reported === "number" && reported > 0 ? reported : null;
 }
 
-/** Whole decisions, since a half decision means nothing; under one it keeps one significant figure. */
-export const fmtDecisions = (n: number) => (n >= 1 ? String(Math.floor(n)) : n.toPrecision(1));
+/** Nearest whole decision, so 78 per 1 USDC and 8 per 0.10 USDC agree; under one it keeps one significant figure. */
+export const fmtDecisions = (n: number) => (n >= 1 ? String(Math.round(n)) : n.toPrecision(1));
+
+/** The headline: AI decisions paid for by the maker fee on 1 USDC traded. */
+export function decisionsPerUsdc(status: AgentStatus): number | null {
+  return status.strategy ? decisionsFor(status.strategy.feeBps / 10_000, status) : null;
+}
 
 /** Decisions a fee of `feeUsd` pays for. */
 export function decisionsFor(feeUsd: number, status: AgentStatus): number | null {
@@ -41,7 +48,7 @@ export function decisionsFor(feeUsd: number, status: AgentStatus): number | null
 
 /** The demo fill: 0.10 USDC, or the live buy cap when the signed price allows less. Every "one swap" figure uses this size. */
 export function presetUsdcUnits(status: AgentStatus, buy: Priced | null): bigint {
-  const cap = maxFillIn("buy-w0g", status, buy);
+  const cap = fillCap("buy-w0g", status, buy)?.units ?? null;
   return cap !== null && cap > 0n && cap < 100_000n ? cap : 100_000n;
 }
 
@@ -126,6 +133,11 @@ export function takersOf(status: AgentStatus, fills: Fill[]): { distinct: number
  * applied and a 0.5% margin for the rounding inside the router. Null when the strategy or price is unknown.
  */
 export function maxFillIn(direction: Direction, status: AgentStatus, price: Priced | null): bigint | null {
+  return fillCap(direction, status, price)?.units ?? null;
+}
+
+/** The same cap with the constraint that binds it: the agent's signed per-fill size, or the strategy's depth on the far side. */
+export function fillCap(direction: Direction, status: AgentStatus, price: Priced | null): { units: bigint; by: "signed" | "depth" } | null {
   if (!status.strategy || !price) return null;
   const rate = BigInt(price.quote.rateE18);
   if (rate <= 0n) return null;
@@ -133,7 +145,7 @@ export function maxFillIn(direction: Direction, status: AgentStatus, price: Pric
   const keep = 10_000n - BigInt(status.strategy.feeBps);
   const byDepth = (out * 10n ** 18n * 10_000n * 995n) / (rate * keep * 1000n);
   const signed = price.quote.maxAmountIn ? BigInt(price.quote.maxAmountIn) : null;
-  return signed !== null && signed > 0n && signed < byDepth ? signed : byDepth;
+  return signed !== null && signed > 0n && signed < byDepth ? { units: signed, by: "signed" } : { units: byDepth, by: "depth" };
 }
 
 /** A run's cost the same way everywhere: 0G first with the USD equivalent; a run the router billed in USD says so. */
@@ -142,3 +154,7 @@ export function runCost(r: Run): string {
   if (r.billedIn === "usd") return `${r.cost0g !== null ? `${fmt0g(r.cost0g)} 0G ` : ""}(${fmtUsd(r.costUsd!)}, billed in USD)`;
   return "cost not reported";
 }
+
+/** The agent keeps its last 50 runs (KEEP in agent/src/worker-tick.ts); until it has that many, the run list is every run since launch. */
+export const RUN_HISTORY = 50;
+export const spendWindow = (status: AgentStatus) => (status.inferences.length < RUN_HISTORY ? "since launch" : `over the last ${status.inferences.length} runs`);

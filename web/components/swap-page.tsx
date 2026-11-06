@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 import { usePostedAt } from "@/hooks/use-posted-at";
 import { Machine } from "@/components/machine";
 import { SwapTicket } from "@/components/swap-ticket";
-import { CopyLink } from "@/components/copy-link";
+import { CopyLink, CurlBox } from "@/components/copy-link";
 import { Amount, ProtocolIcon, Tk } from "@/components/token-mark";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
-import { BASE_CHAIN_ID, EXPLORERS, QUOTES_API, TOKENS, USDC, V4_HOOK } from "@/lib/config";
+import { BASE_CHAIN_ID, EXPLORERS, TOKENS, V4_HOOK } from "@/lib/config";
 import { useQuoteStats } from "@/hooks/use-quote-stats";
 import { decisionCostUsd, economicsOf, fillEconomics, fmtDecisions, maxFillIn, runCost, takersOf } from "@/lib/economics";
 import { fmt0g, fmtUnits, fmtUsd, fmtUsdc, fmtUsdcAtLeast, relativeTime, significant } from "@/lib/format";
@@ -73,7 +73,7 @@ function Economics({ status, priced, fills, nowMs, loading }: { status: AgentSta
       ) : null}
 
       <div className="border-t border-rule pt-6">
-        <p className="label flex items-center gap-1.5"><ProtocolIcon protocol="aqua" size={14} />Depth the strategy can fill right now</p>
+        <p className="label flex items-center gap-1.5"><ProtocolIcon protocol="aqua" size={16} />Depth the strategy can fill right now</p>
         <dl className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="ask">
             <dt className="text-[13px] text-ink-2"><span className="font-semibold text-[var(--tone)]">Buy</span> <Tk>W0G</Tk>, pay up to</dt>
@@ -123,8 +123,6 @@ function WaysIn({ nowMs }: { nowMs: number }) {
   const q = useQuoteStats();
   const d = q.data;
   const hookAt = usePostedAt(V4_HOOK.poolInitTx);
-  const cmd = `curl "${QUOTES_API}/v1/quote?tokenIn=${USDC}&amountIn=50000"`;
-  const [copied, setCopied] = useState(false);
   return (
     <div className="border-t border-rule pt-6">
       <p className="label">Two more ways in</p>
@@ -139,12 +137,9 @@ function WaysIn({ nowMs }: { nowMs: number }) {
           {d && d.paidQuotes > 0 ? (
             <p className="num mt-1">{d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}, {fmtUsdc(d.revenueUsdc)} USDC earned.</p>
           ) : (
-            <p className="mt-1">Any agent can buy the current signed price for 0.01 USDC over x402:</p>
+            <p className="mt-1">Any agent can buy this signed price for 0.01 USDC over x402. The first call answers 402 with the payment terms; a paid retry gets the signed quote and the 0G request behind it.</p>
           )}
-          <div className="mt-2 flex items-stretch overflow-hidden rounded-control bg-panel">
-            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2 text-[13px] text-ink [mask-image:linear-gradient(to_right,black_85%,transparent)]">{cmd}</code>
-            <button type="button" onClick={() => void navigator.clipboard.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); })} className="shrink-0 border-l border-rule px-3 text-[13px] font-medium text-ink transition-colors duration-150 hover:bg-sunken" aria-label="Copy the curl command">{copied ? "Copied" : "Copy"}</button>
-          </div>
+          <CurlBox className="mt-2 bg-panel" />
         </li>
       </ul>
     </div>

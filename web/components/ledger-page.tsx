@@ -2,9 +2,10 @@
 
 import { useMemo, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
+import { DecisionFacts, OutcomeChip } from "@/components/decision";
 import { Alert, AlertBody, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { CopyLink } from "@/components/copy-link";
+import { CopyLink, CurlBox } from "@/components/copy-link";
 import { EvidenceRow } from "@/components/evidence-row";
 import { Chronogram } from "@/components/chronogram";
 import { CountBadge, MarkTips } from "@/components/mark-tips";
@@ -18,13 +19,15 @@ import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, EXPLORERS, FILL_LOOKBACK_BLOCKS, QUOTES_API, TOKENS, V4_HOOK, ZERO_G_CHAIN_ID } from "@/lib/config";
 import { useQuoteStats } from "@/hooks/use-quote-stats";
-import { economicsOf, fillEconomics, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { useGasRunway } from "@/hooks/use-post-cost";
+import { economicsOf, fillEconomics, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, spendWindow, takersOf, type Economics, type Run } from "@/lib/economics";
 import { countdown, fmt0g, fmtBlock, fmtPct, fmtPrice, fmtUnits, fmtUsd, fmtUsdc, relativeTime, shortHash, significant, toNumber, utcStamp } from "@/lib/format";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
 import { buildLoop, type Fill, type Loop } from "@/lib/ledger";
 import { directionOf, impliedPrice, latestByDirection } from "@/lib/quotes";
 import type { AgentStatus } from "@/lib/schema";
 import { reasonText, TIERS } from "@/lib/tiers";
+import { gist, humaniseReason, outcomeOf, type Outcome } from "@/lib/decision";
 import { cn } from "@/lib/utils";
 
 type Spine = "base" | "zg" | "cross";
@@ -99,6 +102,7 @@ function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[
   const meta = TIERS[status.budget.tier];
   const lastModel = runsOf(status)[0]?.model ?? status.budget.model;
   const tierModel = status.budget.model;
+  const gas = useGasRunway(status);
   return (
     <div>
       <Chronogram status={status} fills={fills} nowMs={nowMs} />
@@ -106,6 +110,7 @@ function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[
         <li className={cn("inline-flex items-center gap-2 rounded-control bg-paper px-3 py-1.5 font-semibold text-ink", `tone-${meta.tone}`)}><span className="size-2 rounded-full bg-[var(--tone)]" aria-hidden />{meta.label} tier</li>
         {lastModel ? <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2" title={tierModel && tierModel !== lastModel ? `The ${status.budget.tier.toLowerCase()} tier asks for ${tierModel}` : undefined}>{tierModel && tierModel !== lastModel ? `router served ${lastModel}` : `model ${lastModel}`}</li> : null}
         <li className="rounded-control bg-paper px-3 py-1.5 text-ink-2">fuel <Amount value={fmt0g(toNumber(status.budget.computeBalanceWei, "0G"))} symbol="0G" size={14} className="text-ink" /></li>
+        {gas ? <li className={cn("num rounded-control bg-paper px-3 py-1.5", gas.days < 1 ? "text-warn-ink" : "text-ink-2")}>Base gas {significant(gas.days, 2)} days at {gas.perDay} posts a day</li> : null}
         <li className="num rounded-control bg-paper px-3 py-1.5 text-ink-2">{fmtPct(BigInt(status.budget.spendCapPerDayWei) > 0n ? (Number(status.budget.spentTodayWei) / Number(status.budget.spendCapPerDayWei)) * 100 : 0)} of the daily cap used</li>
       </ul>
       <p className="mt-3 max-w-[75ch] text-[14px] text-muted">{meta.consequence}</p>
@@ -267,35 +272,38 @@ function PriceRow({ q, nowMs, superseded }: { q: AgentStatus["quotes"][number]; 
   );
 }
 
-/** Fees as the stage's headline number, then what they cover and how far they are from the next funding run. */
+/** Fees as the stage's headline number, set against everything spent on AI, then how far they are from the next funding run. */
 function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
   const preset = toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC");
   const toCover = fillsToCover(econ, status, preset);
   const toThreshold = econ.fundingThresholdUsdc ? Math.min(1, econ.feesEarnedUsdc / econ.fundingThresholdUsdc) : null;
+  const max = Math.max(econ.feesEarnedUsdc, econ.aiSpentUsd) || 1;
   return (
     <div className="grid grid-cols-1 gap-8 rounded-card bg-panel p-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-end md:gap-12">
       <div>
         <p className="label">Fees earned</p>
         <p className="mt-2 font-display text-[64px] font-semibold leading-none text-ink lg:text-[88px]"><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" size={28} unitClassName="text-[24px]" /></p>
       </div>
-      <dl className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <dl className="grid grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div>
-          <dt className="label">AI spent</dt>
-          <dd className="num mt-1 text-[22px] text-ink">{fmtUsd(econ.aiSpentUsd)}</dd>
-          <dd className="text-[13px] text-muted">{status.inferences.length} runs</dd>
-        </div>
-        <div>
-          <dt className="label">Fees vs AI spent</dt>
-          <dd className={cn("num mt-1 text-[22px]", econ.coverage !== null && econ.coverage >= 1 ? "text-ok-ink" : "text-warn-ink")}>{econ.coverage !== null ? fmtPct(econ.coverage * 100) : "n/a"}</dd>
-          {toCover ? <dd className="num text-[13px] text-muted">{toCover} more {fmtUsdc(preset)} USDC {toCover === 1 ? "fill covers" : "fills cover"} it all</dd> : null}
+          <dt className="label">Fees earned vs AI spent, {spendWindow(status)}</dt>
+          <dd className="mt-2 space-y-1.5" aria-label={`${fmtUsd(econ.feesEarnedUsdc)} earned against ${fmtUsd(econ.aiSpentUsd)} spent on ${status.inferences.length} AI runs`}>
+            {[["earned", econ.feesEarnedUsdc, "tone-ok"], ["AI spent", econ.aiSpentUsd, "chain-zg"]].map(([k, v, cls]) => (
+              <span key={k as string} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 text-[13px]">
+                <span className="text-muted">{k as string}</span>
+                <span className="h-2 rounded-[2px] bg-sunken"><span className={cn("block h-full rounded-[2px]", cls === "tone-ok" ? "tone-ok bg-[var(--tone)]" : "chain-zg bg-[var(--chain)]")} style={{ width: `${Math.max(2, ((v as number) / max) * 100)}%` }} /></span>
+                <span className="num text-ink">{fmtUsd(v as number)}</span>
+              </span>
+            ))}
+          </dd>
+          <dd className="num mt-2 text-[13px] text-muted">{status.inferences.length} AI runs{toCover ? `; ${toCover} more ${fmtUsdc(preset)} USDC ${toCover === 1 ? "fill covers" : "fills cover"} all of it` : ", all covered by fees"}</dd>
         </div>
         <div>
           <dt className="label">Next funding run</dt>
           <dd className="num mt-1 text-[22px] text-ink">{econ.fundingThresholdUsdc !== null ? `${fmtUsdc(econ.fundingThresholdUsdc)} USDC` : "n/a"}</dd>
-          {toThreshold !== null ? <dd className="num text-[13px] text-muted">{fmtPct(toThreshold * 100)} of the way there</dd> : null}
+          <dd className="text-[13px] text-muted">{toThreshold !== null && toThreshold >= 0.1 ? <span className="num">{fmtPct(toThreshold * 100)} of the way there</span> : `of fees, ${status.fundingMachine?.lastDecision?.k ?? 3}x the live bridge and gas cost, so a run never spends more than it moves`}</dd>
         </div>
       </dl>
-
     </div>
   );
 }
@@ -327,58 +335,53 @@ function FundingRows({ loop, threshold, nowMs }: { loop: Loop; threshold: number
   );
 }
 
-/** Every billed run in one compact table, cost in 0G with its USD equivalent, under a sparkline of what each run cost. */
+/** Every billed run with what it decided: the price it posted, or the guard that refused it, the full reasoning one click away. */
 function RunTable({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
   const runs = runsOf(status);
   if (runs.length === 0) return <EmptyBlock title="The first billed AI run lands here." next="Each run's request id appears with its cost, so a signed price on the swap page can be matched to the money that paid for it." />;
-  const decided = runs.filter((r) => r.raw.reason || r.raw.skewBps != null).length;
-  // A Decision column that is mostly empty reads as broken; the rationale lives in the row's title until most runs carry one.
-  const hasDecision = decided * 2 > runs.length;
+  const outcomes = runs.map((r) => outcomeOf(r.raw));
+  const refused = outcomes.filter((o) => o.kind === "refused").length;
+  const posted = outcomes.filter((o) => o.kind === "posted").length;
   return (
     <div className="overflow-hidden rounded-card bg-panel">
       <CostSpark runs={runs} nowMs={nowMs} />
-      <ul className="divide-y divide-rule border-t border-rule md:hidden">
-        {runs.map((r) => (
-          <li key={r.requestId} className="space-y-1 px-4 py-3 text-[14px]">
-            <p className="flex items-baseline justify-between gap-3">
-              <span className="text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</span>
-              <span className="num text-ink-2">{r.costUsd !== null ? fmtUsd(r.costUsd) : "n/a"}{r.billedIn === "usd" ? <span className="ml-2 rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</span>
-            </p>
-            <p className="num text-[13px] text-muted">{r.atMs ? relativeTime(r.atMs, nowMs) : "time n/a"}{r.model ? `, ${r.model}` : ""}</p>
-            <CopyLink value={r.requestId} label="AI request id" />
-          </li>
-        ))}
+      <p className="border-t border-rule px-4 py-3 text-[14px] text-ink-2">
+        <span className="num text-ink">{posted}</span> {posted === 1 ? "run" : "runs"} posted a price{refused > 0 ? <>, and the guard refused <span className="num text-ink">{refused}</span> {refused === 1 ? "answer" : "answers"} that broke a rule. A refused answer never reaches the signer; the last good price stays up.</> : "."}
+      </p>
+      <ul className="divide-y divide-rule border-t border-rule">
+        {runs.map((r, i) => <RunRow key={r.requestId} r={r} outcome={outcomes[i]!} nowMs={nowMs} />)}
       </ul>
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[640px] border-collapse text-[14px]">
-          <thead>
-            <tr className="border-y border-rule text-left text-[13px] text-muted">
-              <th scope="col" className="px-4 py-2.5 font-medium">When</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">Model</th>
-              {hasDecision ? <th scope="col" className="px-4 py-2.5 font-medium">Decision</th> : null}
-              <th scope="col" className="px-4 py-2.5 text-right font-medium">Cost</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-medium">USD</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">Request id</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-rule">
-            {runs.map((r) => (
-              <tr key={r.requestId} className="transition-colors duration-150 hover:bg-sunken">
-                <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.atMs ? utcStamp(r.atMs) : undefined}>{r.atMs ? relativeTime(r.atMs, nowMs) : "n/a"}</td>
-                <td className="num whitespace-nowrap px-4 py-2.5 text-ink-2" title={r.raw.reason ?? undefined}>{r.model ?? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">router default</span>}{r.billedIn === "usd" ? <span className="mt-1 block w-fit rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-muted">billed in USD</span> : null}</td>
-                {hasDecision ? <td className="px-4 py-2.5 text-ink-2">{[r.raw.reason, r.raw.skewBps != null ? `skew ${r.raw.skewBps} bps` : null].filter(Boolean).join(", ") || <span className="text-muted">n/a</span>}</td> : null}
-                <td className="whitespace-nowrap px-4 py-2.5 text-right text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</td>
-                <td className="num whitespace-nowrap px-4 py-2.5 text-right text-ink-2">
-                  {r.costUsd !== null ? fmtUsd(r.costUsd) : "n/a"}
-                </td>
-                <td className="px-4 py-2.5"><CopyLink value={r.requestId} label="AI request id" /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
       <p className="flex items-center gap-2 border-t border-rule px-4 py-2.5 text-[13px] text-muted"><ChainChip chainId={ZERO_G_CHAIN_ID} /> billed from the Payment Layer balance. Each run is keyed by its router request id.</p>
     </div>
+  );
+}
+
+function RunRow({ r, outcome, nowMs }: { r: Run; outcome: Outcome; nowMs: number }) {
+  const raw = r.raw;
+  const reason = raw.reason ? humaniseReason(raw.reason) : null;
+  const summary = outcome.kind === "refused" ? outcome.why.split(". ")[0]! : reason ? gist(reason) : null;
+  return (
+    <li className="px-4 py-3">
+      <details className="group">
+        <summary className="grid cursor-pointer list-none grid-cols-1 gap-x-4 gap-y-1.5 md:grid-cols-[88px_minmax(0,1fr)_auto] md:items-start [&::-webkit-details-marker]:hidden">
+          <span className="num text-[13px] text-muted" title={r.atMs ? utcStamp(r.atMs) : undefined}>{r.atMs ? relativeTime(r.atMs, nowMs) : "time n/a"}</span>
+          <span className="flex min-w-0 flex-col gap-1">
+            <OutcomeChip o={outcome} />
+            {summary ? <span className="text-[14px] leading-[1.45] text-ink-2">{summary}. <span className="text-muted underline decoration-rule-2 underline-offset-4 group-open:hidden">Full reasoning</span></span> : null}
+          </span>
+          <span className="flex flex-wrap items-baseline gap-x-3 text-[14px] md:flex-col md:items-end">
+            <span className="text-ink">{r.cost0g !== null ? <Amount value={fmt0g(r.cost0g)} symbol="0G" size={14} /> : "n/a"}</span>
+            <span className="num text-[13px] text-muted">{r.costUsd !== null ? fmtUsd(r.costUsd) : ""}{r.billedIn === "usd" ? ", billed in USD" : ""}{r.model ? `, ${r.model}` : ""}</span>
+          </span>
+        </summary>
+        <div className="mt-3 space-y-3 md:ml-[104px]">
+          {outcome.kind === "refused" ? <p className="max-w-[72ch] text-[14px] leading-[1.5] text-ink">{outcome.why}</p> : null}
+          {reason ? <p className="max-w-[72ch] text-[14px] leading-[1.5] text-ink-2">{reason}</p> : null}
+          <DecisionFacts raw={raw} className="max-w-[720px] sm:grid-cols-2" />
+          <CopyLink value={r.requestId} label="AI request id" />
+        </div>
+      </details>
+    </li>
   );
 }
 
@@ -416,7 +419,7 @@ function StatStrip({ status, econ, loop, nowMs }: { status: AgentStatus; econ: E
   const cells: { k: string; v: ReactNode }[] = [
     { k: "Fees earned", v: <Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" size={16} /> },
     { k: "AI spent", v: fmtUsd(econ.aiSpentUsd) },
-    { k: "Fees vs AI spent", v: econ.coverage !== null ? <span className={econ.coverage >= 1 ? "text-ok-ink" : "text-warn-ink"}>{fmtPct(econ.coverage * 100)}</span> : "n/a" },
+    { k: "Refused by guard", v: String(status.inferences.filter((r) => outcomeOf(r).kind === "refused").length) },
     { k: "Funding transactions", v: String(loop.funding.length) },
     { k: "Billed AI runs", v: String(loop.inferences.length) },
     { k: "Last run", v: last?.atMs ? relativeTime(last.atMs, nowMs) : "n/a" },
@@ -443,15 +446,16 @@ function PaidQuoteRow({ nowMs }: { nowMs: number }) {
     <ul className="mt-3 overflow-hidden rounded-card bg-panel">
       <EvidenceRow
         title="Paid quote feed"
-        plain={d.paidQuotes > 0 ? <>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402: {d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</> : <>Any agent can buy the current signed <Tk>W0G</Tk> price for 0.01 USDC over x402 at <code className="inline-block max-w-full truncate whitespace-nowrap align-bottom text-ink">{QUOTES_API.replace("https://", "")}/v1/quote</code>.</>}
+        plain={d.paidQuotes > 0 ? <>Other agents buy a signed <Tk>W0G</Tk> price for 0.01 USDC over x402: {d.paidQuotes} sold to {d.distinctPayers} {d.distinctPayers === 1 ? "agent" : "agents"}.</> : <>Any agent can buy this signed <Tk>W0G</Tk> price for 0.01 USDC over x402, settled on Base to the maker.</>}
         amount={d.paidQuotes > 0 ? <Amount value={fmtUsdc(d.revenueUsdc)} symbol="USDC" size={14} /> : null}
         hash={d.lastSettlementTx ?? undefined}
         hashLabel="latest settlement"
         href={d.lastSettlementTx ? txUrl(BASE_CHAIN_ID, d.lastSettlementTx) : null}
-        extra={d.lastSettlementTx ? null : { href: `${QUOTES_API}/v1/stats`, label: `${d.paidQuotes} sold, feed stats` }}
+        extra={d.lastSettlementTx ? null : { href: `${QUOTES_API}/v1/stats`, label: "feed stats" }}
         chainId={BASE_CHAIN_ID}
         nowMs={nowMs}
       />
+      <li className="px-4 pb-4"><CurlBox /></li>
     </ul>
   );
 }

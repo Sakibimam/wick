@@ -47,8 +47,8 @@ export function CountBadge({ x, y, n }: { x: number | string; y: number; n: numb
   if (n < 2) return null;
   return (
     <g aria-hidden>
-      <circle cx={x} cy={y} r={8} className="fill-ink" />
-      <text x={x} y={y + 4} textAnchor="middle" className="num fill-paper text-[11px] font-semibold">{n}</text>
+      <circle cx={x} cy={y} r={9} className="fill-ink" />
+      <text x={x} y={y + 4} textAnchor="middle" className="num fill-paper text-[12px] font-semibold">{n}</text>
     </g>
   );
 }

@@ -10,12 +10,15 @@ import { CopyLink } from "@/components/copy-link";
 import { Countdown } from "@/components/countdown";
 import { CountBadge, MarkTips } from "@/components/mark-tips";
 import { SourceNote } from "@/components/source-note";
+import { DecisionFacts, OutcomeChip } from "@/components/decision";
+import { humaniseReason, outcomeOf } from "@/lib/decision";
 import { Amount, ProtocolIcon, TokenIcon, Tk, WickMark } from "@/components/token-mark";
 import { AgentError } from "@/lib/agent-api";
 import { cluster } from "@/lib/cluster";
 import { BASE_CHAIN_ID, EXPLORERS, QUOTES_API, V4_HOOK, ZERO_G_CHAIN_ID, type Protocol } from "@/lib/config";
 import { useQuoteStats } from "@/hooks/use-quote-stats";
-import { decisionCostUsd, decisionsFor, economicsOf, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
+import { useGasRunway } from "@/hooks/use-post-cost";
+import { decisionCostUsd, decisionsFor, decisionsPerUsdc, economicsOf, spendWindow, fillsToCover, fmtDecisions, presetUsdcUnits, runCost, runsOf, takersOf, type Economics, type Run } from "@/lib/economics";
 import { clock, countdown, duration, fmt0g, fmtPct, fmtPrice, fmtUsd, fmtUsdc, relativeTime, significant, toNumber, utcStamp } from "@/lib/format";
 import { toMillis, txUrl } from "@/lib/funding";
 import type { Fill } from "@/lib/ledger";
@@ -307,10 +310,11 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
   const presetUsdc = toNumber(presetUsdcUnits(status, latestByDirection(status.quotes)["buy-w0g"]), "USDC");
   const swapFee = status.strategy ? (presetUsdc * status.strategy.feeBps) / 10_000 : null;
   const perSwap = swapFee !== null ? decisionsFor(swapFee, status) : null;
-  const perUsdc = status.strategy ? decisionsFor(status.strategy.feeBps / 10_000, status) : null;
+  const perUsdc = decisionsPerUsdc(status);
   const decisionUsd = decisionCostUsd(status);
-  const lead = econ.coverage !== null && takers && takers.outside > 0
-    ? { value: fmtPct(econ.coverage * 100), label: <>of the agent&apos;s AI bill is covered by the fees it has earned</>, detail: <>{fmtUsd(econ.feesEarnedUsdc)} earned against {fmtUsd(econ.aiSpentUsd)} spent on {status.inferences.length} AI runs</> }
+  const gas = useGasRunway(status);
+  const lead = econ.coverage !== null && econ.coverage >= 1 && takers && takers.outside > 0
+    ? { value: fmtUsd(econ.feesEarnedUsdc), label: <>in fees earned {spendWindow(status)}, against {fmtUsd(econ.aiSpentUsd)} spent on AI</>, detail: <>{status.inferences.length} AI runs, every one paid for by the swaps it priced</> }
     : perUsdc !== null && perSwap !== null
       ? { value: fmtDecisions(perUsdc), label: <>AI decisions paid for by every 1 USDC traded</>, detail: <>one {fmtUsdc(presetUsdc)} USDC swap pays for {fmtDecisions(perSwap)}<span className="hidden sm:inline">; one AI decision costs&nbsp;{fmtUsd(decisionUsd!)}</span></> }
       : { value: fmt0g(fuel), label: <><Tk>0G</Tk> of fuel for AI runs</>, detail: null };
@@ -328,9 +332,16 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
         </div>
         {econ.runwayDays !== null ? (
           <div>
-            <dt className="label">Runway</dt>
+            <dt className="label"><Tk>0G</Tk> runway</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runwayDays, 2)} days</dd>
             <dd className="text-[12px] text-muted">{econ.reported.has("runwayDays") ? "at today's pace" : "at the daily cap"}</dd>
+          </div>
+        ) : null}
+        {gas ? (
+          <div>
+            <dt className="label">Base gas runway</dt>
+            <dd className={cn("num mt-0.5 text-[20px]", gas.days < 1 ? "text-warn-ink" : "text-ink")}>{significant(gas.days, 2)} days</dd>
+            <dd className="text-[12px] text-muted">at {gas.perDay} posts a day</dd>
           </div>
         ) : null}
         {econ.runsPaidByFees !== null && econ.coverage !== null && takers && takers.outside > 0 ? (
@@ -474,6 +485,9 @@ function Station({ k, name, lit, children, className }: { k: NodeKey; name: stri
   );
 }
 
+/** A whole-number cap reads as itself: 1 0G, not 1.000 0G. */
+const fmtCap = (wei: bigint) => String(Number(toNumber(wei, "0G").toPrecision(4)));
+
 function Value({ children, className }: { children: ReactNode; className?: string }) {
   return <p className={cn("num text-[22px] font-medium leading-7 text-ink", className)}>{children}</p>;
 }
@@ -512,7 +526,7 @@ function FeesStation({ status, econ }: { status: AgentStatus; econ: Economics })
       <Value><Amount value={fmtUsdc(econ.feesEarnedUsdc)} symbol="USDC" /></Value>
       <div className="mt-3 max-w-[240px] space-y-3">
         {cover !== null ? (
-          <div><p className="label">Fees vs AI spent <span className={cn("num text-[16px] font-medium", cover >= 1 ? "text-ok-ink" : "text-warn-ink")}>{fmtPct(cover * 100)}</span></p><p className="num text-[13px] text-muted">{fmtUsd(econ.feesEarnedUsdc)} of {fmtUsd(econ.aiSpentUsd)}{toCover ? `, ${toCover} more ${toCover === 1 ? "fill covers" : "fills cover"} it` : ""}</p></div>
+          <div><p className="label">Fees earned vs AI spent, {spendWindow(status)}</p><p className="num mt-0.5 text-[16px] text-ink">{fmtUsd(econ.feesEarnedUsdc)} <span className="text-muted">vs</span> {fmtUsd(econ.aiSpentUsd)}</p>{toCover ? <p className="num text-[13px] text-muted">{toCover} more {toCover === 1 ? "fill covers" : "fills cover"} every run so far</p> : null}</div>
         ) : null}
         {toThreshold !== null && threshold ? <p className="num text-[13px] text-muted">The next funding run starts at {fmtUsdc(threshold)} USDC of fees.</p> : null}
       </div>
@@ -534,9 +548,9 @@ function HopStation({ hop, evidence, status, nowMs }: { hop: (typeof HOPS)[numbe
             <time className="num text-muted" dateTime={new Date(at ?? 0).toISOString()} title={at ? utcStamp(at) : undefined}>{at ? relativeTime(at, nowMs) : ""}</time>
           </>
         ) : hop.key === "swap" && status.mid !== null ? (
-          <span className="text-muted">Swaps fees to <Tk>W0G</Tk> once they reach {status.fundingThresholdUsdc ? `${fmtUsdc(Number(status.fundingThresholdUsdc))} USDC` : "the threshold"}.</span>
+          <span className="text-muted">Buys <Tk>W0G</Tk> on the next funding run.</span>
         ) : (
-          <span className="text-muted">Runs once fees reach {status.fundingThresholdUsdc ? fmtUsdc(Number(status.fundingThresholdUsdc)) : "the threshold"} USDC.</span>
+          <span className="text-muted">Runs on the next funding run.</span>
         )}
       </div>
     </Station>
@@ -576,7 +590,7 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
         </div>
       </div>
       <Note className="max-w-[52ch] text-ink-2">
-        {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</> : <> at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap</>}. </> : null}
+        {econ.runwayDays !== null ? <>Runway <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span>{econ.reported.has("runwayDays") && cap > 0n ? <> at today&apos;s pace, never under {significant(Number(bal) / Number(cap), 2)} days at the full {fmtCap(cap)} <Tk>0G</Tk> daily cap</> : <> at the {fmtCap(cap)} <Tk>0G</Tk> daily cap</>}. </> : null}
         Today it has used <span className="num text-ink">{fmtPct(cap > 0n ? (Number(spent) / Number(cap)) * 100 : 0)}</span> of that cap. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
       <WhatIf balanceWei={bal} served={runsOf(status)[0]?.model ?? null} />
@@ -616,7 +630,8 @@ function WhatIf({ balanceWei, served }: { balanceWei: bigint; served: string | n
 function BrainStation({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
   const start = nowMs - HEARTBEAT_WINDOW_MS;
   const runs = runsOf(status).filter((r) => r.atMs !== null && r.atMs >= start && r.atMs <= nowMs);
-  const groups = cluster(runs, (r) => (r.atMs! - start) / HEARTBEAT_WINDOW_MS, 0.035);
+  // A badge is 18 px wide on a 300 px plot, so marks closer than 0.07 merge and no two badges overlap.
+  const groups = cluster(runs, (r) => (r.atMs! - start) / HEARTBEAT_WINDOW_MS, 0.07);
   const last = runs[0] ?? null;
   const W = 300, H = 64, base = 42, top = 16;
   let d = `M0 ${base}`;
@@ -631,7 +646,7 @@ function BrainStation({ status, nowMs }: { status: AgentStatus; nowMs: number })
         <svg viewBox={`0 0 ${W} ${H}`} className="h-16 w-full overflow-visible" role="img" aria-label={`${runs.length} billed AI runs in the last 48 hours`}>
           <line x1={0} x2={W} y1={base} y2={base} className="stroke-rule" strokeWidth={1} />
           <path d={d} fill="none" className="chain-zg stroke-[var(--chain)]" strokeWidth={2} strokeLinejoin="round" />
-          {groups.map((g, i) => g.items.length > 1 ? <CountBadge key={i} x={g.x * W} y={top - 6} n={g.items.length} /> : <circle key={i} cx={g.x * W} cy={top} r={3} className="chain-zg fill-[var(--chain)]" />)}
+          {groups.map((g, i) => g.items.length > 1 ? <CountBadge key={i} x={Math.min(W - 10, Math.max(10, g.x * W))} y={top - 6} n={g.items.length} /> : <circle key={i} cx={g.x * W} cy={top} r={3} className="chain-zg fill-[var(--chain)]" />)}
         </svg>
         <MarkTips clusters={groups} y={(top / H) * 64} label={(it) => `${it.length} AI ${it.length === 1 ? "run" : "runs"}, show details`} render={(r) => <RunTip r={r} nowMs={nowMs} />} />
         <figcaption className="num flex justify-between text-[13px] text-muted"><span>48 h ago</span><span>now</span></figcaption>
@@ -664,7 +679,25 @@ function PriceStation({ status, view, now, nowReady }: { status: AgentStatus; vi
       <Note className="mt-0 text-ink-2">Signed by the brain. Fills stop at expiry.</Note>
       {soon ? <Countdown expiry={soon.expiry} now={now} ttl={status.quoteTtlSeconds ?? 3600} ready={nowReady} className="mt-3 w-full max-w-[220px]" /> : <p className="mt-3 text-[13px] text-muted">No signed price yet.</p>}
       {run && run !== "price-only" ? <p className="mt-3 flex flex-wrap items-center gap-x-2 text-[13px] text-muted">From AI run <CopyLink value={run} label="AI request id" /></p> : null}
+      <LatestDecision status={status} nowMs={now * 1000} />
     </Station>
+  );
+}
+
+/** The brain's newest answer in full: what it posted or which guard refused it, why, and what binds it on chain. */
+function LatestDecision({ status, nowMs }: { status: AgentStatus; nowMs: number }) {
+  const last = runsOf(status).find((r) => r.raw.reason || r.raw.outcome?.startsWith("refused")) ?? null;
+  if (!last) return null;
+  const o = outcomeOf(last.raw);
+  const reason = last.raw.reason ? humaniseReason(last.raw.reason) : null;
+  return (
+    <div className="mt-6 max-w-[320px] rounded-card bg-panel p-4">
+      <p className="flex items-baseline justify-between gap-3"><span className="label">Latest decision</span>{last.atMs ? <span className="num text-[13px] text-muted">{relativeTime(last.atMs, nowMs)}</span> : null}</p>
+      <OutcomeChip o={o} className="mt-2" />
+      <p className="mt-2 text-[14px] leading-[1.5] text-ink-2">{o.kind === "refused" ? o.why : reason}</p>
+      <DecisionFacts raw={last.raw} withModel className="mt-3" />
+      <p className="mt-2 flex flex-wrap items-center gap-x-2 text-[13px] text-muted">Request <CopyLink value={last.requestId} label="AI request id" /></p>
+    </div>
   );
 }
 

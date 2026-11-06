@@ -7,7 +7,8 @@ import { ChainIcon, Tk, WickMark } from "@/components/token-mark";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { BASE_CHAIN_ID, ZERO_G_CHAIN_ID } from "@/lib/config";
-import { clock, duration, fmtBlock } from "@/lib/format";
+import { clock, duration, fmtBlock, significant } from "@/lib/format";
+import { useGasRunway } from "@/hooks/use-post-cost";
 import { nextTickIn, priceLeg, tickSummary, tierWord } from "@/lib/machine";
 import { cn } from "@/lib/utils";
 
@@ -50,9 +51,13 @@ function StatusStrip() {
   const { now, ready } = useChainNow();
   const s = status.data;
   const ago = ready && status.dataUpdatedAt ? duration(Math.max(0, now * 1000 - status.dataUpdatedAt)) : null;
+  // A failed or slow read keeps the last good status on screen and says how old it is.
+  const lagging = Boolean(s) && (status.isError || (ready && now * 1000 - status.dataUpdatedAt > 30_000));
   const tick = s ? tickSummary(s) : null;
   const leg = s && ready ? priceLeg(s, now) : null;
-  const tone = !s ? "tone-quiet" : leg?.open ? "tone-danger" : tick && tick.failStreak >= 2 ? "tone-warn" : "tone-ok";
+  const gas = useGasRunway(s);
+  const gasLow = gas !== null && gas.days < 1;
+  const tone = !s ? "tone-quiet" : leg?.open ? "tone-danger" : (tick && tick.failStreak >= 2) || gasLow ? "tone-warn" : "tone-ok";
   const word = !s ? null : leg?.open ? "Requoting" : tick && tick.failStreak >= 2 ? "Retrying" : `Agent ${tierWord(s.budget.tier).toLowerCase()}`;
   return (
     <div className="border-y border-rule bg-paper">
@@ -65,7 +70,7 @@ function StatusStrip() {
             <span className="hidden items-center gap-1.5 whitespace-nowrap min-[420px]:inline-flex" title="Latest 0G chain block this page read">
               <ChainIcon chainId={ZERO_G_CHAIN_ID} size={14} className="hidden min-[420px]:inline-block" /><Tk className="hidden sm:inline">0G</Tk> <span className="num text-ink-2">{fmtBlock(s.readAt.zeroGBlock)}</span>
             </span>
-            <span className="whitespace-nowrap">{ago !== null ? `read ${ago} ago` : null}</span>
+            <span className={cn("whitespace-nowrap", lagging && "text-warn-ink")}>{ago !== null ? (lagging ? `reading chain, last good ${ago} ago` : `read ${ago} ago`) : null}</span>
           </>
         ) : (
           <span aria-hidden className="skeleton h-3.5 w-[260px] max-w-[60%]" />
@@ -75,6 +80,7 @@ function StatusStrip() {
             <span className={cn("inline-flex items-center gap-2 whitespace-nowrap text-ink-2", tone)}>
               <span aria-hidden className="size-2 rounded-full bg-[var(--tone)]" />
               {word}
+              {gas ? <span className="num hidden text-muted sm:inline" title={`Base gas above the agent's floor, at ${gas.perDay} posts a day`}>, gas {significant(gas.days, 2)} d</span> : null}
             </span>
           ) : <span aria-hidden className="skeleton h-3.5 w-24" />}
           {ready && s ? <span className="num whitespace-nowrap text-muted lg:hidden">next {clock(nextTickIn(now))}</span> : null}

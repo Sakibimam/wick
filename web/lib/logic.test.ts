@@ -131,10 +131,17 @@ describe("funding and ledger", () => {
 
 import { DEFAULT_BUDGET_CONFIG } from "../../agent/src/budget";
 import { MODEL_BY_TIER } from "../../agent/src/brain";
-import { FUEL_LINES, fuseLeft, gaugePosition, heartbeat, hopEvidence, MODELS, priceLeg, swapPerRun, tierForBalance } from "./machine";
+import { GAS_FLOOR_WEI as AGENT_GAS_FLOOR_WEI } from "../../agent/src/policy";
+import { FUEL_LINES, fuseLeft, GAS_FLOOR_WEI, gasRunwayDays, gaugePosition, heartbeat, hopEvidence, MODELS, priceLeg, swapPerRun, tierForBalance } from "./machine";
 import { FUNDING_EVIDENCE } from "./evidence";
 
 describe("machine", () => {
+  test("the gas floor is the agent's own and gas runway counts only what sits above it", () => {
+    expect(GAS_FLOOR_WEI).toBe(AGENT_GAS_FLOOR_WEI);
+    expect(gasRunwayDays(GAS_FLOOR_WEI, 1n, 288)).toBe(0);
+    expect(gasRunwayDays(GAS_FLOOR_WEI + 288n * 400_000_000_000n, 400_000_000_000n, 288)).toBe(1);
+    expect(gasRunwayDays(10n ** 15n, 0n, 288)).toBeNull();
+  });
   test("fuel lines are the agent's own budget lines", () => {
     expect(FUEL_LINES.pauseWei).toBe(DEFAULT_BUDGET_CONFIG.pauseBalanceWei);
     expect(FUEL_LINES.criticalWei).toBe(DEFAULT_BUDGET_CONFIG.criticalBalanceWei);

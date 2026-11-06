@@ -1,6 +1,7 @@
 import { describeStep, toMillis, type StageKind } from "./funding";
 import { freshness, latestByDirection, type Priced } from "./quotes";
 import { reasonText } from "./tiers";
+import { isGuardRefusal } from "./decision";
 import { duration as ago } from "./format";
 import type { AgentStatus, FundingStep, Inference, Tier } from "./schema";
 
@@ -109,7 +110,8 @@ export function swapPerRun(status: AgentStatus): { usdc: number; cost0g: number;
 }
 
 export type Tick = { at: string; outcome: string };
-const failed = (t: Tick) => !(t.outcome.startsWith("hold") || t.outcome.startsWith("posted"));
+// A guard refusing a model answer is the agent deciding to keep its price, not a failure; only transport errors retry.
+const failed = (t: Tick) => !(t.outcome.startsWith("hold") || t.outcome.startsWith("posted") || isGuardRefusal(t.outcome));
 
 /** The agent's last cron tick in plain words, and how many ticks in a row have failed (newest first in lastTicks). */
 export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">): { at: number; words: string; failed: boolean; failStreak: number } | null {
@@ -120,9 +122,19 @@ export function tickSummary(status: Pick<AgentStatus, "lastTick" | "lastTicks">)
   for (const t of ticks) { if (!failed(t)) break; failStreak++; }
   const o = last.outcome;
   // Outcomes are machine codes; the page says only what they mean for a taker.
-  const words = o.startsWith("posted") ? "signed a new price" : o.startsWith("hold") ? "held its price" : "retrying";
+  const words = o.startsWith("posted") ? "signed a new price" : o.startsWith("hold") ? "held its price" : isGuardRefusal(o) ? "held: answer refused by guard" : "retrying";
   return { at: Date.parse(last.at), words, failed: failed(last), failStreak };
 }
 
 /** The cron runs every five minutes on the clock; seconds until the next run. */
 export const nextTickIn = (nowSeconds: number) => 300 - (Math.floor(nowSeconds) % 300);
+
+/** Base gas the agent never spends below, the same number as GAS_FLOOR_WEI in agent/src/policy.ts (a test pins it). */
+export const GAS_FLOOR_WEI = 30_000_000_000_000n;
+
+/** Days of requotes the agent's Base gas pays for above its floor, at the measured cost of one post and the requote cadence. */
+export function gasRunwayDays(gasWei: bigint, costPerPostWei: bigint, postsPerDay: number): number | null {
+  if (costPerPostWei <= 0n || !(postsPerDay > 0)) return null;
+  const spendable = gasWei > GAS_FLOOR_WEI ? gasWei - GAS_FLOOR_WEI : 0n;
+  return Number(spendable / costPerPostWei) / postsPerDay;
+}

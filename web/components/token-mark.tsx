@@ -41,7 +41,7 @@ export function Amount({ value, symbol, size = 16, className, unitClassName }: {
     <span className={cn("num inline-flex items-baseline gap-1.5 whitespace-nowrap", className)}>
       <TokenIcon symbol={symbol} size={size} className="self-center" />
       <span>{value}</span>
-      <Tk className={cn("text-[0.8em] text-muted", unitClassName)}>{symbol}</Tk>
+      <Tk className={cn("text-[max(12px,0.8em)] text-muted", unitClassName)}>{symbol}</Tk>
     </span>
   );
 }

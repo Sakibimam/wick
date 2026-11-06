@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
+import { QUOTES_API } from "@/lib/config";
 import { shortHash } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -41,5 +42,18 @@ export function CopyLink({ value, href, label, extra, className }: Props) {
         </a>
       ) : null}
     </span>
+  );
+}
+
+/** The x402 quote call any agent can run: one line, copyable. The 402 it answers carries the payment requirements. */
+export const X402_CURL = `curl -i "${QUOTES_API}/v1/quote?tokenIn=USDC&amountIn=50000"`;
+
+export function CurlBox({ cmd = X402_CURL, className }: { cmd?: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className={cn("flex items-stretch overflow-hidden rounded-control bg-sunken", className)}>
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2 text-[13px] text-ink [mask-image:linear-gradient(to_right,black_85%,transparent)]">{cmd}</code>
+      <button type="button" onClick={() => void navigator.clipboard.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); })} className="shrink-0 border-l border-rule px-3 text-[13px] font-medium text-ink transition-colors duration-150 hover:bg-panel" aria-label="Copy the curl command">{copied ? "Copied" : "Copy"}</button>
+    </div>
   );
 }
