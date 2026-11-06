@@ -31,9 +31,9 @@ describe("v2 decision", () => {
     expect(seen[0].model).toBe("0gm-1.0-35b-a3b");
   });
   test("every field is range-checked on both sides", () => {
-    const bad: [string, Partial<typeof good>][] = [["spread_out_of_range", { bidHalfSpreadBps: 4 }], ["spread_out_of_range", { bidHalfSpreadBps: 501 }], ["spread_out_of_range", { askHalfSpreadBps: 40.5 }], ["spread_out_of_range", { askHalfSpreadBps: 4 }], ["spread_out_of_range", { askHalfSpreadBps: 501 }], ["ttl_out_of_range", { ttlSeconds: 699 }], ["ttl_out_of_range", { ttlSeconds: 901 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0.2001 }], ["reason_invalid", { reason: " " }], ["reason_invalid", { reason: "x".repeat(281) }]];
+    const bad: [string, Partial<typeof good>][] = [["spread_out_of_range", { bidHalfSpreadBps: 4 }], ["spread_out_of_range", { bidHalfSpreadBps: 501 }], ["spread_out_of_range", { askHalfSpreadBps: 40.5 }], ["spread_out_of_range", { askHalfSpreadBps: 4 }], ["spread_out_of_range", { askHalfSpreadBps: 501 }], ["ttl_out_of_range", { ttlSeconds: 839 }], ["ttl_out_of_range", { ttlSeconds: 901 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0 }], ["max_amount_out_of_range", { maxAmountInUsdc: 0.2001 }], ["reason_invalid", { reason: " " }], ["reason_invalid", { reason: "x".repeat(281) }]];
     for (const [code, patch] of bad) { try { validateDecision({ ...good, ...patch }, 0.2); throw new Error(`accepted ${JSON.stringify(patch)}`); } catch (e) { expect((e as BrainError).code).toBe(code as never); } }
-    for (const edge of [{ bidHalfSpreadBps: 5, askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500 }, { askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500, askHalfSpreadBps: 500 }, { ttlSeconds: 700 }, { ttlSeconds: 900 }, { maxAmountInUsdc: 0.2 }]) expect(() => validateDecision({ ...good, ...edge }, 0.2)).not.toThrow();
+    for (const edge of [{ bidHalfSpreadBps: 5, askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500 }, { askHalfSpreadBps: 5 }, { bidHalfSpreadBps: 500, askHalfSpreadBps: 500 }, { ttlSeconds: 840 }, { ttlSeconds: 900 }, { maxAmountInUsdc: 0.2 }]) expect(() => validateDecision({ ...good, ...edge }, 0.2)).not.toThrow();
     expect(() => validateDecision({ ...good, askHalfSpreadBps: "30" }, 0.2)).toThrow();
     const { askHalfSpreadBps: _, ...missing } = good; expect(() => validateDecision(missing, 0.2)).toThrow(/missing askHalfSpreadBps/);
     // The old signed-skew answer is not a decision any more.
@@ -235,4 +235,8 @@ describe("TeeML retry with backoff", () => {
     expect(a.seen.every((b) => b.model === "0gm-1.0-35b-a3b")).toBe(true);
     expect(waits[1]! > waits[0]!).toBe(true);
   });
+});
+test("quote lifetimes sit near MAX_TTL: every allowed TTL outlives the next requote tick by at least four minutes", () => {
+  expect(QUOTE_TTL_BAND[0] - EXPIRY_REQUOTE_WINDOW_SECONDS).toBeGreaterThanOrEqual(480);
+  expect(() => validateDecision({ ...good, ttlSeconds: 760 }, 0.2)).toThrow(/ttl_out_of_range/);
 });

@@ -73,3 +73,32 @@ describe("half-spread decision on chain", () => {
     expect(r.state.inferences.at(-1)).toMatchObject({ bidHalfSpreadBps: 90, askHalfSpreadBps: 10, postedBidHalfSpreadBps: 90, postedAskHalfSpreadBps: 30, reason: "calm, balanced", outcome: "posted" });
   });
 });
+
+describe("a refused answer never empties the book", () => {
+  test("a guard refusal with a valid previous decision re-posts that decision around the new TWAP, clamped, and records why", async () => {
+    const c = fakeChain();
+    let answer: unknown = { bidHalfSpreadBps: 70, askHalfSpreadBps: 50, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "first" };
+    const e = (now: number) => c.env({ now, fetchImpl: router(() => answer) });
+    let r = await cronTick(emptyCronState(), e(NOW));
+    expect(r.outcome).toStartWith("posted");
+    c.st.twapTick += 40; // ~40 bps move: a requote is due
+    answer = { bidHalfSpreadBps: 700, askHalfSpreadBps: 50, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "bad" };
+    r = await cronTick(r.state, e(NOW + 300_000));
+    const posts = c.st.sent.filter((t) => t.fn === "postPair");
+    expect(posts.length).toBe(2);
+    expect(r.outcome).toContain("refused model answer, reposted last valid decision");
+    const p = posts[1]!.args[0] as { rate01E18: bigint; rate10E18: bigint; inferenceId: string; expiry: bigint };
+    const mid = 1.0001 ** c.st.twapTick * 1e12;
+    expect(Number(p.rate01E18) / 1e6 / mid).toBeCloseTo(1 - 0.007, 5);
+    expect(1e30 / Number(p.rate10E18) / mid).toBeCloseTo(1 + 0.005, 5);
+    expect(p.inferenceId).toBe((posts[0]!.args[0] as { inferenceId: string }).inferenceId);
+    expect(r.state.inferences.at(-1)!.outcome).toBe("refused model answer, reposted last valid decision");
+    expect(r.state.inferences.at(-1)!.reason).toContain("spread_out_of_range");
+  });
+  test("with no valid previous decision a refusal posts nothing", async () => {
+    const c = fakeChain();
+    const r = await cronTick(emptyCronState(), c.env({ now: NOW, fetchImpl: router(() => ({ bidHalfSpreadBps: 700, askHalfSpreadBps: 50, maxAmountInUsdc: 0.05, ttlSeconds: 900, reason: "bad" })) }));
+    expect(c.st.sent.filter((t) => t.fn === "postPair").length).toBe(0);
+    expect(r.outcome).toStartWith("refused spread_out_of_range");
+  });
+});

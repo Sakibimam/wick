@@ -77,7 +77,7 @@ export async function askBrain(state: BrainState, options: { fetchImpl?: typeof 
 }
 
 /** Bounds the decision must land inside; the extruction's on-chain band (800 bps) sits outside the widest half-spread. */
-export const DECISION_BOUNDS = { halfSpreadBps: [5, 500], ttlSeconds: [700, 900] } as const;
+export const DECISION_BOUNDS = { halfSpreadBps: [5, 500], ttlSeconds: [840, 900] } as const;
 /** Models served from a TeeML provider; their answers are signed only when the router verified the provider's TEE signature. */
 export const TEE_MODELS = new Set<string>([PRIMARY_MODEL]);
 export type DecisionState = {

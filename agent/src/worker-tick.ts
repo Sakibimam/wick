@@ -2,7 +2,7 @@
 // State lives in whatever store the caller passes back in; every chain read goes through fetch-based viem clients.
 import { createWalletClient, defineChain, encodeAbiParameters, formatUnits, http, keccak256, parseAbi, parseAbiParameters, type Address, type Chain, type Hex, type PublicClient, type Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { askDecision, BrainError, inventoryGoal, type BilledRun } from "./brain.js";
+import { askDecision, BrainError, inventoryGoal, validateDecision, type BilledRun, type Decision } from "./brain.js";
 import { accountSpend, deviationBps, emptySpendLedger, type SpendLedger } from "./budget.js";
 import { MAX_SPOT_TWAP_GAP_BPS, quoterAbi, QUOTER_V2, readTwapMarket, USDC, W0G } from "./price.js";
 import { fundingAbi, quoteCcipFee, W0G_ZERO_G, ZERO_G_PAYMENT_LAYER } from "./funding.js";
@@ -29,6 +29,8 @@ export type CronState = {
   lastTick: TickRecord | null;
   lastTicks?: TickRecord[];
   funding?: FundingState;
+  /** The last decision that passed every guard and was posted: what a refused answer re-posts instead of leaving the book empty. */
+  lastValidDecision?: Decision & { inferenceId: Hex; requestId: string };
   market?: { twapMid: number; spotMid: number; gapBps: number; ethUsd: number };
 };
 export type FillLite = { orderHash?: Hex; taker: Address; tokenIn: Address; tokenOut: Address; amountIn: string; amountOut: string; timeMs: number | null };
@@ -160,6 +162,28 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
   const runsLeft = runCost ? Number(BigInt(ledger0.fundsWei) / runCost) : null;
   const requotesPerDay = 86_400 / 300;
   const share = w0gDepthUsdc + usdcDepth > 0 ? Number((w0gDepthUsdc / (w0gDepthUsdc + usdcDepth)).toFixed(4)) : 0.5;
+  const cap = Number(Math.max(w0gDepthUsdc, usdcDepth).toFixed(6));
+  const errText = (e: unknown) => e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message).split("\n").filter(Boolean).slice(0, 2).join(" ") + ((e as { cause?: { data?: { errorName?: string; args?: unknown[] } } }).cause?.data?.errorName ? ` ${(e as any).cause.data.errorName}(${((e as any).cause.data.args ?? []).join(",")})` : "") : String(e);
+  /** Signs and posts one pair for a validated decision, and keeps both posted directions; throws when the post fails. */
+  const postDecision = async (d: Decision, inferenceId: Hex, requestId: string) => {
+    const sides = postedHalfSpreads(d.bidHalfSpreadBps, d.askHalfSpreadBps, decision.tier);
+    const composed = composeQuotes({ twapMid: market.twapMid, bidHalfSpreadBps: sides.bid, askHalfSpreadBps: sides.ask, maxAmountInUsdc: d.maxAmountInUsdc });
+    // spreadBps / postedSpreadBps / skewBps are the half-spreads restated as width and lean for readers of the older record shape.
+    const detail = { reason: d.reason, bidHalfSpreadBps: d.bidHalfSpreadBps, askHalfSpreadBps: d.askHalfSpreadBps, postedBidHalfSpreadBps: sides.bid, postedAskHalfSpreadBps: sides.ask, spreadBps: Math.round((d.bidHalfSpreadBps + d.askHalfSpreadBps) / 2), postedSpreadBps: Math.round((sides.bid + sides.ask) / 2), skewBps: Math.round((sides.bid - sides.ask) / 2), maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: d.maxAmountInUsdc, ttlSeconds: d.ttlSeconds, inferenceId };
+    const nonce = (await env.base.readContract({ address: env.board, abi: boardV2Abi, functionName: "lastNonce", args: [env.maker, epoch] })) + 1n;
+    const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0: composed.maxIn0, maxIn1: composed.maxIn1, expiry: BigInt(nowSec + d.ttlSeconds), epoch, nonce, inferenceId };
+    try {
+      const sig = await signPair(wallet, env.chain.id, env.board, pair);
+      const sent = await postPair(env.base, wallet, env.board, pair, sig);
+      // Base receipts carry the L1 data fee next to L2 gas; together they are what one requote cost.
+      const gasCostWei = (BigInt(sent.receipt.gasUsed) * BigInt(sent.receipt.effectiveGasPrice) + BigInt((sent.receipt as { l1Fee?: bigint | null }).l1Fee ?? 0n)).toString();
+      for (const [tokenIn, tokenOut, rate, maxIn] of [[W0G, USDC, pair.rate01E18, pair.maxIn0], [USDC, W0G, pair.rate10E18, pair.maxIn1]] as const)
+        s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), maxAmountIn: maxIn.toString(), expiry: pair.expiry.toString(), epoch: epoch.toString(), nonce: nonce.toString(), inferenceId, requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString(), board: env.board, gasCostWei }].slice(-KEEP);
+      s.lastValidDecision = { ...d, inferenceId, requestId };
+      s.lastMid = market.twapMid; s.quotedAt = now;
+      return { detail, error: null };
+    } catch (e) { return { detail, error: errText(e) }; }
+  };
   let result: Awaited<ReturnType<typeof askDecision>>;
   try {
     result = await askDecision({
@@ -169,39 +193,36 @@ export async function cronTick(prev: CronState, env: TickEnv): Promise<{ state: 
       recentFills: fills.map(f => ({ side: f.tokenIn.toLowerCase() === USDC.toLowerCase() ? "taker_bought_w0g" as const : "taker_sold_w0g" as const, amountUsdc: f.tokenIn.toLowerCase() === USDC.toLowerCase() ? Number(formatUnits(BigInt(f.amountIn), 6)) : Number(formatUnits(BigInt(f.amountOut), 6)), minutesAgo: Math.round((now - f.timeMs!) / 60_000) })),
       gas: { baseEth: Number(formatUnits(gasWei, 18)), gasPerRequoteUsd: Number((Number(gasPrice * 120_000n) / 1e18 * ethUsd).toFixed(6)) },
       runway: { vault0g: Number(formatUnits(BigInt(ledger0.fundsWei), 18)), runsLeft, days: runsLeft === null ? null : Number((runsLeft / requotesPerDay).toFixed(2)) },
-      budgetTier: decision.tier, tierSpreadBps: tierSpreadBps(decision.tier), maxAmountInUsdcCap: Number(Math.max(w0gDepthUsdc, usdcDepth).toFixed(6)),
+      budgetTier: decision.tier, tierSpreadBps: tierSpreadBps(decision.tier), maxAmountInUsdcCap: cap,
     }, { apiKey: env.zgApiKey, baseUrl: env.zgApiBase, fetchImpl: env.fetchImpl ?? fetch });
   } catch (e) {
     const run = e instanceof BrainError ? e.run : undefined;
-    if (run) record(s, run, now, { outcome: `refused ${(e as BrainError).code}` });
     setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(run) }));
-    return hold(`refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e));
+    const why = `refused ${e instanceof BrainError ? e.code : "error"}${run ? ` ${run.requestId}` : ""}`, msg = e instanceof Error ? e.message.split("\n")[0]!.slice(0, 300) : String(e);
+    // A guard refused a billed answer: keep the book quoted with the last decision that passed every guard, re-checked
+    // against this tick's inventory and depth cap and composed around this tick's TWAP, rather than letting it lapse.
+    const last = s.lastValidDecision;
+    let again: Decision | null = null;
+    if (run && last) try { again = validateDecision({ ...last, maxAmountInUsdc: Math.min(last.maxAmountInUsdc, cap) }, cap, share); } catch { again = null; }
+    if (run && last && again) {
+      const r = await postDecision(again, last.inferenceId, last.requestId);
+      const outcome = r.error ? `refused model answer, repost failed` : REPOSTED;
+      record(s, run, now, { ...r.detail, reason: msg, outcome });
+      return done(`${why}; ${outcome}`, r.error ?? msg);
+    }
+    if (run) record(s, run, now, { outcome: `refused ${(e as BrainError).code}`, reason: msg });
+    return hold(why, msg);
   }
   setBudget(accountSpend(s.spend!, { nowMs: now, vaultWei: vault, billedWei: billedWei(result) }));
-  const sides = postedHalfSpreads(result.bidHalfSpreadBps, result.askHalfSpreadBps, decision.tier);
-  const ttl = result.ttlSeconds;
   const inferenceId = inferenceIdOf(result);
-  const composed = composeQuotes({ twapMid: market.twapMid, bidHalfSpreadBps: sides.bid, askHalfSpreadBps: sides.ask, maxAmountInUsdc: result.maxAmountInUsdc });
-  const nonce = (await env.base.readContract({ address: env.board, abi: boardV2Abi, functionName: "lastNonce", args: [env.maker, epoch] })) + 1n;
-  const pair: Pair = { maker: env.maker, token0: W0G, token1: USDC, rate01E18: composed.rate01E18, rate10E18: composed.rate10E18, maxIn0: composed.maxIn0, maxIn1: composed.maxIn1, expiry: BigInt(nowSec + ttl), epoch, nonce, inferenceId };
-  // spreadBps / postedSpreadBps / skewBps are the half-spreads restated as width and lean for readers of the older record shape.
-  const detail = { reason: result.reason, bidHalfSpreadBps: result.bidHalfSpreadBps, askHalfSpreadBps: result.askHalfSpreadBps, postedBidHalfSpreadBps: sides.bid, postedAskHalfSpreadBps: sides.ask, spreadBps: Math.round((result.bidHalfSpreadBps + result.askHalfSpreadBps) / 2), postedSpreadBps: Math.round((sides.bid + sides.ask) / 2), skewBps: Math.round((sides.bid - sides.ask) / 2), maxAmountIn: composed.maxIn1.toString(), maxAmountInUsdc: result.maxAmountInUsdc, ttlSeconds: ttl, inferenceId, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
-  try {
-    const sig = await signPair(wallet, env.chain.id, env.board, pair);
-    const sent = await postPair(env.base, wallet, env.board, pair, sig);
-    // Base receipts carry the L1 data fee next to L2 gas; together they are what one requote cost.
-    const gasCostWei = (BigInt(sent.receipt.gasUsed) * BigInt(sent.receipt.effectiveGasPrice) + BigInt((sent.receipt as { l1Fee?: bigint | null }).l1Fee ?? 0n)).toString();
-    for (const [tokenIn, tokenOut, rate, maxIn] of [[W0G, USDC, pair.rate01E18, pair.maxIn0], [USDC, W0G, pair.rate10E18, pair.maxIn1]] as const)
-      s.posted = [...s.posted, { tokenIn, tokenOut, rateE18: rate.toString(), maxAmountIn: maxIn.toString(), expiry: pair.expiry.toString(), epoch: epoch.toString(), nonce: nonce.toString(), inferenceId, requestId: result.requestId, postedTx: sent.hash, postedBlock: sent.receipt.blockNumber.toString(), board: env.board, gasCostWei }].slice(-KEEP);
-    record(s, result, now, { ...detail, outcome: "posted" });
-  } catch (e) {
-    record(s, result, now, { ...detail, outcome: "post_failed" });
-    return done(`post_failed ${result.requestId}`, e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message).split("\n").filter(Boolean).slice(0, 2).join(" ") + ((e as { cause?: { data?: { errorName?: string; args?: unknown[] } } }).cause?.data?.errorName ? ` ${(e as any).cause.data.errorName}(${((e as any).cause.data.args ?? []).join(",")})` : "") : String(e));
-  }
-  s.lastMid = market.twapMid; s.quotedAt = now;
+  const r = await postDecision(result, inferenceId, result.requestId);
+  const runDetail = { ...r.detail, tokens: result.tokens, costMicroUsd: result.costMicroUsd, attempts: result.attempts, fallbackFrom: result.fallbackFrom };
+  if (r.error) { record(s, result, now, { ...runDetail, outcome: "post_failed" }); return done(`post_failed ${result.requestId}`, r.error); }
+  record(s, result, now, { ...runDetail, outcome: "posted" });
   return done(`posted ${result.requestId}`);
 }
 
+export const REPOSTED = "refused model answer, reposted last valid decision";
 const billedWei = (run?: { billing: { currency: string | null; totalCost: string | null } }) => run?.billing.currency === "0g" && run.billing.totalCost ? BigInt(run.billing.totalCost) : 0n;
 function lastRunCost(inferences: InferenceRecord[]): bigint | null { for (let i = inferences.length - 1; i >= 0; i--) { const r = inferences[i]!; if (r.currency === "0g" && r.totalCost && BigInt(r.totalCost) > 0n) return BigInt(r.totalCost); } return null; }
 function record(s: CronState, run: BilledRun, now: number, extra: Partial<InferenceRecord>) {

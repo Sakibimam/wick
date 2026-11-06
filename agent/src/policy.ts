@@ -27,8 +27,8 @@ export function cronPolicy(input: BudgetInput & { gasWei: bigint; secondsToExpir
   return { ...d, requote, shouldInfer: shouldRunInference(d.tier, requote) };
 }
 
-/** The cron fires every 5 minutes; a quote inside this window of its expiry is renewed. Every allowed TTL is longer, so a fresh quote is never born stale. */
-export const QUOTE_TTL_BAND = [700, 900] as const;
+/** Quote lifetimes the model may pick, near MAX_TTL: renewed at the first tick inside the requote window, each still has 240 s or more left when it is renewed. */
+export const QUOTE_TTL_BAND = [840, 900] as const;
 export const MAX_TTL_SECONDS = 900;
 export const BAND_SAFE_BPS = 790;
 export function tierSpreadBps(tier: BudgetTier, base = DEFAULT_BUDGET_CONFIG.baseSpreadBps): number { return base * ({ NORMAL: 1, LOW: 2, CRITICAL: 4, PAUSED: 4 } as const)[tier]; }
