@@ -22,15 +22,17 @@ Agent, maker and deployer: [`0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953`](https:
 
 | Contract | Chain | Address |
 | --- | --- | --- |
-| AgentQuoteBoard | Base | [`0x309933CE439Da6A059593d73B8c82E8C8447C3F8`](https://basescan.org/address/0x309933CE439Da6A059593d73B8c82E8C8447C3F8), deploy [`0x7894c4f2…eb60`](https://basescan.org/tx/0x7894c4f2d67d623cca729a5938d712f0ffbdd64e9435fe40c820e5d6e1a3eb60) |
-| AgentQuoteExtruction | Base | [`0x59d954dd4fDE7F99634f7b2d29E6b4fFEbE7B7e0`](https://basescan.org/address/0x59d954dd4fDE7F99634f7b2d29E6b4fFEbE7B7e0), deploy [`0xf042bd0d…2630`](https://basescan.org/tx/0xf042bd0d1d007f741ae282877f0367f1a8e244401401149e90701b0882a52630) |
+| AgentQuoteBoardV2 | Base | [`0x0d87944FFFf253dBbbD07750AceE7898333218A5`](https://basescan.org/address/0x0d87944FFFf253dBbbD07750AceE7898333218A5), deploy [`0xdb552695…d7a9`](https://basescan.org/tx/0xdb55269525f0d82931677f9d5af46d088ccb9eea90d51947125792029092d7a9) |
+| AgentQuoteExtructionV2 | Base | [`0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4`](https://basescan.org/address/0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4), deploy [`0x85466a39…5212`](https://basescan.org/tx/0x85466a399625dd1cf0597ad88de6729934e3e45734497a80606b026782425212) |
+| AgentQuoteBoard (v1) | Base | [`0x309933CE439Da6A059593d73B8c82E8C8447C3F8`](https://basescan.org/address/0x309933CE439Da6A059593d73B8c82E8C8447C3F8), deploy [`0x7894c4f2…eb60`](https://basescan.org/tx/0x7894c4f2d67d623cca729a5938d712f0ffbdd64e9435fe40c820e5d6e1a3eb60) |
+| AgentQuoteExtruction (v1) | Base | [`0x59d954dd4fDE7F99634f7b2d29E6b4fFEbE7B7e0`](https://basescan.org/address/0x59d954dd4fDE7F99634f7b2d29E6b4fFEbE7B7e0), deploy [`0xf042bd0d…2630`](https://basescan.org/tx/0xf042bd0d1d007f741ae282877f0367f1a8e244401401149e90701b0882a52630) |
 | Aqua (1inch, pinned) | Base | [`0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a`](https://basescan.org/address/0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a) |
 | AquaSwapVMRouter v1.0.2 (1inch, pinned) | Base | [`0x111111338c5091E8440b67B168bAe16a668AC0De`](https://basescan.org/address/0x111111338c5091E8440b67B168bAe16a668AC0De) |
 | Uniswap v3 W0G/USDC 0.3% | Base | [`0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e`](https://basescan.org/address/0xe03cCe449932219fc0Ca28f3a4f784CE55dE0c4e) |
 | Uniswap v4 PoolManager | Base | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
 | 0G Payment Layer | 0G chain | `0xA3b15Bd2aD18BFB6b5f92D8AA9F444Dd59d1cE32` |
 
-Aqua strategy hash `0xf2513850c1981305143c9655af1305ff35ed5ef52f0bd5d8588f3a8f02ac7f5e`. The v2 board, extruction and strategy ship in one broadcast with `contracts/script/LaunchV2.s.sol`, which docks the strategy above and ships v2 with exactly the inventory the maker wallet backs.
+Live v2 Aqua strategy `0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc035` (program `0x20 | 44 | extruction | 30 bps | pool 0xe03cCe44…0c4e | 800 bps`), shipped by `contracts/script/LaunchV2.s.sol` in one broadcast at Base block 53,810,154: deploy both contracts, dock v1 strategy `0xf2513850…7f5e`, ship v2 with exactly the inventory the maker wallet backs, `setAgent` (epoch 1), and raise the W0G/USDC pool's observation cardinality to 20. Aqua `safeBalances` for v2 reads 1.357492788767429240 W0G and 0.006836 USDC at Base block 53,811,582.
 
 ## The live loop, in order
 
@@ -49,7 +51,8 @@ Aqua strategy hash `0xf2513850c1981305143c9655af1305ff35ed5ef52f0bd5d8588f3a8f02
 | 11 | `PaymentLayer.depositFor(agent)`, vault credit 0 to 2.844 0G | [`0x8b0b60f8…3f68`](https://chainscan.0g.ai/tx/0x8b0b60f8559bb609dcea0338ae86a5b9a546ec011061f673d18db8c072663f68) |
 | 12 | Inference billed `"currency":"0g"`, 0.00004166 0G; vault moves 2.844 to 2.344 0G as the router draws its working deposit | router request `798fb102-9f06-4bc5-9ec2-1dde3b716628` |
 | 13 | The Worker cron keeps pricing on 0G-billed runs: 0.000243, 0.000281 and 0.000272 0G, each posting both directions | requests `286d605d-7b73-4b09-882c-6605e2bcf64e`, `1002ff0b-2daf-48ae-b697-daa672d2dd47`, `65073141-8324-44a8-b819-c0f421c55ff8`; posts [`0x836477f5…c602`](https://basescan.org/tx/0x836477f516deadb72ad5d03b3bdc8722cf4d9aa2ad6c6360c4b2e54d4c57c602), [`0x5dff60e6…cc23`](https://basescan.org/tx/0x5dff60e69f27d1559d39930f15128f8cd16295597eeceac7502e9b8729adcc23) |
-| 14 | An agent asks for a quote over x402 and gets HTTP 402 with `exact` scheme requirements, 10000 atomic USDC to the maker on Base | `curl -i "https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote?tokenIn=USDC&amountIn=100000"` |
+| 14 | v2 cutover: dock v1, ship v2 with the TWAP band program, register the agent at epoch 1, grow the pool's oracle history | dock [`0x5585112e…e593`](https://basescan.org/tx/0x5585112eb78a2af2c8e89785c4709c63a83ca2b82638258b636f5a93f2f3e593), ship [`0x20822085…0ba7`](https://basescan.org/tx/0x20822085a78bc7c75e3123d2c95776d00b96632b625850452cd4de4be51f0ba7), `setAgent` [`0xbcf1a5a6…d75e`](https://basescan.org/tx/0xbcf1a5a6c66c865a74fbacd00ca83367af31921919d9bf40e5bc113b2267d75e), `increaseObservationCardinalityNext(20)` [`0x60dd0188…3729`](https://basescan.org/tx/0x60dd01887cb1c402ebb265d0f3c87b07eee8abf3b00677af19924e289c0d3729) |
+| 15 | An agent asks for a quote over x402 and gets HTTP 402 with `exact` scheme requirements, 10000 atomic USDC to the maker on Base | `curl -i "https://wick-quotes.earn-shield-alerts.workers.dev/v1/quote?tokenIn=USDC&amountIn=100000"` |
 
 After step 7, Aqua `safeBalances` for the strategy reads 1.357492788767429240 W0G and 0.6 USDC: the exact deltas the signed quote set. Anyone can recompute the quote's provenance:
 
@@ -133,7 +136,7 @@ Positions are demonstrated by tests and live:
 - `contracts/test/AgentQuoteV2.t.sol`: unit and fuzz tests for leaked-key rotation, epoch replay, TTL edges, band edges, `maxAmountIn` exact-in and exact-out, maker-favouring rounding and quote/swap equality.
 - `contracts/test/AgentQuoteV2.invariant.t.sol`: a handler that posts, fills and tries a leaked key.
 - `contracts/test/BaseV2Fork.t.sol`: the v2 extruction through the deployed AquaSwapVMRouter on a Base fork, both directions, out-of-band, over-size and expiry reverts, and `testFuzz_quoteEqualsSwap`.
-- The v1 strategy filled on Base mainnet at the signed rate: [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1).
+- The v2 strategy is live on Base (`0x05bc438b…c035`), and the v1 strategy filled on Base mainnet at the signed rate: [`0x62f874c5…c7a1`](https://basescan.org/tx/0x62f874c5c240ff107114d745ccf8adbd919fdf97d28ae06ab5d4f10184d0c7a1).
 
 > Official Aqua/SwapVM contracts must be used (redeployments of a modified SwapVM contract is allowed)
 

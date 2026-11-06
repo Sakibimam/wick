@@ -101,10 +101,10 @@ Assets: the maker's Aqua inventory (W0G and USDC on Base), the agent's 0G Paymen
 
 | Parameter | Value | Where | Measurement it comes from | What would change it |
 | --- | --- | --- | --- | --- |
-| Strategy fee | 30 bps | extruction args `feeBps`, `LaunchV2.s.sol` `FEE_BPS` | `spikes/fact3-economics/econ.txt`: a $500 Base strategy at p90 turnover earns $0.165/day at 30 bps against $0.0275 at 5 bps; live fill `0x62f874c5…c7a1` paid 300 atomic USDC on 0.10 USDC | turnover that 30 bps prices out of routing; the fee then falls toward the $0.00188 requote cost line |
+| Strategy fee | 30 bps | extruction args `feeBps`, `LaunchV2.s.sol` `FEE_BPS` | `spikes/fact3-economics/econ.txt`: a $500 Base strategy at p90 turnover earns $0.165/day at 30 bps against $0.0275 at 5 bps; live fill `0x62f874c5…c7a1` paid 300 atomic USDC on 0.10 USDC | turnover that 30 bps prices out of routing; the fee then falls toward the $0.00114 requote cost line |
 | Quote TTL | model picks 300 to 900 s; board caps at 900 s | `DECISION_BOUNDS.ttlSeconds`, `AgentQuoteBoardV2.MAX_TTL` | `spikes/fact1-fills/ttf.txt`: first fills on fresh Base strategies came 1.7 h, 4.4 h and 52.2 h after ship, so a longer quote earns nothing extra while it carries more stale-price exposure | taker flow that fills within seconds of each post |
 | Requote window | 600 s before expiry | `EXPIRY_REQUOTE_WINDOW_SECONDS` | two 5 minute cron ticks of margin, so one failed tick (RPC 429, router 502) never lets the pair lapse | a faster cron |
-| Requote on TWAP move | 25 bps NORMAL, 100 bps LOW | `DEFAULT_BUDGET_CONFIG` | `spikes/fact3-economics/FINDINGS.md`: gas dominates, so requote on deviation, never on a fast timer; measured gas $0.00184 vs inference $0.00004 per requote | cheaper gas, or a band tighter than 100 bps |
+| Requote on TWAP move | 25 bps NORMAL, 100 bps LOW | `DEFAULT_BUDGET_CONFIG` | `spikes/fact3-economics/FINDINGS.md`: gas dominates, so requote on deviation, never on a fast timer; measured gas $0.00110 per `postPair` vs inference $0.00004 per decision | cheaper gas, or a band tighter than 100 bps |
 | Spread floor by tier | 30 / 60 / 120 bps | `tierSpreadBps` | base spread equals the 30 bps fee; each tier step doubles it, so a degraded agent quotes away from the market instead of at it | measured mark-out on Wick's own fills |
 | Spread and skew bounds | spread 5 to 500 bps, skew -200 to 200 bps | `DECISION_BOUNDS` | spread plus the largest skew is 700 bps, inside the 790 bps composition guard and the 800 bps onchain band, so a valid decision never produces a pair the chain refuses | a wider onchain band |
 | TWAP window | 600 s | `AgentQuoteExtructionV2.TWAP_WINDOW`, `TWAP_WINDOW_SECONDS` | a manipulator must hold the 0.3% v3 pool (about $168k of liquidity, `spikes/fact2-funding/FINDINGS.md`) off-price for the whole window; `LaunchV2` raises the pool's observation cardinality to 20 so the window is always readable | a thinner pool or a shorter block time |
@@ -113,13 +113,13 @@ Assets: the maker's Aqua inventory (W0G and USDC on Base), the agent's 0G Paymen
 | maxAmountIn | model picks, at most the strategy's depth | `Pair.maxIn0`, `Pair.maxIn1`, `maxAmountInUsdcCap` | live strategy depth from Aqua `safeBalances` each tick; the extruction also caps `amountOut` at the strategy's balance | deeper inventory |
 | Funding threshold | k = 3 times run cost, about $0.75 | `decideFunding`, `DEFAULT_FUNDING_ENV.k` | CCIP fee 0.000109 ETH (`ccipSend 0xd0b46ef5…876e`) plus 482,000 Base gas; k = 3 holds the bridge to at most a third of each run | a cheaper bridge |
 | Funding spend cap per run | 0.0003 ETH | `DEFAULT_FUNDING_ENV.maxSpendWeiPerRun` | 2.7x the measured CCIP fee, so a fee spike past that waits for the next tick | CCIP fee moves |
-| Gas top-up | below 0.0001 ETH, 50% of spendable fee USDC | `gasTopUpBelowWei`, `gasShareBps` | 120 requotes at 829,501,116,200 wei each (posts `0x5dff60e6…`, `0xb36f6404…`) | a gas spike on Base |
-| Gas floor | 0.00003 ETH | `GAS_FLOOR_WEI` in `agent/src/policy.ts` | 36 requotes at the same measured cost; below it the tick pauses rather than strand a post | a gas spike on Base |
+| Gas top-up | below 0.0001 ETH, 50% of spendable fee USDC | `gasTopUpBelowWei`, `gasShareBps` | about 200 requotes at 82,443 gas per `postPair` (Base fork at block 53,813,705 against the deployed v2 board) | a gas spike on Base |
+| Gas floor | 0.00003 ETH | `GAS_FLOOR_WEI` in `agent/src/policy.ts` | 60 requotes at the same measured cost; below it the tick pauses rather than strand a post | a gas spike on Base |
 | 0G gas reserve | 0.005 0G | `DEFAULT_FUNDING_ENV.zeroGGasReserveWei` | left on the 0G chain for `withdraw` and `depositFor` gas | 0G gas price |
 | Tier floors | 0.5 / 0.1 / 0.05 0G | `DEFAULT_BUDGET_CONFIG` | 0.05 0G is about 180 decisions at the measured 0.000272 0G median (requests `286d605d…`, `1002ff0b…`, `65073141…`), enough to keep pricing through one 1,427 s CCIP delivery | a different model price |
 | Spend cap | 1 0G per UTC day | `SPEND_CAP_PER_DAY_WEI` | 3,676 decisions a day at 0.000272 0G, 12.8x the 288 tick ceiling | a faster cron |
 | Inference model | `0gm-1.0-35b-a3b` (TeeML), then `qwen3.7-flash` (TeeTLS) | `MODEL_BY_TIER`, `TEE_MODELS` | `spikes/fact3-economics/cost_table.txt`: 0gm $0.00012 list, qwen3.7-flash $0.000035 per 600 in / 150 out; thinking off took one decision from 159 to 26 micro-USD | a cheaper TEE model in the 0G catalog |
-| x402 quote price | 0.01 USDC | `PRICE_ATOMIC` in `quotes/wrangler.jsonc` | equals the fee on $3.33 of swap volume and covers 5.3 requotes all-in | demand from paying agents |
+| x402 quote price | 0.01 USDC | `PRICE_ATOMIC` in `quotes/wrangler.jsonc` | equals the fee on $3.33 of swap volume and covers 8.8 requotes all-in | demand from paying agents |
 
 ## Trust boundaries
 

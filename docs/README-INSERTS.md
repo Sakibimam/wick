@@ -35,7 +35,7 @@ Spend is counted from the router's own per-request bill, against a 1 0G daily ca
 | Number | Value | Source |
 | --- | --- | --- |
 | 0G cost per decision | 0.000243 to 0.000281 0G | router requests `286d605d…`, `1002ff0b…`, `65073141…`, billed `"currency":"0g"` |
-| Gas per requote | $0.00184 | posts `0x5dff60e6…cc23` and `0xb36f6404…863e`, Base blocks 53,784,273 and 53,784,276 |
+| Gas per requote | 82,443 gas, $0.00110 | one `postPair` against the deployed v2 board on a Base fork at block 53,813,705 |
 | CCIP Base to 0G | 0.000109 ETH, delivered in 1,427 s | `ccipSend 0xd0b46ef5…876e` |
-| Break-even swap volume per requote | $0.63 | $0.00188 all-in divided by the 30 bps fee |
+| Break-even swap volume per requote | $0.38 | $0.00114 all-in divided by the 30 bps fee |
 | Compute vault | 2.344 0G | Payment Layer `balanceOf(agent)`, 0G block 49,436,077 |
