@@ -56,6 +56,7 @@ Agent, maker and deployer: [`0xeF2E5ba8becc666b4B7BBfEB8f7d851af40Fd953`](https:
 | --- | --- | --- |
 | AgentQuoteBoardV2 | [`0x0d87944FFFf253dBbbD07750AceE7898333218A5`](https://basescan.org/address/0x0d87944FFFf253dBbbD07750AceE7898333218A5) | [`0xdb552695…d7a9`](https://basescan.org/tx/0xdb55269525f0d82931677f9d5af46d088ccb9eea90d51947125792029092d7a9) |
 | AgentQuoteExtructionV2 | [`0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4`](https://basescan.org/address/0xEE1374852327Da76Fd04CA5f681C875E3e8e9cf4) | [`0x85466a39…5212`](https://basescan.org/tx/0x85466a399625dd1cf0597ad88de6729934e3e45734497a80606b026782425212) |
+| WickGate (taker gate) | [`0x159dd4fCdA128070E0f2A50408b936be560FE0E5`](https://basescan.org/address/0x159dd4fCdA128070E0f2A50408b936be560FE0E5) | [creation on Basescan](https://basescan.org/address/0x159dd4fCdA128070E0f2A50408b936be560FE0E5#code), maker nonce 121 |
 | AquaAggregatorHook (Uniswap v4) | [`0x1A35d13AE02a834E9b35A98cA1b9C87b30d72888`](https://basescan.org/address/0x1A35d13AE02a834E9b35A98cA1b9C87b30d72888) | [`0xa72b0d60…2427`](https://basescan.org/tx/0xa72b0d60b59900f8b89ca96c3c6612a18a04750e16c606fc1a0e68d6bbfb2427) |
 
 The v2 strategy `0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc035` (program `0x20 | 44 | extruction | 30 bps | pool 0xe03cCe44…0c4e | 800 bps`) shipped from `contracts/script/LaunchV2.s.sol` in one broadcast at Base block 53,810,154:
@@ -69,6 +70,16 @@ The v2 strategy `0x05bc438b60860b593d7278d8d64653302a9d314beb0275e9103d5a0c3cbbc
 | Hook `setOrder` to the v2 strategy | [`0xf062d2d5…ec11`](https://basescan.org/tx/0xf062d2d5c839fd03ddddea6ff201cfa246c1e221d48b4335a327d201d2a7ec11) |
 | v4 pool initialised on the PoolManager, pool id `0xba432fbc…785e` | [`0xee9b8414…9696`](https://basescan.org/tx/0xee9b8414c77c117231f020d604b684d7766076df89fdfbe816c9f97229649696) |
 | A cron `postPair`, both directions from one signature, 88,391 gas | [`0xe75b8628…5ef3`](https://basescan.org/tx/0xe75b86286eaff73792f585adf0fee3741a40292c718a415bb83aa697679e5ef3) |
+
+**The live strategy is taker-gated.** `0x888f4e9134623a949a0a2d62998fd8869a5749dadda509aa63ade7928ca8217e` runs the v2 program behind SwapVM's `_onlyTakerTokenBalanceNonZero` (opcode `0x0e` on the deployed router): program `0x0e | 20 | WickGate | ` then the v2 program byte for byte. [WickGate](https://basescan.org/address/0x159dd4fCdA128070E0f2A50408b936be560FE0E5) has a fixed supply of 2, held by the v4 hook and the maker. Every Uniswap swap reaches the strategy with the hook as the SwapVM taker, so the pool stays open to everyone while a direct `AquaSwapVMRouter` call from any other address reverts `TakerTokenBalanceIsZero` before the extruction runs. This closes the strategy to MEV searchers calling the router directly, the setup 1inch's Aqua team recommended. `agent/scripts/live-gate-cutover.ts` moved the strategy in one run and asserted the result from chain; `hook/test/TakerGate.fork.t.sol` proves the hook fill, the holder fill and both stranger refusals on a Base fork.
+
+| Step | Transaction |
+| --- | --- |
+| Deploy WickGate, minted to the hook and the maker | [`0x159dd4fC…E0E5`](https://basescan.org/address/0x159dd4fCdA128070E0f2A50408b936be560FE0E5) |
+| Dock the ungated v2 strategy | [`0x82672a1d…2e0a`](https://basescan.org/tx/0x82672a1db622c3366ae20fb4e65c312085b1e104a3e456f1fbc207eb3aee2e0a) |
+| Aqua `ship` of the gated strategy at the docked balances | [`0x94b92299…5663`](https://basescan.org/tx/0x94b92299c89aedb1351c80dcc2bc6f1973d9d4e56ec2598bf6bd36f396215663) |
+| Hook `setOrder` to the gated strategy | [`0x0e7e3461…1491`](https://basescan.org/tx/0x0e7e3461164c9bf4fa5eda7b56ce1f9d685a79d577fb0d963470b94caf771491) |
+| A Uniswap swap through the gated strategy: 0.05 USDC for 0.325813890354555680 W0G, equal to the hook quote, `Swapped` taker = hook | [`0x52fbee31…860f`](https://basescan.org/tx/0x52fbee315b79eb533aec4272b22d6d111605ba57312785a0a21342b04c85860f) |
 
 At Base block 53,822,256, Aqua `safeBalances` for the v2 strategy reads 1.357492788767429240 W0G and 0.006836 USDC, and the hook's `pseudoTotalValueLocked` for its v4 pool returns the same two numbers:
 
