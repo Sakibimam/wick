@@ -19,6 +19,8 @@ export type Stats = { paidQuotes: number; revenueAtomic: string; payers: Address
 export type PaidRecord = { payer: Address; amount: string; settlementTx: Hex; block: string; time: string; tokenIn: Address; amountIn: string; inferenceId: Hex };
 
 const TOKENS: Record<string, Address> = { USDC, W0G };
+/** tokenIn as the symbol or the token's address, either case. */
+const tokenOf = (t: string): Address | undefined => TOKENS[t.toUpperCase()] ?? Object.values(TOKENS).find((a) => a.toLowerCase() === t.toLowerCase());
 const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "X-PAYMENT, Content-Type", "access-control-expose-headers": "X-PAYMENT-RESPONSE" };
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => Response.json(body, { status, headers: { "cache-control": "no-store", ...cors, ...headers } });
 const msg = (e: unknown) => (e instanceof Error ? e.message.split("\n")[0]! : String(e));
@@ -52,11 +54,11 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
       return json({ error: `board read failed: ${msg(e)}` }, 502);
     }
   }
-  if (url.pathname !== "/v1/quote") return json({ error: "not found", routes: ["/v1/quote?tokenIn=USDC|W0G&amountIn=<atomic>", "/v1/stats", "/v1/health"] }, 404);
+  if (url.pathname !== "/v1/quote") return json({ error: "not found", routes: ["/v1/quote?tokenIn=USDC|W0G|<token address>&amountIn=<atomic>", "/v1/stats", "/v1/health"] }, 404);
 
-  const tokenIn = TOKENS[(url.searchParams.get("tokenIn") ?? "").toUpperCase()];
+  const tokenIn = tokenOf(url.searchParams.get("tokenIn") ?? "");
   const raw = url.searchParams.get("amountIn") ?? "";
-  if (!tokenIn || !/^\d{1,40}$/.test(raw) || BigInt(raw) === 0n) return json({ error: "tokenIn must be USDC or W0G and amountIn a positive integer in the token's atomic units" }, 400);
+  if (!tokenIn || !/^\d{1,40}$/.test(raw) || BigInt(raw) === 0n) return json({ error: "tokenIn must be USDC or W0G (symbol or token address) and amountIn a positive integer in the token's atomic units" }, 400);
   const amountIn = BigInt(raw);
 
   const payTo = getAddress(env.MAKER);
@@ -92,6 +94,8 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   } catch (e) {
     return paymentRequired(`settlement_failed: ${msg(e)}`);
   }
+  // One settlement tx pays for one quote: a hash already recorded is not a new payment, whatever the facilitator says.
+  if (await env.QUOTES_KV.get(`paid:${tx}`, "json")) return paymentRequired("settlement_tx_already_recorded");
   try {
     ({ block } = await deps.confirm(tx, auth));
   } catch (e) {

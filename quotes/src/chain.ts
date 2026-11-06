@@ -20,6 +20,7 @@ export const abi = parseAbi([
   "function authorizationState(address authorizer,bytes32 nonce) view returns (bool)",
   "function transferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce,uint8 v,bytes32 r,bytes32 s)",
   "event Transfer(address indexed from,address indexed to,uint256 value)",
+  "event AuthorizationUsed(address indexed authorizer,bytes32 indexed nonce)",
 ]);
 
 export type ChainEnv = { BASE_RPC_URL?: string; BOARD_ADDRESS: string; MAKER: string; STATUS_URL?: string; FACILITATOR_URL?: string; SETTLE_MODE?: string; RELAYER_PK?: string };
@@ -150,12 +151,20 @@ export async function settle(env: ChainEnv, p: PaymentPayload, req: PaymentRequi
   return body.transaction as Hex;
 }
 
-/** The post-condition only a completed payment produces: a mined, successful tx carrying the exact USDC Transfer payer to payTo. */
-export async function confirm(env: ChainEnv, tx: Hex, a: Authorization): Promise<{ block: bigint }> {
-  const receipt = await publicClient(env).waitForTransactionReceipt({ hash: tx, timeout: 45_000, retryCount: 6 });
+type SettlementReceipt = { status: "success" | "reverted"; blockNumber: bigint; logs: { address: Address; topics: readonly Hex[] | Hex[]; data: Hex }[] };
+/** The post-condition only this payment produces: a mined, successful tx carrying the exact USDC Transfer payer to payTo AND
+ *  USDC's AuthorizationUsed for this payer and nonce, so a facilitator cannot answer with some other tx that moved the same amount. */
+export function checkSettlement(tx: Hex, receipt: SettlementReceipt, a: Authorization): { block: bigint } {
   if (receipt.status !== "success") throw new Error(`settlement_reverted: ${tx}`);
-  const paid = parseEventLogs({ abi, eventName: "Transfer", logs: receipt.logs.filter((l) => getAddress(l.address) === USDC) })
+  const usdcLogs = receipt.logs.filter((l) => getAddress(l.address) === USDC) as never;
+  const paid = parseEventLogs({ abi, eventName: "Transfer", logs: usdcLogs })
     .some((l) => l.args.from === getAddress(a.from) && l.args.to === getAddress(a.to) && l.args.value === BigInt(a.value));
   if (!paid) throw new Error(`settlement_missing_transfer: ${tx}`);
+  const authorized = parseEventLogs({ abi, eventName: "AuthorizationUsed", logs: usdcLogs })
+    .some((l) => l.args.authorizer === getAddress(a.from) && l.args.nonce.toLowerCase() === a.nonce.toLowerCase());
+  if (!authorized) throw new Error(`settlement_missing_authorization: ${tx}`);
   return { block: receipt.blockNumber };
+}
+export async function confirm(env: ChainEnv, tx: Hex, a: Authorization): Promise<{ block: bigint }> {
+  return checkSettlement(tx, await publicClient(env).waitForTransactionReceipt({ hash: tx, timeout: 45_000, retryCount: 6 }), a);
 }

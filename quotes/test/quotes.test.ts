@@ -161,3 +161,51 @@ describe("stats", () => {
     expect(typeof rec.time).toBe("string");
   });
 });
+
+import { encodeAbiParameters, encodeEventTopics, pad, parseAbi } from "viem";
+import { checkSettlement } from "../src/chain";
+describe("settlement proof", () => {
+  const ev = parseAbi(["event Transfer(address indexed from,address indexed to,uint256 value)", "event AuthorizationUsed(address indexed authorizer,bytes32 indexed nonce)"]);
+  const nonce = pad("0x1234", { size: 32 });
+  const a: Authorization = { from: payer.address, to: MAKER, value: "10000", validAfter: "0", validBefore: "9999999999", nonce };
+  const transfer = (from = payer.address, value = 10_000n) => ({ address: USDC, topics: encodeEventTopics({ abi: ev, eventName: "Transfer", args: { from, to: MAKER } }), data: encodeAbiParameters([{ type: "uint256" }], [value]) });
+  const used = (authorizer: Address = payer.address, n: Hex = nonce, address: Address = USDC) => ({ address, topics: encodeEventTopics({ abi: ev, eventName: "AuthorizationUsed", args: { authorizer, nonce: n } }), data: "0x" as Hex });
+  const rc = (logs: unknown[]) => ({ status: "success" as const, blockNumber: 42n, logs: logs as never });
+  test("a mined tx with the Transfer and the payer's AuthorizationUsed for this nonce is accepted", () => {
+    expect(checkSettlement("0xaa", rc([used(), transfer()]), a)).toEqual({ block: 42n });
+  });
+  test("a Transfer without the matching AuthorizationUsed is rejected with settlement_missing_authorization", () => {
+    expect(() => checkSettlement("0xaa", rc([transfer()]), a)).toThrow(/settlement_missing_authorization/);
+    expect(() => checkSettlement("0xaa", rc([transfer(), used(payer.address, pad("0x99", { size: 32 }))]), a)).toThrow(/settlement_missing_authorization/);
+    expect(() => checkSettlement("0xaa", rc([transfer(), used(MAKER)]), a)).toThrow(/settlement_missing_authorization/);
+    expect(() => checkSettlement("0xaa", rc([transfer(), used(payer.address, nonce, "0x0000000000000000000000000000000000000001")]), a)).toThrow(/settlement_missing_authorization/);
+  });
+  test("no matching Transfer, or a reverted tx, is still rejected", () => {
+    expect(() => checkSettlement("0xaa", rc([used()]), a)).toThrow(/settlement_missing_transfer/);
+    expect(() => checkSettlement("0xaa", { status: "reverted", blockNumber: 1n, logs: [] }, a)).toThrow(/settlement_reverted/);
+  });
+});
+
+describe("settlement tx replay", () => {
+  test("a settle that returns a tx hash already recorded is refused: two handle() calls with the same tx give paidQuotes 1", async () => {
+    const same = { ...deps, settle: async () => { settles++; return toHex(7, { size: 32 }); } };
+    const r1 = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": (await sign()).header } }), env, same);
+    const r2 = await handle(new Request(URL_Q, { headers: { "X-PAYMENT": (await sign()).header } }), env, same);
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(402);
+    expect(((await r2.json()) as any).error).toBe("settlement_tx_already_recorded");
+    expect((await stats()).paidQuotes).toBe(1);
+  });
+});
+
+describe("tokenIn", () => {
+  for (const t of ["USDC", "usdc", USDC, USDC.toLowerCase(), "0x23cd099eB438CcA50349EE2BC809196b1ae00861", "0x23CD099EB438CCA50349EE2BC809196B1AE00861".replace("0X", "0x"), "w0g"]) {
+    test(`accepts tokenIn=${t}`, async () => {
+      const res = await call(undefined, `https://wick-quotes.test/v1/quote?tokenIn=${t}&amountIn=1000000`);
+      expect(res.status).toBe(402);
+    });
+  }
+  test("an unknown address is a 400", async () => {
+    expect((await call(undefined, "https://wick-quotes.test/v1/quote?tokenIn=0x0000000000000000000000000000000000000001&amountIn=1")).status).toBe(400);
+  });
+});
