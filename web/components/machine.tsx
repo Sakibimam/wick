@@ -21,7 +21,11 @@ import { cn } from "@/lib/utils";
 type NodeKey = "pool" | "fees" | HopKey | "vault" | "brain" | "price";
 const ORDER: NodeKey[] = ["pool", "fees", "swap", "bridge", "withdraw", "deposit", "vault", "brain", "price"];
 type Pt = { x: number; y: number };
-type Seg = { from: NodeKey; to: NodeKey; points: Pt[]; state: "lit" | "dim" | "open" | "fuse" };
+type EdgeState = "lit" | "dim" | "open" | "fuse";
+type Seg = { from: NodeKey; to: NodeKey; points: Pt[]; state: EdgeState };
+/** Which chain each station lives on. Lit track and nodes take their chain's hue; green is kept for liveness. */
+const CHAIN: Record<NodeKey, "base" | "zg"> = { pool: "base", fees: "base", swap: "base", bridge: "base", withdraw: "zg", deposit: "zg", vault: "zg", brain: "zg", price: "base" };
+const CHAIN_CLASS = { base: "chain-base", zg: "chain-zg" } as const;
 
 const HEARTBEAT_WINDOW_MS = 48 * 3600_000;
 const TONE_CLASS: Record<Tone, string> = { ok: "tone-ok", warn: "tone-warn", danger: "tone-danger", quiet: "tone-quiet" };
@@ -64,6 +68,7 @@ export function Machine(props: MachineProps) {
           {segs.length > 0 ? <Circuit segs={segs} reduce={reduce} view={view!} now={now} ttl={status?.quoteTtlSeconds ?? 3600} /> : null}
           {split !== null && status?.readAt && pts?.pool ? <LaneLabels baseBlock={status.readAt.baseBlock} zeroGBlock={status.readAt.zeroGBlock} split={split} left={pts.pool.x} /> : null}
 
+          <CompactLoop status={status} view={view} now={now} nowReady={nowReady} />
           <Infield status={status} loading={loading} error={error} onRetry={onRetry} view={view} now={now} nowReady={nowReady} />
 
           {view && status ? (
@@ -104,25 +109,27 @@ function buildView(status: AgentStatus, fills: Fill[] | null, now: number) {
     brain: beats > 0,
     price: !leg.open,
   };
+  // Each edge is lit once money has moved along it at least once; the price leg is a fuse, or open when no price is fresh.
+  const litEdge: Record<NodeKey, boolean> = {
+    pool: fillCount > 0,
+    fees: lit.swap,
+    swap: lit.swap && lit.bridge,
+    bridge: lit.withdraw,
+    withdraw: lit.deposit,
+    deposit: lit.vault,
+    vault: lit.brain,
+    brain: aiBehindPrice,
+    price: !leg.open,
+  };
+  const edge = Object.fromEntries(ORDER.map((k) => [k, k === "price" ? (leg.open ? "open" : "fuse") : litEdge[k] ? "lit" : "dim"])) as Record<NodeKey, EdgeState>;
+  const lastRun = [...status.inferences].sort((a, b) => (toMillis(b.time) ?? 0) - (toMillis(a.time) ?? 0))[0]?.requestId ?? null;
   // Re-measure only when something that changes station heights changes.
   const key = `${fillCount}|${beats}|${status.funding.length}|${leg.open}|${status.budget.tier}`;
-  return { leg, hops, lit, key, fillCount, aiBehindPrice };
+  return { leg, hops, lit, edge, key, fillCount, aiBehindPrice, lastRun };
 }
 
-/** A segment is lit once money has moved along it at least once; the price leg is a fuse, or open when no price is fresh. */
 function segments(pts: Partial<Record<NodeKey, Pt>>, view: View): Seg[] {
   const out: Seg[] = [];
-  const litEdge: Record<NodeKey, boolean> = {
-    pool: view.fillCount > 0,
-    fees: view.lit.swap,
-    swap: view.lit.swap && view.lit.bridge,
-    bridge: view.lit.withdraw,
-    withdraw: view.lit.deposit,
-    deposit: view.lit.vault,
-    vault: view.lit.brain,
-    brain: view.aiBehindPrice,
-    price: !view.leg.open,
-  };
   ORDER.forEach((from, i) => {
     const to = ORDER[(i + 1) % ORDER.length]!;
     const a = pts[from];
@@ -130,7 +137,7 @@ function segments(pts: Partial<Record<NodeKey, Pt>>, view: View): Seg[] {
     if (!a || !b) return;
     const closing = from === "price";
     const points = closing && Math.abs(a.x - b.x) > 2 ? [a, { x: Math.min(a.x, b.x) - 14, y: a.y }, { x: Math.min(a.x, b.x) - 14, y: b.y }, b] : [a, b];
-    out.push({ from, to, points, state: closing ? (view.leg.open ? "open" : "fuse") : litEdge[from] ? "lit" : "dim" });
+    out.push({ from, to, points, state: view.edge[from] });
   });
   return out;
 }
@@ -179,13 +186,13 @@ function Circuit({ segs, reduce, view, now, ttl }: { segs: Seg[]; reduce: boolea
     }
     return out;
   };
-  const stroke = (s: Seg) => cn(s.state === "lit" && "stroke-[var(--tone)]", s.state === "dim" && "stroke-rule-2", s.state === "open" && "stroke-danger", s.state === "fuse" && "stroke-rule");
+  const stroke = (s: Seg) => cn(s.state === "lit" && cn("stroke-[var(--chain)]", CHAIN_CLASS[CHAIN[s.to]]), s.state === "dim" && "stroke-rule-2", s.state === "open" && "stroke-danger", s.state === "fuse" && "stroke-rule");
   return (
     <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
       {segs.map((s, i) => {
         const common = { d: pathOf(s.points), fill: "none", strokeWidth: s.state === "lit" || s.state === "fuse" ? 2.5 : 2, strokeDasharray: s.state === "open" ? "6 7" : undefined, className: stroke(s) };
         return settled ? <path key={s.from} {...common} /> : (
-          <motion.path key={s.from} {...common} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ delay: i * 0.12, duration: 0.5, ease: "linear" }} />
+          <motion.path key={s.from} {...common} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ delay: i * 0.11, duration: 0.55, ease: [0.16, 1, 0.3, 1] }} />
         );
       })}
       {settled ? segs.filter((s) => s.state !== "fuse").map((s) => <Chevron key={`c-${s.from}`} seg={s} className={stroke(s)} />) : null}
@@ -196,12 +203,12 @@ function Circuit({ segs, reduce, view, now, ttl }: { segs: Seg[]; reduce: boolea
           strokeWidth={2.5}
           pathLength={1}
           strokeDasharray={`${left} 1`}
-          className={cn(left * ttl <= URGENT_SECONDS ? "stroke-danger" : left * ttl <= CLOSING_SECONDS ? "stroke-warn" : "stroke-[var(--tone)]")}
+          className={cn(left * ttl <= URGENT_SECONDS ? "stroke-danger" : left * ttl <= CLOSING_SECONDS ? "stroke-warn" : "stroke-ok")}
         />
       ) : null}
       {!reduce && view.fillCount > 0 ? <Pulses route={route("pool", "fees")} count={Math.min(view.fillCount, 5)} delay={1.2} /> : null}
       {!reduce && view.lit.deposit ? <Pulses route={route(view.lit.swap ? "fees" : "swap", "vault")} count={1} delay={1.6} dwell /> : null}
-      {!reduce && view.lit.brain && view.aiBehindPrice && !view.leg.open ? <Pulses route={route("brain", "pool")} count={1} delay={2.6} /> : null}
+      {!reduce && view.lit.brain && view.aiBehindPrice && !view.leg.open ? <Pulses key={view.lastRun ?? "none"} route={route("brain", "pool")} count={1} delay={2.6} /> : null}
     </svg>
   );
 }
@@ -233,7 +240,7 @@ function Pulses({ route, count, delay, dwell }: { route: Pt[]; count: number; de
         <motion.circle
           key={i}
           r={4.5}
-          className="fill-[var(--tone)]"
+          className="fill-ink"
           initial={{ cx: xs[0], cy: ys[0], opacity: 0 }}
           animate={{ cx: xs, cy: ys, opacity: [0, ...Array(xs.length - 2).fill(1), 0] }}
           transition={{ delay: delay + i * 0.35, duration, times, ease: "linear" }}
@@ -286,6 +293,50 @@ function Infield({ status, loading, error, onRetry, view, now, nowReady }: { sta
   );
 }
 
+const SHORT: Record<NodeKey, string> = { pool: "Pool", fees: "Fees", swap: "Uniswap", bridge: "CCIP", withdraw: "Unwrap", deposit: "Deposit", vault: "Fuel", brain: "Brain", price: "Price" };
+
+/** Under 1024px the circuit becomes a ring above the title: the same nine stations and edge states, the fuse as the closing arc. */
+function CompactLoop({ status, view, now, nowReady }: { status: AgentStatus | undefined; view: View | null; now: number; nowReady: boolean }) {
+  const W = 360, H = 316, cx = 180, cy = 158, R = 108;
+  const n = ORDER.length;
+  const at = (i: number, r = R) => { const a = ((-90 + (i * 360) / n) * Math.PI) / 180; return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), c: Math.cos(a) }; };
+  const arc = (i: number) => { const a = at(i), b = at(i + 1); return `M${a.x.toFixed(1)} ${a.y.toFixed(1)} A${R} ${R} 0 0 1 ${b.x.toFixed(1)} ${b.y.toFixed(1)}`; };
+  const ttl = status?.quoteTtlSeconds ?? 3600;
+  const soon = view?.leg.soonest ?? null;
+  const left = soon ? fuseLeft(soon.expiry, now, ttl) : 0;
+  const secs = soon ? Math.max(0, Math.floor(soon.expiry - now)) : 0;
+  const fuseCls = secs <= URGENT_SECONDS ? "stroke-danger" : secs <= CLOSING_SECONDS ? "stroke-warn" : "stroke-ok";
+  return (
+    <figure className="-mx-2 lg:hidden" aria-label="The money loop">
+      <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto h-auto w-full max-w-[420px]" role="img" aria-label={view ? `Money loop, ${ORDER.filter((k) => view.edge[k] === "lit").length} of 8 legs proven on chain, price ${view.leg.open ? "expired" : "fresh"}` : "Reading the money loop"}>
+        <circle cx={cx} cy={cy} r={R} fill="none" className="stroke-rule" strokeWidth={2} />
+        {view ? ORDER.map((k, i) => {
+          const st = view.edge[k];
+          if (st === "fuse") return <g key={k}><path d={arc(i)} fill="none" className="stroke-rule" strokeWidth={3} /><path d={arc(i)} fill="none" pathLength={1} strokeDasharray={`${left} 1`} className={fuseCls} strokeWidth={3} /></g>;
+          return <path key={k} d={arc(i)} fill="none" strokeWidth={st === "lit" ? 3 : 2} strokeDasharray={st === "open" ? "5 6" : undefined} className={cn(st === "lit" && cn("stroke-[var(--chain)]", CHAIN_CLASS[CHAIN[ORDER[(i + 1) % n]!]]), st === "dim" && "stroke-rule-2", st === "open" && "stroke-danger")} />;
+        }) : null}
+        {ORDER.map((k, i) => {
+          const p = at(i), l = at(i, R + 20);
+          const lit = view?.lit[k] ?? false;
+          return (
+            <g key={k}>
+              <circle cx={p.x} cy={p.y} r={6} strokeWidth={2} className={lit ? cn("fill-[var(--chain)] stroke-[var(--chain)]", CHAIN_CLASS[CHAIN[k]]) : "fill-paper stroke-rule-2"} />
+              <text x={l.x} y={l.y + 4} textAnchor={l.c > 0.25 ? "start" : l.c < -0.25 ? "end" : "middle"} className="fill-muted font-display text-[13px] font-semibold uppercase tracking-[0.04em]">{SHORT[k]}</text>
+            </g>
+          );
+        })}
+        {status && view ? (
+          <g textAnchor="middle">
+            <text x={cx} y={cy - 14} className="fill-ink font-display text-[26px] font-semibold uppercase tracking-[0.02em]">{tierWord(status.budget.tier)}</text>
+            <text x={cx} y={cy + 12} className={cn("num text-[16px]", view.leg.open ? "fill-danger" : "fill-ink")}>{!nowReady ? "" : view.leg.open ? "price expired" : `price T-${clock(secs)}`}</text>
+            <text x={cx} y={cy + 34} className="num fill-muted text-[13px]">{formatAmount(BigInt(status.budget.computeBalanceWei), 18, 4)} 0G fuel</text>
+          </g>
+        ) : null}
+      </svg>
+    </figure>
+  );
+}
+
 type NodeSpot = "top-l" | "top-r" | "side-l" | "side-r" | "bot-l" | "bot-r";
 const SPOT: Record<NodeSpot, { wrap: string; node: string }> = {
   "top-l": { wrap: "lg:pl-0 lg:pb-8 lg:pr-2", node: "lg:left-[-7px] lg:top-auto lg:bottom-[-7px]" },
@@ -305,7 +356,7 @@ function Station({ k, name, chain, lit, children, className }: { k: NodeKey; nam
   const spot = SPOT[SPOTS[k]];
   return (
     <article aria-label={name} className={cn("relative min-w-0 pl-10", spot.wrap, AREA[k], className)}>
-      <span data-node={k} aria-hidden className={cn("absolute left-[5px] top-[3px] size-3.5 rounded-full border-2", lit ? "border-[var(--tone)] bg-[var(--tone)]" : "border-rule-2 bg-paper", spot.node)} />
+      <span data-node={k} aria-hidden className={cn("absolute left-[5px] top-[3px] size-3.5 rounded-full border-2", lit ? cn("border-[var(--chain)] bg-[var(--chain)]", CHAIN_CLASS[CHAIN[k]]) : "border-rule-2 bg-paper", spot.node)} />
       <h2 className="station flex items-baseline gap-2 lg:block">
         {name}
         <span className="text-[13px] font-medium normal-case tracking-normal text-muted lg:hidden">on {chain}</span>
@@ -440,8 +491,8 @@ function BrainStation({ status, nowMs }: { status: AgentStatus; nowMs: number })
       <figure data-ui className="max-w-[300px]">
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-14 w-full" role="img" aria-label={`${beats.length} billed AI runs in the last 48 hours`}>
           <line x1={0} x2={W} y1={base} y2={base} className="stroke-rule" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-          <path d={d} fill="none" className="stroke-[var(--tone)]" strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-          {beats.map((b) => <circle key={b.requestId} cx={b.x * W} cy={6} r={2.5} className="fill-[var(--tone)]"><title>{`${b.requestId} at ${utcStamp(b.atMs)}`}</title></circle>)}
+          <path d={d} fill="none" className="chain-zg stroke-[var(--chain)]" strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          {beats.map((b) => <circle key={b.requestId} cx={b.x * W} cy={6} r={2.5} className="chain-zg fill-[var(--chain)]"><title>{`${b.requestId} at ${utcStamp(b.atMs)}`}</title></circle>)}
         </svg>
         <figcaption className="num flex justify-between text-[13px] text-muted"><span>48 h ago</span><span>now</span></figcaption>
       </figure>

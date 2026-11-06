@@ -5,20 +5,20 @@ import { RefreshCw } from "lucide-react";
 import { Alert, AlertBody, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EvidenceRow } from "@/components/evidence-row";
-import { TierChip, TierMeter } from "@/components/tier-meter";
+import { Chronogram } from "@/components/chronogram";
+import { TIERS } from "@/lib/tiers";
 import { useAgentStatus } from "@/hooks/use-agent-status";
 import { useChainNow } from "@/hooks/use-clock";
 import { useFills } from "@/hooks/use-fills";
-import { useTierHistory } from "@/hooks/use-tier-history";
 import { AgentError } from "@/lib/agent-api";
 import { parseUnits } from "viem";
 import { formatAmount, percentOf, truncateHex } from "@/lib/amounts";
 import { BASE_CHAIN_ID, FILL_LOOKBACK_BLOCKS, TOKENS } from "@/lib/config";
 import { describeStep, toMillis, txUrl } from "@/lib/funding";
-import { formatPrice, relativeTime, utcStamp } from "@/lib/format";
+import { formatPrice, relativeTime } from "@/lib/format";
 import { clock, directionOf, impliedPrice, secondsLeft } from "@/lib/quotes";
 import { usePostedAt } from "@/hooks/use-posted-at";
-import { buildLoop, loopSentence, type Loop } from "@/lib/ledger";
+import { buildLoop, loopSentence, type Fill, type Loop } from "@/lib/ledger";
 import { reasonText } from "@/lib/tiers";
 import type { AgentStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ export function LedgerPage() {
   const { now } = useChainNow();
   const nowMs = now * 1000;
   const fills = useFills(status.data?.order);
-  const history = useTierHistory(status.data ? { tier: status.data.budget.tier, reason: status.data.budget.reason } : null);
   const loop = useMemo(() => (status.data ? buildLoop(status.data, fills.data?.fills ?? []) : null), [status.data, fills.data?.fills]);
 
   return (
@@ -41,7 +40,7 @@ export function LedgerPage() {
       </div>
 
       <div className="mt-10">
-        <GaugeBand status={status.data} loading={status.isPending} error={status.isError && !status.data ? status.error : null} onRetry={() => void status.refetch()} />
+        <GaugeBand status={status.data} fills={fills.data?.fills ?? []} nowMs={nowMs} loading={status.isPending} error={status.isError && !status.data ? status.error : null} onRetry={() => void status.refetch()} />
       </div>
 
       <div className="mx-auto max-w-[1312px] px-4 py-14 sm:px-6 lg:px-12 lg:py-20">
@@ -65,13 +64,12 @@ export function LedgerPage() {
           </ol>
         ) : null}
 
-        {status.data ? <TierHistory history={history} current={status.data.budget} /> : null}
       </div>
     </>
   );
 }
 
-function GaugeBand({ status, loading, error, onRetry }: { status: AgentStatus | undefined; loading: boolean; error: Error | null; onRetry: () => void }) {
+function GaugeBand({ status, fills, nowMs, loading, error, onRetry }: { status: AgentStatus | undefined; fills: Fill[]; nowMs: number; loading: boolean; error: Error | null; onRetry: () => void }) {
   return (
     <section aria-label="AI account balance" className="bg-lane">
       <div className="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-12 lg:py-12">
@@ -87,38 +85,25 @@ function GaugeBand({ status, loading, error, onRetry }: { status: AgentStatus | 
             </div>
             <Button variant="secondary" onClick={onRetry}><RefreshCw className="size-4" aria-hidden />Try again</Button>
           </div>
-        ) : status ? <GaugeLive status={status} /> : null}
+        ) : status ? <GaugeLive status={status} fills={fills} nowMs={nowMs} /> : null}
       </div>
     </section>
   );
 }
 
-function GaugeLive({ status }: { status: AgentStatus }) {
+function GaugeLive({ status, fills, nowMs }: { status: AgentStatus; fills: Fill[]; nowMs: number }) {
   const balance = BigInt(status.budget.computeBalanceWei);
   const spent = BigInt(status.budget.spentTodayWei);
   const cap = BigInt(status.budget.spendCapPerDayWei);
-  const pct = percentOf(spent, cap);
-  const barTone = pct >= 90 ? "tone-danger" : pct >= 75 ? "tone-warn" : "tone-ok";
+  const meta = TIERS[status.budget.tier];
   return (
-    <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.1fr_1fr_1.1fr] md:gap-12">
-      <div>
-        <p className="label">Fuel in the 0G Payment Layer</p>
-        <p className="mt-2 flex items-baseline gap-3"><span className="num text-[44px] font-medium leading-none text-ink md:text-[56px]">{formatAmount(balance, 18, 4)}</span><span className="text-[18px] text-muted">0G</span></p>
-        <p className="mt-3 text-[14px] text-ink-2">The router bills every AI run from this balance.</p>
-        {status.readAt ? <p className="num mt-1 text-[13px] text-muted">balanceOf(agent), 0G block {Number(status.readAt.zeroGBlock).toLocaleString("en-US")}</p> : null}
-      </div>
-      <div className={barTone}>
-        <p className="label">Spent today against the daily cap</p>
-        <p className="mt-2 flex items-baseline gap-3"><span className="num text-[28px] font-medium leading-none text-ink">{formatAmount(spent, 18, 4)}</span><span className="text-[14px] text-muted">{cap === 0n ? "no cap set" : `of ${formatAmount(cap, 18, 4)} 0G`}</span></p>
-        <div className="mt-4 h-1.5 overflow-hidden rounded-[2px] bg-sunken" role="progressbar" aria-label="Share of the daily cap spent" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
-          <div className="h-full origin-left bg-[var(--tone)]" style={{ transform: `scaleX(${pct / 100})` }} />
-        </div>
-        <p className="num mt-2 text-[13px] text-muted">{cap === 0n ? "A zero cap pauses the agent." : `${pct.toFixed(0)}% of today's cap used. At the cap the agent pauses.`}</p>
-      </div>
-      <div>
-        <p className="label mb-3">Budget tier now</p>
-        <TierMeter tier={status.budget.tier} reason={status.budget.reason} />
-      </div>
+    <div>
+      <Chronogram status={status} fills={fills} nowMs={nowMs} />
+      <p className="mt-8 max-w-[75ch] text-[16px] leading-[1.6] text-ink-2">
+        <span className={cn("mr-2 inline-block size-2.5 rounded-full bg-[var(--tone)] align-middle", `tone-${meta.tone}`)} aria-hidden />
+        <span className="font-semibold text-ink">{meta.label}.</span> {meta.consequence} Fuel is <span className="num text-ink">{formatAmount(balance, 18, 4)} 0G</span> in the Payment Layer
+        {status.readAt ? <span className="text-muted"> (0G block {Number(status.readAt.zeroGBlock).toLocaleString("en-US")})</span> : null}, and today the agent has spent <span className="num text-ink">{formatAmount(spent, 18, 4)}</span> of its <span className="num text-ink">{cap === 0n ? "zero" : formatAmount(cap, 18, 2)} 0G</span> daily cap.
+      </p>
     </div>
   );
 }
@@ -310,30 +295,6 @@ function RunRows({ loop, nowMs }: { loop: Loop; nowMs: number }) {
         );
       })}
     </Rows>
-  );
-}
-
-function TierHistory({ history, current }: { history: ReturnType<typeof useTierHistory>; current: AgentStatus["budget"] }) {
-  const entries = [...history].reverse();
-  return (
-    <section aria-label="Tier changes seen by this browser" className="mt-20">
-      <h2 className="text-[28px]">Tier changes this browser has seen</h2>
-      <p className="mt-1 max-w-[62ch] text-[14px] text-muted">The agent reports only its current tier. This list starts the first time this browser opened the page and adds a line whenever the tier changes.</p>
-      {entries.length === 0 ? (
-        <p className="mt-4 text-[14px] text-muted">Reading the first tier.</p>
-      ) : (
-        <ul className="mt-4 divide-y divide-rule overflow-hidden rounded-card bg-panel">
-          {entries.map((e, i) => (
-            <li key={`${e.atMs}-${e.tier}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
-              <TierChip tier={e.tier} />
-              <span className="min-w-0 flex-1 text-[14px] text-ink-2">{reasonText(i === 0 ? current.reason : e.reason)}</span>
-              <time className="num text-[12px] text-muted" dateTime={new Date(e.atMs).toISOString()}>{i === 0 ? "now, since " : ""}{utcStamp(e.atMs)}</time>
-            </li>
-          ))}
-        </ul>
-      )}
-      {entries.length === 1 ? <p className="mt-3 text-[13px] text-muted">No change seen yet. If the agent moves to a different tier while this page is open, it is added here.</p> : null}
-    </section>
   );
 }
 

@@ -53,16 +53,16 @@ function PriceBoard({ status, priced, direction, now, ready, loading }: { status
   if (!status) return null;
   const mid = status.mid;
   return (
-    <div data-ui className="lg:pt-[140px]">
+    <div data-ui className="lg:pt-2">
       <div className="space-y-10">
         {(["buy-w0g", "sell-w0g"] as const).map((d) => <Clock key={d} d={d} p={priced[d]} now={now} ready={ready} mid={mid} active={d === direction} />)}
       </div>
-      <dl className="mt-14 grid grid-cols-1 gap-x-10 gap-y-6 rounded-card bg-panel p-6 sm:grid-cols-2">
-        <Fact k="Pool mid on Uniswap" v={mid !== null ? `${formatPrice(mid)} USDC` : "unavailable"} note={status.readAt ? `Base block ${Number(status.readAt.baseBlock).toLocaleString("en-US")}` : undefined} />
-        {status.strategy ? <Fact k="The strategy can pay out" v={`${formatAmount(BigInt(status.strategy.w0g), 18, 4)} W0G, ${formatAmount(BigInt(status.strategy.usdc), 6, 2)} USDC`} note="Aqua safeBalances, read live" /> : null}
-        {status.strategy ? <Fact k="Maker fee" v={`${(status.strategy.feeBps / 100).toFixed(2)}% of what you pay`} note="Goes to the agent's AI budget" /> : null}
-        <Fact k="Funding run starts at" v={`${status.fundingThresholdUsdc ?? "10"} USDC of fees`} note="Then Uniswap, CCIP, unwrap, depositFor" />
-      </dl>
+      <p className="num mt-12 max-w-[60ch] text-[16px] leading-[1.6] text-ink-2">
+        Pool mid on Uniswap <span className="text-ink">{mid !== null ? `${formatPrice(mid)} USDC` : "unavailable"}</span>
+        {status.strategy ? <>, the strategy can pay out <span className="text-ink">{formatAmount(BigInt(status.strategy.w0g), 18, 4)} W0G and {formatAmount(BigInt(status.strategy.usdc), 6, 2)} USDC</span>, the maker fee is <span className="text-ink">{(status.strategy.feeBps / 100).toFixed(2)}%</span></> : null}
+        , and a funding run starts at <span className="text-ink">{status.fundingThresholdUsdc ?? "10"} USDC</span> of fees.
+        {status.readAt ? <span className="text-muted"> Read at Base block {Number(status.readAt.baseBlock).toLocaleString("en-US")}.</span> : null}
+      </p>
     </div>
   );
 }
@@ -84,16 +84,6 @@ function Clock({ d, p, now, ready, mid, active }: { d: Direction; p: Priced | nu
         <span className="text-[22px] text-muted">USDC</span>
       </p>
       {off !== null ? <p className="num mt-2 text-[13px] text-muted">{off >= 0 ? "+" : ""}{off.toFixed(2)}% against the pool mid</p> : null}
-    </div>
-  );
-}
-
-function Fact({ k, v, note }: { k: string; v: string; note?: string }) {
-  return (
-    <div>
-      <dt className="label">{k}</dt>
-      <dd className="num mt-1 text-[22px] font-medium text-ink">{v}</dd>
-      {note ? <dd className="mt-0.5 text-[13px] text-muted">{note}</dd> : null}
     </div>
   );
 }

@@ -25,6 +25,8 @@
   --color-danger-ink: oklch(78% 0.15 25);
   --color-danger-tint: oklch(24% 0.06 25);
   --color-quiet: oklch(78% 0.01 280);
+  --color-chain-base: oklch(68% 0.16 258);
+  --color-chain-zg: oklch(74% 0.16 350);
 
   --font-display: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
   --font-sans: var(--font-barlow), "Arial", sans-serif;
@@ -62,6 +64,8 @@
   .tone-warn { --tone: var(--color-warn); }
   .tone-danger { --tone: var(--color-danger); }
   .tone-quiet { --tone: var(--color-quiet); }
+  .chain-base { --chain: var(--color-chain-base); }
+  .chain-zg { --chain: var(--color-chain-zg); }
 }
 
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }

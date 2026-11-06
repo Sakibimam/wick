@@ -8,7 +8,6 @@ import { buildLoop, loopSentence } from "./ledger";
 import { clock, freshness, impliedPrice, latestByDirection, offMidPct, spreadPct } from "./quotes";
 import { classifyFailure, classifyQuoteError } from "./revert";
 import { statusSchema } from "./schema";
-import { recordTier } from "./tier-history";
 
 const sig = (n: string) => "0x" + n.repeat(64);
 const quote = (tokenIn: string, tokenOut: string, rateE18: string, expiry: number, id = "aa") => ({ tokenIn, tokenOut, rateE18, expiry: String(expiry), inferenceId: sig(id), requestId: `req-${id}` });
@@ -121,11 +120,6 @@ describe("funding and ledger", () => {
     expect(loopSentence(buildLoop(funded, []))).toContain("No AI run has been paid yet");
     const paying = status({ fees: { accruedUsdc: "2500000", accruedW0g: "0" }, funding: funded.funding, inferences: [{ requestId: "r1", model: "m", currency: "0g", totalCost: "1", time: 2 }] });
     expect(loopSentence(buildLoop(paying, []))).toContain("billed 1 AI run against it");
-  });
-  test("tier history appends only on change", () => {
-    const a = recordTier([], "NORMAL", "normal", 1);
-    expect(recordTier(a, "NORMAL", "normal", 2)).toBe(a);
-    expect(recordTier(a, "LOW", "balance_low", 3).map((e) => e.tier)).toEqual(["NORMAL", "LOW"]);
   });
   test("status schema rejects a bad tier and a missing field", () => {
     expect(() => status({ budget: { tier: "BROKEN", model: null, computeBalanceWei: "0", spentTodayWei: "0", spendCapPerDayWei: "0", reason: "x" } })).toThrow();

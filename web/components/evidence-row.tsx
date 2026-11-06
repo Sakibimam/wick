@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { CopyLink } from "@/components/copy-link";
 import { CHAIN_NAMES } from "@/lib/config";
 import { relativeTime, utcStamp } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Props = {
   title: ReactNode;
@@ -23,7 +24,7 @@ export function EvidenceRow({ title, plain, hash, hashLabel, href, chainId, time
       </div>
       <div className="min-w-0">{hash ? <CopyLink value={hash} href={href} label={hashLabel ?? "hash"} head={10} tail={8} /> : <span className="text-[13px] text-muted">No transaction, read from the agent</span>}</div>
       <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1">
-        {chainId !== undefined ? <span className="rounded-control bg-sunken px-1.5 py-0.5 text-[12px] text-ink-2">{CHAIN_NAMES[chainId] ?? `Chain ${chainId}`}</span> : null}
+        {chainId !== undefined ? <span className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--chain)]", chainId === 16661 ? "chain-zg" : "chain-base")}><span aria-hidden className="size-2 rounded-full bg-[var(--chain)]" />{CHAIN_NAMES[chainId] ?? `Chain ${chainId}`}</span> : null}
         {timeMs ? <time dateTime={new Date(timeMs).toISOString()} title={utcStamp(timeMs)} className="num text-[13px] text-muted">{relativeTime(timeMs, nowMs)}</time> : null}
       </div>
     </li>
