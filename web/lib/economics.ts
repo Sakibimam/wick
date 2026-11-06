@@ -90,7 +90,8 @@ export function feeFromAmount(amountIn: bigint, tokenIn: string, status: AgentSt
 export function takersOf(status: AgentStatus, fills: Fill[]): { distinct: number; outside: number; seedFills: number } {
   const set = new Set(fills.map((f) => f.taker.toLowerCase()));
   const outsideSet = [...set].filter((t) => !isAgent(status, t));
-  return { distinct: status.distinctTakers ?? set.size, outside: outsideSet.length, seedFills: fills.filter((f) => isAgent(status, f.taker)).length };
+  // The agent reports distinctTakers counting outside wallets only; the fills list is the source for the total.
+  return { distinct: set.size, outside: Math.max(outsideSet.length, status.distinctTakers ?? 0), seedFills: fills.filter((f) => isAgent(status, f.taker)).length };
 }
 
 /**

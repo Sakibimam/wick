@@ -281,6 +281,11 @@ function FeesBlock({ econ, status }: { econ: Economics; status: AgentStatus }) {
           {toThreshold !== null ? <dd className="num text-[13px] text-muted">{fmtPct(toThreshold * 100)} of the way there</dd> : null}
         </div>
       </dl>
+      {status.seedVsEarned && status.seedVsEarned.seedUsdc != null ? (
+        <p className="num text-[14px] text-ink-2 md:col-span-2">
+          The agent started with {fmtUsd(status.seedVsEarned.seedUsdc)} of seed money; {fmtUsd(status.seedVsEarned.earnedUsdc ?? 0)} of its AI fuel so far was bought with fees from outside wallets.
+        </p>
+      ) : null}
     </div>
   );
 }

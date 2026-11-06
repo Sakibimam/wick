@@ -249,7 +249,7 @@ function Row({ k, v, strike, muted }: { k: string; v: string | null; strike?: bo
   return (
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-muted">{k}</dt>
-      <dd className={cn("num text-right", muted ? "text-muted" : "text-ink", strike && "text-muted line-through decoration-danger")}>{v ?? <span aria-hidden className="skeleton inline-block h-4 w-36 align-middle" />}</dd>
+      <dd className={cn("num text-right", muted || strike ? "text-muted" : "text-ink")}>{v ?? <span aria-hidden className="skeleton inline-block h-4 w-36 align-middle" />}</dd>
     </div>
   );
 }

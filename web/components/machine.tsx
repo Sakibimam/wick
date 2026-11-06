@@ -328,11 +328,11 @@ function LeadFigure({ status, econ, fills }: { status: AgentStatus; econ: Econom
         </div>
         {econ.runwayDays !== null ? (
           <div>
-            <dt className="label">Runway</dt>
+            <dt className="label">{econ.reported.has("runwayDays") ? "Runway at current spend" : "Runway at the daily cap"}</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runwayDays, 2)} days</dd>
           </div>
         ) : null}
-        {econ.runsPaidByFees !== null ? (
+        {econ.runsPaidByFees !== null && econ.coverage !== null && takers && takers.outside > 0 ? (
           <div>
             <dt className="label">AI runs the fees pay for</dt>
             <dd className="num mt-0.5 text-[20px] text-ink">{significant(econ.runsPaidByFees, 2)}</dd>
@@ -578,7 +578,7 @@ function VaultStation({ status, econ }: { status: AgentStatus; econ: Economics }
         </div>
       </div>
       <Note className="max-w-[52ch] text-ink-2">
-        {econ.runwayDays !== null ? <>About <span className="num font-medium text-ink">{significant(econ.runwayDays, 2)} days</span> of AI at the {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap. </> : null}
+        {cap > 0n ? <>About <span className="num font-medium text-ink">{significant(Number(bal) / Number(cap), 2)} days</span> of AI if it spent the full {fmt0g(toNumber(cap, "0G"))} <Tk>0G</Tk> daily cap. </> : null}
         Spent today <span className="num text-ink">{fmt0g(toNumber(spent, "0G"))} <Tk>0G</Tk></span>. Under 0.5 the agent drops to a cheaper model, under 0.05 it stops.
       </Note>
       <WhatIf balanceWei={bal} capWei={cap} />
